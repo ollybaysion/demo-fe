@@ -1,1 +1,215 @@
 @import "tailwindcss";
+
+@theme {
+  /* ==========================================================================
+   * Colors — brand namespace
+   * Maps DESIGN.md frontmatter `colors:` block. Tailwind v4 generates utilities
+   * like bg-brand-canvas, text-brand-ink, border-brand-hairline, etc.
+   * Opacity modifiers (bg-brand-primary/15) work automatically on solid colors.
+   * The explicit `*-translucent-*` / `*-soft` tokens preserve DESIGN.md naming.
+   * ========================================================================== */
+
+  /* Brand & accent */
+  --color-brand-primary: #cc785c;
+  --color-brand-primary-active: #a9583e;
+  --color-brand-primary-disabled: #e6dfd8;
+  --color-brand-accent-teal: #5db8a6;
+  --color-brand-accent-amber: #e8a55a;
+
+  /* Text */
+  --color-brand-ink: #141413;
+  --color-brand-body: #3d3d3a;
+  --color-brand-body-strong: #252523;
+  --color-brand-muted: #6c6a64;
+  --color-brand-muted-soft: #8e8b82;
+  --color-brand-on-primary: #ffffff;
+  --color-brand-on-dark: #faf9f5;
+  --color-brand-on-dark-soft: #a09d96;
+
+  /* Surfaces */
+  --color-brand-canvas: #faf9f5;
+  --color-brand-surface-soft: #f5f0e8;
+  --color-brand-surface-card: #efe9de;
+  --color-brand-surface-cream-strong: #e8e0d2;
+  --color-brand-surface-dark: #181715;
+  --color-brand-surface-dark-elevated: #252320;
+  --color-brand-surface-dark-soft: #1f1e1b;
+
+  /* Hairlines */
+  --color-brand-hairline: #e6dfd8;
+  --color-brand-hairline-soft: #ebe6df;
+
+  /* Semantic */
+  --color-brand-success: #5db872;
+  --color-brand-warning: #d4a017;
+  --color-brand-error: #c64545;
+
+  /* Alpha variants (DESIGN.md explicit tokens) */
+  --color-brand-primary-translucent-15: rgba(204, 120, 92, 0.15);
+  --color-brand-error-soft: rgba(198, 69, 69, 0.10);
+  --color-brand-ink-translucent-04: rgba(20, 20, 19, 0.04);
+
+  /* ==========================================================================
+   * Spacing — DESIGN.md `spacing:` block (4px base)
+   * Powers p-*, m-*, gap-*, space-y-*, w-*, h-*
+   * ========================================================================== */
+
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-section: 96px;
+
+  /* ==========================================================================
+   * Border radius — DESIGN.md `rounded:` block
+   * ========================================================================== */
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+
+  /* ==========================================================================
+   * Container max-widths — DESIGN.md `container:` block
+   * Powers max-w-marketing, max-w-chat-narrow utilities
+   * ========================================================================== */
+
+  --container-marketing: 1200px;
+  --container-chat-narrow: 768px;
+
+  /* ==========================================================================
+   * Font families — slots filled by next/font/google in #4
+   * Until then, system fallbacks render reasonably.
+   * Korean fallback (Noto KR) loaded alongside in #4.
+   * ========================================================================== */
+
+  --font-display: "Cormorant Garamond", "Tiempos Headline", Garamond, "Times New Roman", serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+
+  /* ==========================================================================
+   * Font sizes — DESIGN.md `typography:` block
+   * Each token bundles size + line-height + letter-spacing + font-weight.
+   * Tailwind v4 utility: text-display-xl applies all four.
+   * ========================================================================== */
+
+  /* Display (Cormorant serif) */
+  --text-display-xl: 64px;
+  --text-display-xl--line-height: 1.05;
+  --text-display-xl--letter-spacing: -1.5px;
+  --text-display-xl--font-weight: 400;
+
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 1.1;
+  --text-display-lg--letter-spacing: -1px;
+  --text-display-lg--font-weight: 400;
+
+  --text-display-md: 36px;
+  --text-display-md--line-height: 1.15;
+  --text-display-md--letter-spacing: -0.5px;
+  --text-display-md--font-weight: 400;
+
+  --text-display-sm: 28px;
+  --text-display-sm--line-height: 1.2;
+  --text-display-sm--letter-spacing: -0.3px;
+  --text-display-sm--font-weight: 400;
+
+  /* Title (Inter sans) */
+  --text-title-lg: 22px;
+  --text-title-lg--line-height: 1.3;
+  --text-title-lg--letter-spacing: 0;
+  --text-title-lg--font-weight: 500;
+
+  --text-title-md: 18px;
+  --text-title-md--line-height: 1.4;
+  --text-title-md--letter-spacing: 0;
+  --text-title-md--font-weight: 500;
+
+  --text-title-sm: 16px;
+  --text-title-sm--line-height: 1.4;
+  --text-title-sm--letter-spacing: 0;
+  --text-title-sm--font-weight: 500;
+
+  /* Body */
+  --text-body-md: 16px;
+  --text-body-md--line-height: 1.55;
+  --text-body-md--letter-spacing: 0;
+  --text-body-md--font-weight: 400;
+
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.55;
+  --text-body-sm--letter-spacing: 0;
+  --text-body-sm--font-weight: 400;
+
+  /* Caption */
+  --text-caption: 13px;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0;
+  --text-caption--font-weight: 500;
+
+  --text-caption-uppercase: 12px;
+  --text-caption-uppercase--line-height: 1.4;
+  --text-caption-uppercase--letter-spacing: 1.5px;
+  --text-caption-uppercase--font-weight: 500;
+
+  /* Code */
+  --text-code: 14px;
+  --text-code--line-height: 1.6;
+  --text-code--letter-spacing: 0;
+  --text-code--font-weight: 400;
+
+  /* Button + nav */
+  --text-button: 14px;
+  --text-button--line-height: 1;
+  --text-button--letter-spacing: 0;
+  --text-button--font-weight: 500;
+
+  --text-nav-link: 14px;
+  --text-nav-link--line-height: 1.4;
+  --text-nav-link--letter-spacing: 0;
+  --text-nav-link--font-weight: 500;
+
+  /* Chat-specific (DESIGN.md §Chat Interface) */
+  --text-chat-message-body: 16px;
+  --text-chat-message-body--line-height: 1.65;
+  --text-chat-message-body--letter-spacing: 0;
+  --text-chat-message-body--font-weight: 400;
+
+  --text-inline-code: 14px;
+  --text-inline-code--line-height: 1.4;
+  --text-inline-code--letter-spacing: 0;
+  --text-inline-code--font-weight: 400;
+
+  /* ==========================================================================
+   * Animations — DESIGN.md `motion:` block
+   * Tailwind v4: animate-cursor-blink, animate-typing-bounce
+   * ========================================================================== */
+
+  --animate-cursor-blink: cursor-blink 800ms ease-in-out infinite;
+  --animate-typing-bounce: typing-bounce 600ms ease-in-out infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
