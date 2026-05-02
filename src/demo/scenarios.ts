@@ -80,37 +80,35 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: "no-data",
     starter: "설비 데이터가 발생하지 않았는데 그 이유가 궁금합니다.",
-    contextPanel: [
-      {
-        id: "demo-no-data-eq-1",
-        equipment: "ETCH-01",
-        chambers: [
-          {
-            id: "demo-no-data-ch-1",
-            name: "A",
-            sensors: [
-              { id: "demo-no-data-sn-1", name: "APC_PRESSURE" },
-              { id: "demo-no-data-sn-2", name: "RF_FORWARD" },
-            ],
-          },
-        ],
-      },
-    ],
+    // 시나리오 시작 시점엔 비어 있음 — turn 1에서 사용자가 입력하면 채워짐.
+    contextPanel: [],
     turns: [
       {
         user: "설비 데이터가 발생하지 않았는데 그 이유가 궁금합니다.",
         assistant:
-          "ETCH-01 챔버 A의 APC_PRESSURE / RF_FORWARD 두 센서를 발생 시간 범위로 조회했습니다. 해당 구간에 데이터가 비어 있는 흔한 원인은 (1) 센서 통신 단절, (2) 데이터 수집기 큐 적체, (3) 설비 STOP 상태 세 가지입니다. 어디부터 살펴볼까요?",
+          "설비 정보와 발생 시간을 입력해주세요. 메시지로 입력하거나 오른쪽 패널을 활용해주세요. 이미지도 가능합니다.",
       },
       {
-        user: "통신 단절 이력부터 확인해주세요.",
+        user: "ETCH-03 설비 B 챔버 TEMP_TC1 센서 14:00부터 14:30까지 입니다.",
         assistant:
-          "장비 통신 로그를 조회한 결과, 발생 시간 구간에 LinkDown 이벤트가 3회 기록되어 있습니다. 첫 단절은 14:02, 마지막 복구는 14:27이며 총 12분간 데이터 수집이 중단됐습니다. 동일 시간대의 네트워크 스위치 로그를 함께 보시겠습니까?",
-      },
-      {
-        user: "네, 스위치 로그도 보여주세요.",
-        assistant:
-          "스위치 측 로그에서도 14:02:11에 포트 12 STP 토폴로지 변경이 기록됐고, 인접 포트도 0.8초 동안 동시 깜박임이 있었습니다. 즉, 설비 자체 문제보다는 네트워크 측 이벤트로 보입니다. 다음 정기 점검에 STP 우선순위 검토를 권장드립니다.",
+          "이 센서는 TEMP_TC1 센서의 BAKE STEP 진행 중 최댓값입니다. 먼저 데이터 수집 기준 정보를 조회하겠습니다. 조회 결과, 트리거 조건은 'BAKE STEP 종료 시점' 으로 입력되어야 하는데 'NEXT STEP 시작 시점' 으로 입력되어 있었습니다. 따라서 트리거를 'STEP_END' 로 수정해야 합니다. 수정 후 BAKE STEP 종료 시점부터 데이터가 정상적으로 발생합니다.",
+        contextPanel: [
+          {
+            id: "demo-nodata-eq-1",
+            equipment: "ETCH-03",
+            chambers: [
+              {
+                id: "demo-nodata-ch-1",
+                name: "B",
+                sensors: [{ id: "demo-nodata-sn-1", name: "TEMP_TC1" }],
+              },
+            ],
+          },
+        ],
+        timeRange: {
+          start: "2026-05-02T14:00",
+          end: "2026-05-02T14:30",
+        },
       },
     ],
   },
