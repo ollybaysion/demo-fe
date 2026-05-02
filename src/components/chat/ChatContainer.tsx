@@ -159,6 +159,17 @@ export function ChatContainer() {
     [messages, rows, timeRange, sendToApi],
   );
 
+  const handleResetConversation = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const ok = window.confirm(
+      "대화를 초기화하시겠습니까? 입력하신 설비 정보와 발생 시간도 함께 비워집니다.",
+    );
+    if (!ok) return;
+    setMessages([]);
+    setIsStreaming(false);
+    reset();
+  }, [reset]);
+
   const handleRetry = useCallback(() => {
     setMessages((prev) => {
       const lastUserIndex = findLastIndex(prev, (m) => m.role === "user");
@@ -174,7 +185,7 @@ export function ChatContainer() {
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
       {/* Chat column */}
       <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader />
+        <ChatHeader onReset={handleResetConversation} />
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-chat-narrow px-lg py-xl">
