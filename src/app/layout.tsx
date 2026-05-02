@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Inter, JetBrains_Mono, Noto_Sans_KR, Noto_Serif_KR } from "next/font/google";
+import { Cormorant_Garamond, Inter, JetBrains_Mono, Noto_Serif_KR } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
+// Latin display
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
   weight: ["500"],
@@ -9,6 +11,7 @@ const cormorant = Cormorant_Garamond({
   display: "swap",
 });
 
+// Latin sans
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500"],
@@ -16,6 +19,7 @@ const inter = Inter({
   display: "swap",
 });
 
+// Latin mono
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400"],
@@ -23,6 +27,7 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+// Korean display fallback (Google Fonts — Noto family pairs visually with Cormorant)
 const notoSerifKr = Noto_Serif_KR({
   subsets: ["latin"],
   weight: ["400", "500"],
@@ -30,11 +35,21 @@ const notoSerifKr = Noto_Serif_KR({
   display: "swap",
 });
 
-const notoSansKr = Noto_Sans_KR({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-noto-sans-kr",
+// Korean sans (Pretendard variable — Inter와 비례 매칭, 한국 웹의 모던 표준)
+// Single variable woff2 covers all weights (45 ~ 920)
+const pretendard = localFont({
+  src: "../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
+  variable: "--font-pretendard",
   display: "swap",
+  weight: "45 920",
+});
+
+// Korean mono (D2Coding subset — KS-X-1001 한글 + Latin/숫자/기호, 357KB)
+const d2coding = localFont({
+  src: "../../node_modules/d2coding/fonts/d2coding-subset.woff2",
+  variable: "--font-d2coding",
+  display: "swap",
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -47,7 +62,8 @@ const fontVariables = [
   inter.variable,
   jetbrainsMono.variable,
   notoSerifKr.variable,
-  notoSansKr.variable,
+  pretendard.variable,
+  d2coding.variable,
 ].join(" ");
 
 export default function RootLayout({
