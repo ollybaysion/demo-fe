@@ -85,10 +85,10 @@ export function ChatContainer() {
       </main>
 
       <div
-        className="border-t border-brand-hairline bg-brand-canvas"
+        className="bg-brand-canvas"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto max-w-chat-narrow px-lg py-md">
+        <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
           <ChatInput onSubmit={handleSubmit} disabled={isStreaming} />
         </div>
       </div>
