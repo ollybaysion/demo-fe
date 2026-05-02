@@ -1,4 +1,5 @@
 import { CONTEXT_LABELS } from "@/config/contextColumns";
+import { SCENARIOS } from "@/demo/scenarios";
 import type { ContextRow, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -8,12 +9,24 @@ const TOKEN_INTERVAL_MS = 100;
 
 type ChatTimeRange = { start?: string; end?: string };
 
+type ChatDemoMeta = {
+  scenarioId: string;
+  /**
+   * 0-based index into Scenario.turns. The route returns
+   * turns[turnIndex].assistant. Out-of-range or unknown scenario falls
+   * back to the regular echo behavior.
+   */
+  turnIndex: number;
+};
+
 type ChatRequestBody = {
   messages: Message[];
   /** Optional 설비 정보 table (#16) included by the client. */
   context?: ContextRow[];
   /** Optional 발생 시간 범위 (datetime-local strings). */
   timeRange?: ChatTimeRange;
+  /** Optional demo-mode metadata (#19) — bypasses echo with scripted text. */
+  demo?: ChatDemoMeta;
 };
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
@@ -95,11 +108,24 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const responseText = buildMockResponse(
-    lastUser.content,
-    body.context,
-    body.timeRange,
-  );
+  // Demo mode: scripted assistant text bypasses the echo formatter.
+  let responseText: string;
+  if (body.demo) {
+    const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
+    const turn = scenario?.turns[body.demo.turnIndex];
+    if (turn) {
+      responseText = turn.assistant;
+    } else {
+      responseText =
+        "데모 시나리오의 마지막 응답을 이미 재생했습니다. 헤더의 '다시 시작' 버튼으로 새 시나리오를 선택하세요.";
+    }
+  } else {
+    responseText = buildMockResponse(
+      lastUser.content,
+      body.context,
+      body.timeRange,
+    );
+  }
   const characters = [...responseText];
   const messageId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 

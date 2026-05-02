@@ -314,6 +314,16 @@ export function useContextRows() {
     setTimeRange((prev) => ({ ...prev, end: next }));
   }, []);
 
+  // ─── batch setters (used by demo scenarios) ──────────────────────
+  const replaceRows = useCallback((next: ContextRow[]) => {
+    // Demo scenarios may pass an empty array — keep the table populated
+    // with one empty row so the UI has something to render.
+    setRows(next.length > 0 ? next : defaultRows());
+  }, []);
+  const replaceTimeRange = useCallback((next: TimeRange) => {
+    setTimeRange(next);
+  }, []);
+
   const reset = useCallback(() => {
     setRows(defaultRows());
     setTimeRange(todayRange());
@@ -333,6 +343,8 @@ export function useContextRows() {
     addSensor,
     setSensorName,
     deleteSensor,
+    replaceRows,
+    replaceTimeRange,
     reset,
   };
 }

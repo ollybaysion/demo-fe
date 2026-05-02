@@ -12,21 +12,46 @@ import {
 type Props = {
   onSubmit: (text: string) => void;
   disabled?: boolean;
+  /**
+   * When provided, the input is locked to this exact text (rendered as
+   * ghost-styled value), the user can only press Enter to submit, and
+   * typing is blocked. Used by demo scenarios (#19) to constrain the
+   * presenter to the scripted next message.
+   */
+  lockedValue?: string;
+  /**
+   * Optional placeholder override. Used in demo "ended" state to show
+   * a notice in place of the regular hint.
+   */
+  placeholder?: string;
 };
 
 const TEXTAREA_MAX_HEIGHT = 200;
 
-export function ChatInput({ onSubmit, disabled }: Props) {
+export function ChatInput({
+  onSubmit,
+  disabled,
+  lockedValue,
+  placeholder,
+}: Props) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Treat any string (including "") as locked. An empty locked value
+  // shows the placeholder while still blocking typing — used for the
+  // demo "ended" state.
+  const isLocked = typeof lockedValue === "string";
+  const displayValue = isLocked ? lockedValue : value;
+
   function tryDispatch() {
-    const text = value.trim();
+    const text = (isLocked ? lockedValue : value).trim();
     if (!text || disabled) return;
     onSubmit(text);
-    setValue("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
+    if (!isLocked) {
+      setValue("");
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
     }
   }
 
@@ -42,10 +67,16 @@ export function ChatInput({ onSubmit, disabled }: Props) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       tryDispatch();
+      return;
+    }
+    // In locked (demo) mode, swallow every other key — only Enter submits.
+    if (isLocked) {
+      e.preventDefault();
     }
   }
 
   function handleInput(e: FormEvent<HTMLTextAreaElement>) {
+    if (isLocked) return; // never auto-grow while locked
     const el = e.currentTarget;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
@@ -75,15 +106,27 @@ export function ChatInput({ onSubmit, disabled }: Props) {
 
         <textarea
           ref={textareaRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
+          value={displayValue}
+          onChange={(e) => {
+            if (!isLocked) setValue(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           onInput={handleInput}
           disabled={disabled}
+          readOnly={isLocked}
           rows={1}
-          placeholder="메시지를 입력하세요"
+          placeholder={placeholder ?? "메시지를 입력하세요"}
           aria-label="채팅 메시지 입력"
-          className="flex-1 resize-none bg-transparent text-brand-ink placeholder:text-brand-muted-soft font-sans text-body-md py-[10px] px-xs focus:outline-none disabled:text-brand-muted disabled:cursor-not-allowed"
+          className={[
+            "flex-1 resize-none bg-transparent",
+            "placeholder:text-brand-muted-soft font-sans text-body-md",
+            "py-[10px] px-xs",
+            "focus:outline-none",
+            "disabled:text-brand-muted disabled:cursor-not-allowed",
+            // Ghost-style the locked value so it reads as "next scripted
+            // message" rather than something the user typed.
+            isLocked ? "text-brand-muted-soft cursor-default" : "text-brand-ink",
+          ].join(" ")}
           style={{ minHeight: "40px", maxHeight: `${TEXTAREA_MAX_HEIGHT}px` }}
         />
 
