@@ -77,13 +77,13 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 const DURATION_PRESETS: Array<{ label: string; ms: number }> = [
+  { label: "10분", ms: 10 * MINUTE_MS },
   { label: "30분", ms: 30 * MINUTE_MS },
   { label: "1시간", ms: 1 * HOUR_MS },
   { label: "3시간", ms: 3 * HOUR_MS },
   { label: "6시간", ms: 6 * HOUR_MS },
   { label: "12시간", ms: 12 * HOUR_MS },
   { label: "하루", ms: 1 * DAY_MS },
-  { label: "1주일", ms: 7 * DAY_MS },
 ];
 
 function TimeRangeFields({
