@@ -1,21 +1,31 @@
 "use client";
 
 type Props = {
-  open: boolean;
+  /** True when ANY right panel is open (context or summary or future). */
+  pulledOut: boolean;
+  /** True when this handle's panel (context) is the active one. Drives chevron direction. */
+  isContextOpen: boolean;
   onToggle: () => void;
 };
 
-export function ContextToggleHandle({ open, onToggle }: Props) {
+export function ContextToggleHandle({
+  pulledOut,
+  isContextOpen,
+  onToggle,
+}: Props) {
+  const ariaLabel = isContextOpen
+    ? "설비 정보 패널 닫기"
+    : "설비 정보 입력";
   return (
     <button
       type="button"
       onClick={onToggle}
-      aria-expanded={open}
-      aria-label={open ? "설비 정보 패널 닫기" : "설비 정보 입력"}
+      aria-expanded={isContextOpen}
+      aria-label={ariaLabel}
       className={[
         "fixed top-1/4 right-0 z-20",
         "transition-transform duration-200 ease-out",
-        open ? "translate-x-[-320px]" : "translate-x-0",
+        pulledOut ? "translate-x-[-320px]" : "translate-x-0",
         "h-24 w-16 rounded-l-lg",
         "bg-brand-primary hover:bg-brand-primary-active active:bg-brand-primary-active",
         "text-brand-on-primary",
@@ -24,7 +34,7 @@ export function ContextToggleHandle({ open, onToggle }: Props) {
         "focus:outline-none focus:ring-2 focus:ring-brand-primary/40",
       ].join(" ")}
     >
-      <Icon open={open} />
+      <Icon isContextOpen={isContextOpen} />
       <span
         className="font-sans font-medium leading-tight text-center"
         style={{ fontSize: "11px" }}
@@ -37,8 +47,8 @@ export function ContextToggleHandle({ open, onToggle }: Props) {
   );
 }
 
-function Icon({ open }: { open: boolean }) {
-  if (open) {
+function Icon({ isContextOpen }: { isContextOpen: boolean }) {
+  if (isContextOpen) {
     return (
       <svg
         width="18"
@@ -55,7 +65,6 @@ function Icon({ open }: { open: boolean }) {
       </svg>
     );
   }
-  // Closed state: list icon — implies tabular input, complements label.
   return (
     <svg
       width="18"

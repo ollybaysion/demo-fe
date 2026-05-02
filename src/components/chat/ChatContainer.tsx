@@ -10,6 +10,7 @@ import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
+import { SummaryPanel } from "./SummaryPanel";
 import {
   ContextPanel,
   ContextToggleHandle,
@@ -47,7 +48,11 @@ function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
+  // Single source of truth for the right-side slot — at most one panel
+  // is shown at a time; flipping flips both visually.
+  const [rightPanel, setRightPanel] = useState<"context" | "summary" | null>(
+    null,
+  );
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
@@ -208,7 +213,7 @@ export function ChatContainer() {
         let effectiveTimeRange = timeRange;
         if (currentTurn?.contextPanel) {
           replaceRows(currentTurn.contextPanel);
-          setPanelOpen(true); // surface the just-filled panel
+          setRightPanel("context"); // surface the just-filled panel
         }
         if (currentTurn?.timeRange) {
           replaceTimeRange(currentTurn.timeRange);
@@ -294,7 +299,14 @@ export function ChatContainer() {
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
       {/* Chat column */}
       <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader onReset={handleRequestReset} />
+        <ChatHeader
+          onReset={handleRequestReset}
+          onOpenSummary={
+            messages.length > 0
+              ? () => setRightPanel("summary")
+              : undefined
+          }
+        />
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-chat-narrow px-lg py-xl">
@@ -328,9 +340,9 @@ export function ChatContainer() {
         </div>
       </div>
 
-      {/* Right-side context panel (push layout) */}
+      {/* Right-side context panel (push layout) — mutex with summary */}
       <ContextPanel
-        open={panelOpen}
+        open={rightPanel === "context"}
         rows={rows}
         timeRange={timeRange}
         onStartChange={setStart}
@@ -347,10 +359,21 @@ export function ChatContainer() {
         onReset={reset}
       />
 
-      {/* Toggle handle (fixed) — sits at panel's left edge when open */}
+      {/* Right-side summary panel (#24) — mutex with context */}
+      <SummaryPanel
+        open={rightPanel === "summary"}
+        rows={rows}
+        timeRange={timeRange}
+        onClose={() => setRightPanel(null)}
+      />
+
+      {/* Toggle handle (fixed) — context panel access */}
       <ContextToggleHandle
-        open={panelOpen}
-        onToggle={() => setPanelOpen((o) => !o)}
+        pulledOut={rightPanel !== null}
+        isContextOpen={rightPanel === "context"}
+        onToggle={() =>
+          setRightPanel((prev) => (prev === "context" ? null : "context"))
+        }
       />
 
       <ConfirmDialog
