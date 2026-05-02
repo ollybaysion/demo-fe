@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { ContextRow, ContextValue } from "@/lib/types";
+import type { ContextRow } from "@/lib/types";
 import { ContextTable } from "./ContextTable";
 import type { TimeRange } from "./useContextRows";
 
@@ -11,9 +11,20 @@ type Props = {
   timeRange: TimeRange;
   onStartChange: (next: string) => void;
   onEndChange: (next: string) => void;
-  onCellChange: (rowId: string, key: string, value: ContextValue) => void;
-  onAdd: () => void;
-  onDelete: (rowId: string) => void;
+  onEquipmentChange: (rowId: string, name: string) => void;
+  onAddRow: () => void;
+  onDeleteRow: (rowId: string) => void;
+  onAddChamber: (rowId: string) => void;
+  onSetChamberName: (rowId: string, chamberId: string, name: string) => void;
+  onDeleteChamber: (rowId: string, chamberId: string) => void;
+  onAddSensor: (rowId: string, chamberId: string) => void;
+  onSetSensorName: (
+    rowId: string,
+    chamberId: string,
+    sensorId: string,
+    name: string,
+  ) => void;
+  onDeleteSensor: (rowId: string, chamberId: string, sensorId: string) => void;
   onReset: () => void;
 };
 
@@ -23,9 +34,15 @@ export function ContextPanel({
   timeRange,
   onStartChange,
   onEndChange,
-  onCellChange,
-  onAdd,
-  onDelete,
+  onEquipmentChange,
+  onAddRow,
+  onDeleteRow,
+  onAddChamber,
+  onSetChamberName,
+  onDeleteChamber,
+  onAddSensor,
+  onSetSensorName,
+  onDeleteSensor,
   onReset,
 }: Props) {
   return (
@@ -44,9 +61,15 @@ export function ContextPanel({
           <Section title="설비 정보">
             <ContextTable
               rows={rows}
-              onCellChange={onCellChange}
-              onAdd={onAdd}
-              onDelete={onDelete}
+              onEquipmentChange={onEquipmentChange}
+              onAddRow={onAddRow}
+              onDeleteRow={onDeleteRow}
+              onAddChamber={onAddChamber}
+              onSetChamberName={onSetChamberName}
+              onDeleteChamber={onDeleteChamber}
+              onAddSensor={onAddSensor}
+              onSetSensorName={onSetSensorName}
+              onDeleteSensor={onDeleteSensor}
               onReset={onReset}
             />
           </Section>

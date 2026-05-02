@@ -1,4 +1,4 @@
-import { CONTEXT_COLUMNS } from "@/config/contextColumns";
+import { CONTEXT_LABELS } from "@/config/contextColumns";
 import type { ContextRow, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -22,27 +22,27 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
 }
 
 function formatContextRow(row: ContextRow): string {
-  const primary = CONTEXT_COLUMNS.find((c) => c.required && !c.multi);
-  const others = CONTEXT_COLUMNS.filter((c) => c !== primary);
+  const head = row.equipment.trim() || "(미입력)";
 
-  const head =
-    primary && typeof row.values[primary.key] === "string"
-      ? (row.values[primary.key] as string).trim()
-      : "";
+  const chamberParts: string[] = [];
+  for (const chamber of row.chambers) {
+    const cName = chamber.name.trim();
+    const sensors = chamber.sensors
+      .map((s) => s.name.trim())
+      .filter((s) => s.length > 0);
 
-  const detailParts: string[] = [];
-  for (const col of others) {
-    const v = row.values[col.key];
-    if (Array.isArray(v)) {
-      const filled = v.map((s) => s.trim()).filter((s) => s.length > 0);
-      if (filled.length > 0) detailParts.push(`${col.label} ${filled.join(", ")}`);
-    } else if (typeof v === "string" && v.trim().length > 0) {
-      detailParts.push(`${col.label} ${v.trim()}`);
-    }
+    if (!cName && sensors.length === 0) continue;
+
+    const cLabel = cName || "(미입력)";
+    const sensorPart =
+      sensors.length > 0
+        ? ` ${CONTEXT_LABELS.sensor.label} ${sensors.join(", ")}`
+        : "";
+    chamberParts.push(`${cLabel}${sensorPart}`);
   }
 
-  const detail = detailParts.length > 0 ? ` (${detailParts.join(" / ")})` : "";
-  return `${head || "(미입력)"}${detail}`;
+  if (chamberParts.length === 0) return head;
+  return `${head} (${CONTEXT_LABELS.chamber.label} ${chamberParts.join(" · ")})`;
 }
 
 function formatContext(context: ContextRow[]): string {

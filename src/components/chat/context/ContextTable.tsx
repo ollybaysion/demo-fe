@@ -1,21 +1,38 @@
 "use client";
 
-import type { ContextRow as ContextRowType, ContextValue } from "@/lib/types";
+import type { ContextRow } from "@/lib/types";
 import { ContextRowNested } from "./ContextRowNested";
 
 type Props = {
-  rows: ContextRowType[];
-  onCellChange: (rowId: string, key: string, value: ContextValue) => void;
-  onAdd: () => void;
-  onDelete: (rowId: string) => void;
+  rows: ContextRow[];
+  onEquipmentChange: (rowId: string, name: string) => void;
+  onAddRow: () => void;
+  onDeleteRow: (rowId: string) => void;
+  onAddChamber: (rowId: string) => void;
+  onSetChamberName: (rowId: string, chamberId: string, name: string) => void;
+  onDeleteChamber: (rowId: string, chamberId: string) => void;
+  onAddSensor: (rowId: string, chamberId: string) => void;
+  onSetSensorName: (
+    rowId: string,
+    chamberId: string,
+    sensorId: string,
+    name: string,
+  ) => void;
+  onDeleteSensor: (rowId: string, chamberId: string, sensorId: string) => void;
   onReset: () => void;
 };
 
 export function ContextTable({
   rows,
-  onCellChange,
-  onAdd,
-  onDelete,
+  onEquipmentChange,
+  onAddRow,
+  onDeleteRow,
+  onAddChamber,
+  onSetChamberName,
+  onDeleteChamber,
+  onAddSensor,
+  onSetSensorName,
+  onDeleteSensor,
   onReset,
 }: Props) {
   return (
@@ -25,16 +42,28 @@ export function ContextTable({
           <ContextRowNested
             key={row.id}
             row={row}
-            onChange={(key, value) => onCellChange(row.id, key, value)}
-            onDelete={() => onDelete(row.id)}
-            canDelete={rows.length > 1}
+            canDeleteRow={rows.length > 1}
+            onEquipmentChange={(name) => onEquipmentChange(row.id, name)}
+            onDeleteRow={() => onDeleteRow(row.id)}
+            onAddChamber={() => onAddChamber(row.id)}
+            onSetChamberName={(chamberId, name) =>
+              onSetChamberName(row.id, chamberId, name)
+            }
+            onDeleteChamber={(chamberId) => onDeleteChamber(row.id, chamberId)}
+            onAddSensor={(chamberId) => onAddSensor(row.id, chamberId)}
+            onSetSensorName={(chamberId, sensorId, name) =>
+              onSetSensorName(row.id, chamberId, sensorId, name)
+            }
+            onDeleteSensor={(chamberId, sensorId) =>
+              onDeleteSensor(row.id, chamberId, sensorId)
+            }
           />
         ))}
       </div>
       <div className="flex items-center justify-between gap-sm pt-sm border-t border-brand-hairline-soft">
         <button
           type="button"
-          onClick={onAdd}
+          onClick={onAddRow}
           className="inline-flex items-center gap-xxs text-body-sm text-brand-primary hover:text-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs px-xxs py-xxs"
         >
           <svg

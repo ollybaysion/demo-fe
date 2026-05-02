@@ -21,17 +21,26 @@ function newId(): string {
 }
 
 /**
- * Strip rows that are entirely empty so we don't ship blank context to
- * the API. Partially filled rows go through as-is.
+ * Strip rows / chambers / sensors with no user input so we don't ship
+ * blank scaffolding to the API. A row keeps its non-empty members and
+ * is itself dropped if everything inside is empty.
  */
 function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
-  return rows.filter((r) =>
-    Object.values(r.values).some((v) => {
-      if (typeof v === "string") return v.trim().length > 0;
-      if (Array.isArray(v)) return v.some((x) => x.trim().length > 0);
-      return false;
-    }),
-  );
+  return rows
+    .map((r) => {
+      const chambers = r.chambers
+        .map((c) => ({
+          ...c,
+          sensors: c.sensors.filter((s) => s.name.trim().length > 0),
+        }))
+        .filter(
+          (c) => c.name.trim().length > 0 || c.sensors.length > 0,
+        );
+      return { ...r, chambers };
+    })
+    .filter(
+      (r) => r.equipment.trim().length > 0 || r.chambers.length > 0,
+    );
 }
 
 export function ChatContainer() {
@@ -43,9 +52,15 @@ export function ChatContainer() {
     timeRange,
     setStart,
     setEnd,
-    setCell,
+    setEquipment,
     addRow,
     deleteRow,
+    addChamber,
+    setChamberName,
+    deleteChamber,
+    addSensor,
+    setSensorName,
+    deleteSensor,
     reset,
   } = useContextRows();
 
@@ -191,9 +206,15 @@ export function ChatContainer() {
         timeRange={timeRange}
         onStartChange={setStart}
         onEndChange={setEnd}
-        onCellChange={setCell}
-        onAdd={addRow}
-        onDelete={deleteRow}
+        onEquipmentChange={setEquipment}
+        onAddRow={addRow}
+        onDeleteRow={deleteRow}
+        onAddChamber={addChamber}
+        onSetChamberName={setChamberName}
+        onDeleteChamber={deleteChamber}
+        onAddSensor={addSensor}
+        onSetSensorName={setSensorName}
+        onDeleteSensor={deleteSensor}
         onReset={reset}
       />
 

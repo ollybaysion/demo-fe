@@ -1,37 +1,22 @@
 /**
- * 설비 정보 입력 표 — 컬럼 정의.
+ * 설비 정보 트리 라벨 — UI / mock echo에서 공통으로 참조.
  *
- * 배열을 수정하면 입력 표가 자동 확장됩니다.
- * - `required: true` 컬럼은 비어 있으면 안 됨 (라벨에 * 표시).
- * - `multi: true` 컬럼은 한 셀에 여러 값을 가질 수 있음.
- *   값 타입: `string[]` (multi=true) / `string` (multi=false).
+ * 데이터 구조는 `src/lib/types.ts`의 ContextRow / ContextChamber /
+ * ContextSensor 가 정한다 (설비 → 챔버 → 센서 고정 3단계).
+ * 이 파일은 라벨/플레이스홀더만 모은다 — 추후 i18n 분리 지점.
  */
 
-export type ContextColumn = {
-  key: string;
-  label: string;
-  placeholder?: string;
-  required?: boolean;
-  multi?: boolean;
-};
-
-export const CONTEXT_COLUMNS: readonly ContextColumn[] = [
-  {
-    key: "equipment",
+export const CONTEXT_LABELS = {
+  equipment: {
     label: "설비명",
     placeholder: "예: ETCH-01",
-    required: true,
   },
-  {
-    key: "chamber",
+  chamber: {
     label: "챔버",
     placeholder: "예: A",
-    multi: true,
   },
-  {
-    key: "sensor",
+  sensor: {
     label: "센서명",
     placeholder: "예: APC_PRESSURE",
-    multi: true,
   },
-] as const;
+} as const;
