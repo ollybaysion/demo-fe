@@ -11,6 +11,7 @@ import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./SummaryPanel";
+import { SummaryToggleHandle } from "./SummaryToggleHandle";
 import {
   ContextPanel,
   ContextToggleHandle,
@@ -299,14 +300,7 @@ export function ChatContainer() {
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
       {/* Chat column */}
       <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader
-          onReset={handleRequestReset}
-          onOpenSummary={
-            messages.length > 0
-              ? () => setRightPanel("summary")
-              : undefined
-          }
-        />
+        <ChatHeader onReset={handleRequestReset} />
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-chat-narrow px-lg py-xl">
@@ -367,14 +361,30 @@ export function ChatContainer() {
         onClose={() => setRightPanel(null)}
       />
 
-      {/* Toggle handle (fixed) — context panel access */}
-      <ContextToggleHandle
-        pulledOut={rightPanel !== null}
-        isContextOpen={rightPanel === "context"}
-        onToggle={() =>
-          setRightPanel((prev) => (prev === "context" ? null : "context"))
-        }
-      />
+      {/* Right-edge floating handle stack — context on top, summary
+          stacks below once at least one message exists. */}
+      <div
+        className={[
+          "fixed top-1/4 right-0 z-20 flex flex-col gap-xs",
+          "transition-transform duration-200 ease-out",
+          rightPanel !== null ? "translate-x-[-320px]" : "translate-x-0",
+        ].join(" ")}
+      >
+        <ContextToggleHandle
+          isOpen={rightPanel === "context"}
+          onToggle={() =>
+            setRightPanel((prev) => (prev === "context" ? null : "context"))
+          }
+        />
+        {messages.length > 0 && (
+          <SummaryToggleHandle
+            isOpen={rightPanel === "summary"}
+            onToggle={() =>
+              setRightPanel((prev) => (prev === "summary" ? null : "summary"))
+            }
+          />
+        )}
+      </div>
 
       <ConfirmDialog
         open={resetDialogOpen}
