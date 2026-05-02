@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import { parseSseStream } from "@/lib/sse";
@@ -8,6 +8,7 @@ import type { ContextRow, Message } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
+import { EquipmentDetailPanel } from "./EquipmentDetailPanel";
 import { MessageList } from "./MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./SummaryPanel";
@@ -55,6 +56,7 @@ export function ChatContainer() {
     null,
   );
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
     rows,
@@ -256,8 +258,32 @@ export function ChatContainer() {
     setMessages([]);
     setIsStreaming(false);
     setDemoState(null);
+    setDetailOpen(false);
     reset();
   }, [reset]);
+
+  // Names of equipment currently entered in the context panel — feeds
+  // the EquipmentDetailPanel's primary dropdown.
+  const equipmentNames = useMemo(
+    () =>
+      rows
+        .map((r) => r.equipment.trim())
+        .filter((n) => n.length > 0),
+    [rows],
+  );
+
+  function handleContextToggle() {
+    setRightPanel((prev) => {
+      const next = prev === "context" ? null : "context";
+      if (next !== "context") setDetailOpen(false);
+      return next;
+    });
+  }
+
+  function handleSummaryToggle() {
+    setRightPanel((prev) => (prev === "summary" ? null : "summary"));
+    setDetailOpen(false);
+  }
 
   const handleRetry = useCallback(() => {
     setMessages((prev) => {
@@ -351,6 +377,18 @@ export function ChatContainer() {
         onSetSensorName={setSensorName}
         onDeleteSensor={deleteSensor}
         onReset={reset}
+        onExpandDetail={() => setDetailOpen(true)}
+        detailOpen={detailOpen}
+        canExpandDetail={equipmentNames.length > 0}
+      />
+
+      {/* Equipment detail expansion (#27) — sits to the left of the
+          context panel, fixed-positioned over the chat area. Only
+          visible while context panel is the active right slot. */}
+      <EquipmentDetailPanel
+        open={rightPanel === "context" && detailOpen}
+        equipmentNames={equipmentNames}
+        onClose={() => setDetailOpen(false)}
       />
 
       {/* Right-side summary panel (#24) — mutex with context */}
@@ -371,16 +409,12 @@ export function ChatContainer() {
       >
         <ContextToggleHandle
           isOpen={rightPanel === "context"}
-          onToggle={() =>
-            setRightPanel((prev) => (prev === "context" ? null : "context"))
-          }
+          onToggle={handleContextToggle}
         />
         {messages.length > 0 && (
           <SummaryToggleHandle
             isOpen={rightPanel === "summary"}
-            onToggle={() =>
-              setRightPanel((prev) => (prev === "summary" ? null : "summary"))
-            }
+            onToggle={handleSummaryToggle}
           />
         )}
       </div>
