@@ -69,11 +69,29 @@ Library dependencies are added when each feature is implemented — not all at o
 
 ## Deployment (Docker)
 
-Production deploys ship as Docker images:
+Production deploys ship as Docker images. The repository root holds a multi-stage `Dockerfile` plus `.dockerignore`.
 
 ```sh
 docker build -t fdc-agent-fe .
 docker run -p 3000:3000 fdc-agent-fe
+# → http://localhost:3000
 ```
 
-Image strategy: multi-stage build (deps → build → runtime). Runtime is Node.js Alpine + Next.js `output: 'standalone'`. The `Dockerfile` lands in a follow-up task once `package.json` and `next.config.ts` are in place. Environment variables (e.g., backend URL) are injected at runtime via `docker run -e` — the exact set is TBD.
+**Image strategy**
+
+- `node:22.22.2-alpine` base (matches `.nvmrc`)
+- 3 stages: **deps** (pnpm install --frozen-lockfile) → **builder** (next build with `output: 'standalone'`) → **runner** (minimal alpine + non-root `nextjs` user)
+- Runtime image carries only `.next/standalone`, `.next/static`, `public/` — final image ~206MB
+- `pnpm` version pinned via `package.json#packageManager`, activated through corepack inside the image
+
+**Environment variables**
+
+Inject at run time (not bake into the image) so the same image can ship to multiple environments:
+
+```sh
+docker run -p 3000:3000 \
+  -e SOME_BACKEND_URL=https://api.example.com \
+  fdc-agent-fe
+```
+
+The exact set of env vars will grow as backend integrations land; until then the chat UI runs on a self-contained mock SSE route at `/api/chat`.

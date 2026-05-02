@@ -1,0 +1,57 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Dependencies (re-installed inside the image)
+node_modules/
+.pnpm-store/
+
+# Build artifacts (re-generated inside the image)
+.next/
+dist/
+out/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Local env files (inject via `docker run -e` or compose)
+.env
+.env.local
+.env.*.local
+
+# Project-internal Claude Code files
+CLAUDE.md
+docs/
+.claude/
+
+# Project documentation (not needed for build/runtime)
+README.md
+DESIGN.md
+api.md
+setting.md
+AGENTS.md
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker (avoid copying meta into the build context)
+Dockerfile
+.dockerignore
+
+# Host-only Node pin (image already pins NODE_VERSION via ARG)
+.nvmrc
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
