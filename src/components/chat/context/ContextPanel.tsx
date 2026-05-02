@@ -174,16 +174,15 @@ function TimeField({
       <span className="block text-caption text-brand-muted mb-xxs">
         {label}
       </span>
-      <div className="relative">
+      <div className="flex items-center gap-xs">
         <input
           type="datetime-local"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          // pr-9 reserves space for the in-box clear (×) button.
-          // Hiding the WebKit picker indicator avoids visual collision
-          // with the X — clicking anywhere in the input still opens the
-          // native picker on Chromium-based browsers.
-          className="w-full bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline pl-sm pr-9 py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+          // min-w-0 lets the flex item shrink below the browser's
+          // intrinsic min-width for datetime-local, keeping the
+          // clear (×) button in view inside a 320px-wide panel.
+          className="flex-1 min-w-0 bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         />
         {value && (
           <button
@@ -191,15 +190,15 @@ function TimeField({
             onClick={() => onChange("")}
             aria-label={`${label} 시간 비우기`}
             title={`${label} 시간 비우기`}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
             <svg
-              width="12"
-              height="12"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.5"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden
