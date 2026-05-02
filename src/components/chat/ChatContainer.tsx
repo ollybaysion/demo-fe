@@ -7,6 +7,7 @@ import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
+import { SuggestedQuestions } from "./SuggestedQuestions";
 import {
   ContextPanel,
   ContextToggleHandle,
@@ -194,6 +195,9 @@ export function ChatContainer() {
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
+            {messages.length === 0 && !isStreaming && (
+              <SuggestedQuestions onSelect={handleSubmit} />
+            )}
             <ChatInput onSubmit={handleSubmit} disabled={isStreaming} />
           </div>
         </div>
