@@ -66,7 +66,9 @@ export function ConfirmDialog({
       // Inline width to bypass UA <dialog> default `width: fit-content`
       // and keep behavior independent of our customized @theme container
       // scale (which replaces Tailwind's default max-w-* tokens).
-      style={{ width: "min(90vw, 480px)", padding: 0 }}
+      // `margin: auto` re-establishes centering — Tailwind preflight
+      // resets the UA-default margin: auto on <dialog>.
+      style={{ width: "min(90vw, 480px)", margin: "auto", padding: 0 }}
     >
       <div className="p-lg flex flex-col gap-md">
         <h2
