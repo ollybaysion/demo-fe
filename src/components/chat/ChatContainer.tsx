@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { parseSseStream } from "@/lib/sse";
 import type { ContextRow, Message } from "@/lib/types";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
@@ -48,6 +49,7 @@ export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const {
     rows,
     timeRange,
@@ -159,12 +161,11 @@ export function ChatContainer() {
     [messages, rows, timeRange, sendToApi],
   );
 
-  const handleResetConversation = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const ok = window.confirm(
-      "대화를 초기화하시겠습니까? 입력하신 설비 정보와 발생 시간도 함께 비워집니다.",
-    );
-    if (!ok) return;
+  const handleRequestReset = useCallback(() => {
+    setResetDialogOpen(true);
+  }, []);
+
+  const handleConfirmReset = useCallback(() => {
     setMessages([]);
     setIsStreaming(false);
     reset();
@@ -185,7 +186,7 @@ export function ChatContainer() {
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
       {/* Chat column */}
       <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader onReset={handleResetConversation} />
+        <ChatHeader onReset={handleRequestReset} />
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-chat-narrow px-lg py-xl">
@@ -237,6 +238,16 @@ export function ChatContainer() {
       <ContextToggleHandle
         open={panelOpen}
         onToggle={() => setPanelOpen((o) => !o)}
+      />
+
+      <ConfirmDialog
+        open={resetDialogOpen}
+        onClose={() => setResetDialogOpen(false)}
+        onConfirm={handleConfirmReset}
+        title="대화를 초기화하시겠습니까?"
+        description="입력하신 설비 정보와 발생 시간도 함께 비워집니다. 되돌릴 수 없습니다."
+        confirmLabel="초기화"
+        cancelLabel="취소"
       />
     </div>
   );
