@@ -62,7 +62,11 @@ export function ConfirmDialog({
       onClick={handleBackdropClick}
       aria-labelledby={titleId}
       aria-describedby={description ? descId : undefined}
-      className="m-auto rounded-lg border border-brand-hairline bg-brand-canvas p-0 max-w-md w-[90vw] backdrop:bg-brand-ink/40"
+      className="rounded-lg border border-brand-hairline bg-brand-canvas backdrop:bg-brand-ink/40"
+      // Inline width to bypass UA <dialog> default `width: fit-content`
+      // and keep behavior independent of our customized @theme container
+      // scale (which replaces Tailwind's default max-w-* tokens).
+      style={{ width: "min(90vw, 480px)", padding: 0 }}
     >
       <div className="p-lg flex flex-col gap-md">
         <h2
