@@ -27,10 +27,26 @@ export default function Home() {
             <p className="font-display text-display-xl">display-xl 64/1.05/-1.5</p>
             <p className="font-display text-display-md">display-md 36/1.15/-0.5</p>
             <p className="font-sans text-title-lg">title-lg 22/1.3/0/500</p>
-            <p className="font-sans text-body-md">body-md 16/1.55 — Inter humanist sans body. 한글 fallback 검증은 #4 후.</p>
+            <p className="font-sans text-body-md">body-md 16/1.55 — Inter humanist sans body.</p>
             <p className="font-sans text-chat-message-body">chat-message-body 16/1.65 — looser leading for sustained reading.</p>
             <p className="font-mono text-inline-code">inline-code 14 mono</p>
             <p className="font-sans text-caption text-brand-muted">caption 13/500 muted</p>
+          </div>
+        </section>
+
+        <section className="space-y-md">
+          <h2 className="font-display text-display-md">한글 fallback 검증</h2>
+          <p className="text-body-sm text-brand-muted">
+            CSS font-family는 글자 단위로 fallback. 영문은 Cormorant/Inter/JetBrains, 한글은 Noto KR로 떨어집니다.
+          </p>
+          <div className="space-y-xs">
+            <p className="font-display text-display-md">FDC Agent — 대화형 AI</p>
+            <p className="font-sans text-title-md">FDC Agent — 한글과 English가 섞인 본문 줄</p>
+            <p className="font-sans text-body-md">
+              An assistant that responds in 한국어 with editorial 따뜻함. 영문 부분은 humanist sans, 한글
+              부분은 Noto Sans KR이 그려야 동일한 시각적 무게로 보입니다.
+            </p>
+            <p className="font-mono text-code">const greeting = &quot;안녕하세요&quot;; // mono Latin + Korean fallback</p>
           </div>
         </section>
 

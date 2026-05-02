@@ -83,14 +83,15 @@
   --container-chat-narrow: 768px;
 
   /* ==========================================================================
-   * Font families — slots filled by next/font/google in #4
-   * Until then, system fallbacks render reasonably.
-   * Korean fallback (Noto KR) loaded alongside in #4.
+   * Font families — Google Fonts loaded by next/font in layout.tsx.
+   * Each stack puts the Latin face first, then the Korean Noto fallback,
+   * then system fallbacks. Per-glyph CSS fallback resolves per character:
+   * Latin → Cormorant/Inter/JetBrains, Hangul → Noto KR.
    * ========================================================================== */
 
-  --font-display: "Cormorant Garamond", "Tiempos Headline", Garamond, "Times New Roman", serif;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  --font-display: var(--font-cormorant), var(--font-noto-serif-kr), Garamond, "Times New Roman", serif;
+  --font-sans: var(--font-inter), var(--font-noto-sans-kr), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), var(--font-noto-sans-kr), ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
 
   /* ==========================================================================
    * Font sizes — DESIGN.md `typography:` block
