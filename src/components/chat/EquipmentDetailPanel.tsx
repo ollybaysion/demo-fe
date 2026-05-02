@@ -55,17 +55,15 @@ export function EquipmentDetailPanel({
         // ContextPanel은 right: 0 ~ 320px 차지. 본 패널은 그 왼쪽 fixed.
         "fixed top-0 bottom-0 z-30",
         "bg-brand-canvas border-l border-brand-hairline shadow-md",
-        "flex flex-col",
+        "flex-col",
       ].join(" ")}
-      // Closed state must clear the context panel's 320px slot so the
-      // hidden detail panel doesn't overlap it. translateX(100%) alone
-      // only moves by the panel's own width — we add 320px so the
-      // element ends up fully past the viewport right edge.
+      // No transition: open/close are instant. Closing the slide felt
+      // overdone vs the inline X click. Inner state (selected dropdown,
+      // peer choice) is preserved because we toggle `display`, not unmount.
       style={{
         right: "320px",
         width: "70vw",
-        transform: open ? "translateX(0)" : "translateX(calc(100% + 320px))",
-        transition: "transform 200ms ease-out",
+        display: open ? "flex" : "none",
       }}
     >
       <header className="px-lg py-md border-b border-brand-hairline-soft flex items-center justify-between gap-sm">
