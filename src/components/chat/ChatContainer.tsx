@@ -358,7 +358,6 @@ export function ChatContainer() {
         open={rightPanel === "summary"}
         rows={rows}
         timeRange={timeRange}
-        onClose={() => setRightPanel(null)}
       />
 
       {/* Right-edge floating handle stack — context on top, summary

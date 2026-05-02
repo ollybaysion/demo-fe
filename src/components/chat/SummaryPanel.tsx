@@ -24,10 +24,9 @@ type Props = {
   open: boolean;
   rows: ContextRow[];
   timeRange: TimeRange;
-  onClose: () => void;
 };
 
-export function SummaryPanel({ open, rows, timeRange, onClose }: Props) {
+export function SummaryPanel({ open, rows, timeRange }: Props) {
   const summaryText = PHASE1_PLACEHOLDER;
   const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">(
     "idle",
@@ -72,12 +71,7 @@ export function SummaryPanel({ open, rows, timeRange, onClose }: Props) {
           </Section>
           <Section title="요약">
             <p className="text-body-sm text-brand-muted">{summaryText}</p>
-          </Section>
-        </div>
-
-        <footer className="px-lg py-md border-t border-brand-hairline-soft bg-brand-canvas">
-          <div className="flex items-center justify-between gap-xs flex-wrap">
-            <div className="flex items-center gap-xs">
+            <div className="mt-md flex items-center gap-xs">
               <button
                 type="button"
                 onClick={handleCopy}
@@ -94,31 +88,24 @@ export function SummaryPanel({ open, rows, timeRange, onClose }: Props) {
                 다시 요약
               </button>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 px-md rounded-md text-button text-brand-ink bg-brand-canvas border border-brand-hairline hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-            >
-              닫기
-            </button>
-          </div>
-          {copyStatus === "success" && (
-            <p
-              role="status"
-              className="mt-xs text-caption text-brand-success"
-            >
-              클립보드에 복사되었습니다.
-            </p>
-          )}
-          {copyStatus === "error" && (
-            <p
-              role="status"
-              className="mt-xs text-caption text-brand-error"
-            >
-              복사에 실패했습니다. 브라우저 권한을 확인해주세요.
-            </p>
-          )}
-        </footer>
+            {copyStatus === "success" && (
+              <p
+                role="status"
+                className="mt-xs text-caption text-brand-success"
+              >
+                클립보드에 복사되었습니다.
+              </p>
+            )}
+            {copyStatus === "error" && (
+              <p
+                role="status"
+                className="mt-xs text-caption text-brand-error"
+              >
+                복사에 실패했습니다. 브라우저 권한을 확인해주세요.
+              </p>
+            )}
+          </Section>
+        </div>
       </div>
     </aside>
   );
