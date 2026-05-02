@@ -5,7 +5,7 @@ import type { ContextRow, Message } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TOKEN_INTERVAL_MS = 100;
+const TOKEN_INTERVAL_MS = 30;
 
 type ChatTimeRange = { start?: string; end?: string };
 
