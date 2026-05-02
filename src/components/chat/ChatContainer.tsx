@@ -26,7 +26,11 @@ function newId(): string {
  */
 function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
   return rows.filter((r) =>
-    Object.values(r.values).some((v) => v.trim().length > 0),
+    Object.values(r.values).some((v) => {
+      if (typeof v === "string") return v.trim().length > 0;
+      if (Array.isArray(v)) return v.some((x) => x.trim().length > 0);
+      return false;
+    }),
   );
 }
 
@@ -34,7 +38,15 @@ export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
-  const { rows, setCell, addRow, deleteRow, reset } = useContextRows();
+  const {
+    rows,
+    view,
+    setView,
+    setCell,
+    addRow,
+    deleteRow,
+    reset,
+  } = useContextRows();
 
   const sendToApi = useCallback(
     async (history: Message[], context: ContextRow[]) => {
@@ -164,6 +176,8 @@ export function ChatContainer() {
       <ContextPanel
         open={panelOpen}
         rows={rows}
+        view={view}
+        onViewChange={setView}
         onCellChange={setCell}
         onAdd={addRow}
         onDelete={deleteRow}
