@@ -13,24 +13,70 @@ import type { ContextRow } from "@/lib/types";
 export type ScenarioTurn = {
   user: string;
   assistant: string;
+  /**
+   * 이 턴의 user 메시지가 전송될 때 컨텍스트 패널을 이 행들로 교체.
+   * 시나리오 도중 사용자가 설비를 명시하면 패널이 채워지는 흐름을
+   * 시연할 때 사용.
+   */
+  contextPanel?: ContextRow[];
+  /** 이 턴 user 메시지 전송 시 발생 시간을 함께 갱신. */
+  timeRange?: { start: string; end: string };
 };
 
 export type Scenario = {
   id: string;
   /** 시작 박스 라벨이자 첫 사용자 메시지로 그대로 전송됨. */
   starter: string;
-  /** 컨텍스트 패널에 자동 채워지는 설비 행들. */
+  /** 시나리오 시작(starter 클릭) 시 컨텍스트 패널에 자동 채워지는 설비 행들. */
   contextPanel: ContextRow[];
-  /** 발생 시간 (선택). 비우면 컨텍스트 패널의 기본값(오늘) 유지. */
+  /** 시나리오 시작 시 적용할 발생 시간 (선택). 비우면 패널 기본값(오늘) 유지. */
   timeRange?: { start: string; end: string };
   /**
    * turns[0]: starter 에 대한 첫 assistant 응답
    * turns[1..]: ghost text(user) + assistant
+   * 각 턴마다 추가로 contextPanel / timeRange 를 가질 수 있음.
    */
   turns: ScenarioTurn[];
 };
 
 export const SCENARIOS: readonly Scenario[] = [
+  {
+    id: "data-shape",
+    starter: "설비 데이터가 왜 이렇게 발생했는지 궁금합니다.",
+    // 시나리오 시작 시점엔 비어 있음 — 사용자 두 번째 메시지에서 채워짐.
+    contextPanel: [],
+    turns: [
+      {
+        user: "설비 데이터가 왜 이렇게 발생했는지 궁금합니다.",
+        assistant:
+          "설비 정보와 발생 시간을 입력해주세요. 메시지로 입력하거나 오른쪽 패널을 활용해주세요. 이미지도 가능합니다.",
+      },
+      {
+        user: "ETCH-02 설비 A 챔버 APC_PRESSURE 센서 09:00부터 09:10까지 입니다.",
+        assistant:
+          "먼저 센서를 분석해보도록 하겠습니다. 이 센서는 APC_PRESSURE 센서 데이터의 MAIN_ETCH STEP 공정 진행 중의 최댓값입니다. 09:00 부터 09:10 까지 MAIN_ETCH STEP 정상 진행되었으며 이 기간 APC_PRESSURE 센서 데이터의 최댓값은 3입니다. STEP 종료 시점 기준으로 데이터가 발생하기 때문에 09:10에 센서값 3으로 데이터 발생하였습니다.",
+        contextPanel: [
+          {
+            id: "demo-shape-eq-1",
+            equipment: "ETCH-02",
+            chambers: [
+              {
+                id: "demo-shape-ch-1",
+                name: "A",
+                sensors: [
+                  { id: "demo-shape-sn-1", name: "APC_PRESSURE" },
+                ],
+              },
+            ],
+          },
+        ],
+        timeRange: {
+          start: "2026-05-02T09:00",
+          end: "2026-05-02T09:10",
+        },
+      },
+    ],
+  },
   {
     id: "no-data",
     starter: "설비 데이터가 발생하지 않았는데 그 이유가 궁금합니다.",

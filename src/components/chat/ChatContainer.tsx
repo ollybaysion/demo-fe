@@ -201,10 +201,24 @@ export function ChatContainer() {
 
       if (demoState) {
         const scenario = SCENARIOS.find((s) => s.id === demoState.scenarioId);
+        const currentTurn = scenario?.turns[demoState.turnIndex];
+
+        // Per-turn auto-fill (used when a scripted user message names
+        // the equipment, time, etc. — the panel "follows" the script).
+        let effectiveTimeRange = timeRange;
+        if (currentTurn?.contextPanel) {
+          replaceRows(currentTurn.contextPanel);
+          setPanelOpen(true); // surface the just-filled panel
+        }
+        if (currentTurn?.timeRange) {
+          replaceTimeRange(currentTurn.timeRange);
+          effectiveTimeRange = currentTurn.timeRange;
+        }
+
         await sendToApi(
           nextHistory,
           [],
-          timeRange,
+          effectiveTimeRange,
           { scenarioId: demoState.scenarioId, turnIndex: demoState.turnIndex },
         );
         const nextIdx = demoState.turnIndex + 1;
@@ -217,7 +231,15 @@ export function ChatContainer() {
         await sendToApi(nextHistory, nonEmptyRows(rows), timeRange);
       }
     },
-    [demoState, messages, rows, timeRange, sendToApi],
+    [
+      demoState,
+      messages,
+      rows,
+      timeRange,
+      sendToApi,
+      replaceRows,
+      replaceTimeRange,
+    ],
   );
 
   const handleRequestReset = useCallback(() => {
