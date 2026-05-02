@@ -1,18 +1,15 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { parseSseStream } from "@/lib/sse";
 import type { Message } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 
-// Hardcoded placeholder while #6 (mock SSE) is not yet merged.
-const HARDCODED_RESPONSE =
-  "안녕하세요. 아직 백엔드가 연결되지 않아 임시 mock 응답을 드립니다. 다음 PR(#6)에서 SSE 스트리밍 라우트가 들어가면 실시간 응답으로 교체됩니다.";
-
-const TOKEN_INTERVAL_MS = 35;
-const TYPING_DOTS_DELAY_MS = 600;
+type TokenPayload = { content: string };
+type ErrorPayload = { message: string };
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -22,23 +19,27 @@ export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
-  const handleSubmit = useCallback((text: string) => {
-    const userMessage: Message = {
-      id: newId(),
-      role: "user",
-      content: text,
-      createdAt: Date.now(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsStreaming(true);
-
+  const sendToApi = useCallback(async (history: Message[]) => {
     const assistantId = newId();
-    const characters = [...HARDCODED_RESPONSE];
-    let index = 0;
-    let buffer = "";
+    let assistantInserted = false;
 
-    // Phase 1: typing dots delay before first token
-    const startDelayId = window.setTimeout(() => {
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+      });
+
+      if (!res.ok || !res.body) {
+        const reason =
+          res.status === 0
+            ? "네트워크 연결을 확인해주세요."
+            : `요청 실패 (${res.status}). 잠시 후 다시 시도해주세요.`;
+        appendErrorMessage(setMessages, reason);
+        return;
+      }
+
+      // Insert empty assistant placeholder once we know the response is OK.
       setMessages((prev) => [
         ...prev,
         {
@@ -48,27 +49,68 @@ export function ChatContainer() {
           createdAt: Date.now(),
         },
       ]);
+      assistantInserted = true;
 
-      // Phase 2: stream characters
-      const intervalId = window.setInterval(() => {
-        if (index >= characters.length) {
-          window.clearInterval(intervalId);
-          setIsStreaming(false);
-          return;
+      for await (const ev of parseSseStream<TokenPayload | ErrorPayload>(res.body)) {
+        if (ev.event === "token") {
+          const piece = (ev.data as TokenPayload).content;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: m.content + piece }
+                : m,
+            ),
+          );
+        } else if (ev.event === "done") {
+          break;
+        } else if (ev.event === "error") {
+          const msg = (ev.data as ErrorPayload).message ?? "응답 생성 중 오류";
+          appendErrorMessage(setMessages, msg);
+          break;
         }
-        buffer += characters[index++];
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, content: buffer } : m,
-          ),
-        );
-      }, TOKEN_INTERVAL_MS);
-    }, TYPING_DOTS_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(startDelayId);
-    };
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "응답을 받지 못했습니다.";
+      // If we already inserted an assistant bubble with partial content, keep it
+      // and append a separate error bubble so streamed content isn't lost.
+      if (!assistantInserted) {
+        appendErrorMessage(setMessages, reason);
+      } else {
+        appendErrorMessage(setMessages, reason);
+      }
+    } finally {
+      setIsStreaming(false);
+    }
   }, []);
+
+  const handleSubmit = useCallback(
+    (text: string) => {
+      const userMessage: Message = {
+        id: newId(),
+        role: "user",
+        content: text,
+        createdAt: Date.now(),
+      };
+      const nextHistory = [...messages, userMessage];
+      setMessages(nextHistory);
+      setIsStreaming(true);
+      void sendToApi(nextHistory);
+    },
+    [messages, sendToApi],
+  );
+
+  const handleRetry = useCallback(() => {
+    // Drop the most recent error bubble + any preceding empty/partial assistant
+    // bubble that immediately follows the last user, then re-fetch from there.
+    setMessages((prev) => {
+      const lastUserIndex = findLastIndex(prev, (m) => m.role === "user");
+      if (lastUserIndex === -1) return prev;
+      const trimmed = prev.slice(0, lastUserIndex + 1);
+      setIsStreaming(true);
+      void sendToApi(trimmed);
+      return trimmed;
+    });
+  }, [sendToApi]);
 
   return (
     <div className="flex h-dvh flex-col bg-brand-canvas text-brand-ink">
@@ -79,7 +121,11 @@ export function ChatContainer() {
           {messages.length === 0 ? (
             <ChatEmptyState />
           ) : (
-            <MessageList messages={messages} isStreaming={isStreaming} />
+            <MessageList
+              messages={messages}
+              isStreaming={isStreaming}
+              onRetry={handleRetry}
+            />
           )}
         </div>
       </main>
@@ -94,4 +140,29 @@ export function ChatContainer() {
       </div>
     </div>
   );
+}
+
+function appendErrorMessage(
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
+  content: string,
+) {
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: newId(),
+      role: "error",
+      content,
+      createdAt: Date.now(),
+    },
+  ]);
+}
+
+function findLastIndex<T>(
+  arr: T[],
+  predicate: (value: T) => boolean,
+): number {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i])) return i;
+  }
+  return -1;
 }
