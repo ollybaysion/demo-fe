@@ -1,3 +1,4 @@
+import { CONTEXT_COLUMNS } from "@/config/contextColumns";
 import type { ContextRow, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -20,13 +21,43 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
   return new TextEncoder().encode(payload);
 }
 
+function formatContextRow(row: ContextRow): string {
+  const primary = CONTEXT_COLUMNS.find((c) => c.required && !c.multi);
+  const others = CONTEXT_COLUMNS.filter((c) => c !== primary);
+
+  const head =
+    primary && typeof row.values[primary.key] === "string"
+      ? (row.values[primary.key] as string).trim()
+      : "";
+
+  const detailParts: string[] = [];
+  for (const col of others) {
+    const v = row.values[col.key];
+    if (Array.isArray(v)) {
+      const filled = v.map((s) => s.trim()).filter((s) => s.length > 0);
+      if (filled.length > 0) detailParts.push(`${col.label} ${filled.join(", ")}`);
+    } else if (typeof v === "string" && v.trim().length > 0) {
+      detailParts.push(`${col.label} ${v.trim()}`);
+    }
+  }
+
+  const detail = detailParts.length > 0 ? ` (${detailParts.join(" / ")})` : "";
+  return `${head || "(미입력)"}${detail}`;
+}
+
+function formatContext(context: ContextRow[]): string {
+  return context.map(formatContextRow).join("; ");
+}
+
 function buildMockResponse(
   lastUserContent: string,
   context?: ContextRow[],
   timeRange?: ChatTimeRange,
 ): string {
   const parts: string[] = [];
-  if (context && context.length > 0) parts.push(`설비 ${context.length}행`);
+  if (context && context.length > 0) {
+    parts.push(`설비: ${formatContext(context)}`);
+  }
   if (timeRange && (timeRange.start || timeRange.end)) {
     const start = timeRange.start || "(미지정)";
     const end = timeRange.end || "(미지정)";
