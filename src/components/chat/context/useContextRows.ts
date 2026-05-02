@@ -6,9 +6,7 @@ import { readJson, writeJson } from "@/lib/storage";
 import type { ContextRow, ContextValue } from "@/lib/types";
 
 const STORAGE_KEY = "fdc-agent:context-rows";
-const VIEW_KEY = "fdc-agent:context-view";
-
-export type ContextView = "chips" | "nested";
+const OCCURRED_AT_KEY = "fdc-agent:context-occurred-at";
 
 function newId(): string {
   return `ctx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -27,9 +25,9 @@ function defaultRows(): ContextRow[] {
 }
 
 /**
- * Migrate persisted rows to the current schema:
- * - missing keys -> empty default
- * - shape mismatch (string when column is multi, vice versa) -> coerce
+ * Migrate persisted rows to the current schema. Tolerates older shapes
+ * from prior PR iterations (string -> [string] for multi cols, etc.)
+ * so testers don't lose their input on schema bumps.
  */
 function migrateRows(input: unknown): ContextRow[] | null {
   if (!Array.isArray(input)) return null;
@@ -66,11 +64,11 @@ function migrateRows(input: unknown): ContextRow[] | null {
 
 export function useContextRows() {
   const [rows, setRows] = useState<ContextRow[]>(defaultRows);
-  const [view, setView] = useState<ContextView>("chips");
+  // datetime-local input value, e.g. "2026-05-02T14:30". Empty string =
+  // 미입력 (전송 시 제외).
+  const [occurredAt, setOccurredAt] = useState<string>("");
 
-  // Hydrate from localStorage on mount only. SSR + client first paint
-  // both render the default empty row to avoid hydration mismatch;
-  // stored rows replace the default once mounted on the client.
+  // Hydrate from localStorage on mount only.
   useEffect(() => {
     const stored = readJson<unknown>(STORAGE_KEY, null);
     const migrated = migrateRows(stored);
@@ -78,19 +76,18 @@ export function useContextRows() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRows(migrated);
     }
-    const storedView = readJson<ContextView | null>(VIEW_KEY, null);
-    if (storedView === "chips" || storedView === "nested") {
-      setView(storedView);
+    const storedTime = readJson<string | null>(OCCURRED_AT_KEY, null);
+    if (typeof storedTime === "string") {
+      setOccurredAt(storedTime);
     }
   }, []);
 
-  // Persist after every change (best-effort).
   useEffect(() => {
     writeJson(STORAGE_KEY, rows);
   }, [rows]);
   useEffect(() => {
-    writeJson(VIEW_KEY, view);
-  }, [view]);
+    writeJson(OCCURRED_AT_KEY, occurredAt);
+  }, [occurredAt]);
 
   const setCell = useCallback(
     (rowId: string, key: string, value: ContextValue) => {
@@ -116,7 +113,16 @@ export function useContextRows() {
 
   const reset = useCallback(() => {
     setRows(defaultRows());
+    setOccurredAt("");
   }, []);
 
-  return { rows, view, setView, setCell, addRow, deleteRow, reset };
+  return {
+    rows,
+    occurredAt,
+    setOccurredAt,
+    setCell,
+    addRow,
+    deleteRow,
+    reset,
+  };
 }

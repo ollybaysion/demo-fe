@@ -2,13 +2,12 @@
 
 import type { ContextRow, ContextValue } from "@/lib/types";
 import { ContextTable } from "./ContextTable";
-import type { ContextView } from "./useContextRows";
 
 type Props = {
   open: boolean;
   rows: ContextRow[];
-  view: ContextView;
-  onViewChange: (view: ContextView) => void;
+  occurredAt: string;
+  onOccurredAtChange: (next: string) => void;
   onCellChange: (rowId: string, key: string, value: ContextValue) => void;
   onAdd: () => void;
   onDelete: (rowId: string) => void;
@@ -18,8 +17,8 @@ type Props = {
 export function ContextPanel({
   open,
   rows,
-  view,
-  onViewChange,
+  occurredAt,
+  onOccurredAtChange,
   onCellChange,
   onAdd,
   onDelete,
@@ -37,20 +36,22 @@ export function ContextPanel({
       ].join(" ")}
     >
       <div className="w-[320px] h-full flex flex-col">
-        <header className="px-lg pt-lg pb-md border-b border-brand-hairline-soft flex items-center justify-between gap-sm">
-          <h2 className="font-sans text-title-md text-brand-ink">
-            설비 정보
-          </h2>
-          <ViewSwitcher view={view} onChange={onViewChange} />
+        <header className="px-lg pt-lg pb-md border-b border-brand-hairline-soft">
+          <h2 className="font-sans text-title-md text-brand-ink">설비 정보</h2>
         </header>
-        <div className="flex-1 overflow-y-auto px-lg py-md">
-          <ContextTable
-            rows={rows}
-            view={view}
-            onCellChange={onCellChange}
-            onAdd={onAdd}
-            onDelete={onDelete}
-            onReset={onReset}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-lg py-md">
+            <ContextTable
+              rows={rows}
+              onCellChange={onCellChange}
+              onAdd={onAdd}
+              onDelete={onDelete}
+              onReset={onReset}
+            />
+          </div>
+          <OccurredAtSection
+            value={occurredAt}
+            onChange={onOccurredAtChange}
           />
         </div>
       </div>
@@ -58,56 +59,52 @@ export function ContextPanel({
   );
 }
 
-function ViewSwitcher({
-  view,
+function OccurredAtSection({
+  value,
   onChange,
 }: {
-  view: ContextView;
-  onChange: (v: ContextView) => void;
+  value: string;
+  onChange: (next: string) => void;
 }) {
   return (
-    <div
-      role="radiogroup"
-      aria-label="표시 방식"
-      className="inline-flex items-center bg-brand-surface-card rounded-md p-[2px]"
-    >
-      <ViewOption
-        label="칩"
-        selected={view === "chips"}
-        onClick={() => onChange("chips")}
-      />
-      <ViewOption
-        label="목록"
-        selected={view === "nested"}
-        onClick={() => onChange("nested")}
-      />
+    <div className="px-lg py-md border-t border-brand-hairline-soft">
+      <label className="block">
+        <span className="block text-caption text-brand-muted mb-xxs">
+          발생 시간
+        </span>
+        <div className="flex items-center gap-xs">
+          <input
+            type="datetime-local"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="flex-1 bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          />
+          {value && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              aria-label="발생 시간 비우기"
+              title="발생 시간 비우기"
+              className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </label>
     </div>
-  );
-}
-
-function ViewOption({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onClick}
-      className={[
-        "px-sm py-xxs rounded-sm text-caption transition-colors",
-        selected
-          ? "bg-brand-canvas text-brand-ink shadow-sm"
-          : "text-brand-muted hover:text-brand-ink",
-      ].join(" ")}
-    >
-      {label}
-    </button>
   );
 }

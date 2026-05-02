@@ -1,13 +1,10 @@
 "use client";
 
 import type { ContextRow as ContextRowType, ContextValue } from "@/lib/types";
-import { ContextRowChips } from "./ContextRowChips";
 import { ContextRowNested } from "./ContextRowNested";
-import type { ContextView } from "./useContextRows";
 
 type Props = {
   rows: ContextRowType[];
-  view: ContextView;
   onCellChange: (rowId: string, key: string, value: ContextValue) => void;
   onAdd: () => void;
   onDelete: (rowId: string) => void;
@@ -16,19 +13,16 @@ type Props = {
 
 export function ContextTable({
   rows,
-  view,
   onCellChange,
   onAdd,
   onDelete,
   onReset,
 }: Props) {
-  const Row = view === "chips" ? ContextRowChips : ContextRowNested;
-
   return (
     <div className="flex flex-col gap-md">
       <div className="flex flex-col gap-md">
         {rows.map((row) => (
-          <Row
+          <ContextRowNested
             key={row.id}
             row={row}
             onChange={(key, value) => onCellChange(row.id, key, value)}

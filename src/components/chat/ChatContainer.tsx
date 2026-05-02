@@ -40,8 +40,8 @@ export function ChatContainer() {
   const [panelOpen, setPanelOpen] = useState(false);
   const {
     rows,
-    view,
-    setView,
+    occurredAt,
+    setOccurredAt,
     setCell,
     addRow,
     deleteRow,
@@ -49,7 +49,11 @@ export function ChatContainer() {
   } = useContextRows();
 
   const sendToApi = useCallback(
-    async (history: Message[], context: ContextRow[]) => {
+    async (
+      history: Message[],
+      context: ContextRow[],
+      occurredAtSnapshot: string,
+    ) => {
       const assistantId = newId();
       let assistantInserted = false;
 
@@ -57,7 +61,11 @@ export function ChatContainer() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: history, context }),
+          body: JSON.stringify({
+            messages: history,
+            context,
+            occurredAt: occurredAtSnapshot || undefined,
+          }),
         });
 
         if (!res.ok || !res.body) {
@@ -126,9 +134,9 @@ export function ChatContainer() {
       const nextHistory = [...messages, userMessage];
       setMessages(nextHistory);
       setIsStreaming(true);
-      void sendToApi(nextHistory, nonEmptyRows(rows));
+      void sendToApi(nextHistory, nonEmptyRows(rows), occurredAt);
     },
-    [messages, rows, sendToApi],
+    [messages, rows, occurredAt, sendToApi],
   );
 
   const handleRetry = useCallback(() => {
@@ -137,10 +145,10 @@ export function ChatContainer() {
       if (lastUserIndex === -1) return prev;
       const trimmed = prev.slice(0, lastUserIndex + 1);
       setIsStreaming(true);
-      void sendToApi(trimmed, nonEmptyRows(rows));
+      void sendToApi(trimmed, nonEmptyRows(rows), occurredAt);
       return trimmed;
     });
-  }, [rows, sendToApi]);
+  }, [rows, occurredAt, sendToApi]);
 
   return (
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
@@ -176,8 +184,8 @@ export function ChatContainer() {
       <ContextPanel
         open={panelOpen}
         rows={rows}
-        view={view}
-        onViewChange={setView}
+        occurredAt={occurredAt}
+        onOccurredAtChange={setOccurredAt}
         onCellChange={setCell}
         onAdd={addRow}
         onDelete={deleteRow}
