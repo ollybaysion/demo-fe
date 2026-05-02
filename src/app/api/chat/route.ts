@@ -63,7 +63,7 @@ function buildMockResponse(
     const end = timeRange.end || "(미지정)";
     parts.push(`발생 시간 ${start} ~ ${end}`);
   }
-  const ctxNote = parts.length > 0 ? ` (${parts.join(", ")} 받음)` : "";
+  const ctxNote = parts.length > 0 ? ` (${parts.join(", ")})` : "";
   return `'${lastUserContent}' 라고 물으셨네요${ctxNote}. 아직 백엔드가 연결되지 않았습니다.`;
 }
 
