@@ -1,13 +1,16 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { ContextRow, ContextValue } from "@/lib/types";
 import { ContextTable } from "./ContextTable";
+import type { TimeRange } from "./useContextRows";
 
 type Props = {
   open: boolean;
   rows: ContextRow[];
-  occurredAt: string;
-  onOccurredAtChange: (next: string) => void;
+  timeRange: TimeRange;
+  onStartChange: (next: string) => void;
+  onEndChange: (next: string) => void;
   onCellChange: (rowId: string, key: string, value: ContextValue) => void;
   onAdd: () => void;
   onDelete: (rowId: string) => void;
@@ -17,8 +20,9 @@ type Props = {
 export function ContextPanel({
   open,
   rows,
-  occurredAt,
-  onOccurredAtChange,
+  timeRange,
+  onStartChange,
+  onEndChange,
   onCellChange,
   onAdd,
   onDelete,
@@ -36,11 +40,8 @@ export function ContextPanel({
       ].join(" ")}
     >
       <div className="w-[320px] h-full flex flex-col">
-        <header className="px-lg pt-lg pb-md border-b border-brand-hairline-soft">
-          <h2 className="font-sans text-title-md text-brand-ink">설비 정보</h2>
-        </header>
         <div className="flex-1 overflow-y-auto">
-          <div className="px-lg py-md">
+          <Section title="설비 정보">
             <ContextTable
               rows={rows}
               onCellChange={onCellChange}
@@ -48,63 +49,99 @@ export function ContextPanel({
               onDelete={onDelete}
               onReset={onReset}
             />
-          </div>
-          <OccurredAtSection
-            value={occurredAt}
-            onChange={onOccurredAtChange}
-          />
+          </Section>
+          <Section title="발생 시간">
+            <TimeRangeFields
+              range={timeRange}
+              onStartChange={onStartChange}
+              onEndChange={onEndChange}
+            />
+          </Section>
         </div>
       </div>
     </aside>
   );
 }
 
-function OccurredAtSection({
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="px-lg pt-lg pb-md border-b border-brand-hairline-soft last:border-b-0">
+      <h2 className="font-sans text-title-md text-brand-ink mb-md">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function TimeRangeFields({
+  range,
+  onStartChange,
+  onEndChange,
+}: {
+  range: TimeRange;
+  onStartChange: (v: string) => void;
+  onEndChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-sm">
+      <TimeField
+        label="시작"
+        value={range.start}
+        onChange={onStartChange}
+      />
+      <TimeField label="종료" value={range.end} onChange={onEndChange} />
+    </div>
+  );
+}
+
+function TimeField({
+  label,
   value,
   onChange,
 }: {
+  label: string;
   value: string;
-  onChange: (next: string) => void;
+  onChange: (v: string) => void;
 }) {
   return (
-    <div className="px-lg py-md border-t border-brand-hairline-soft">
-      <label className="block">
-        <span className="block text-caption text-brand-muted mb-xxs">
-          발생 시간
-        </span>
-        <div className="flex items-center gap-xs">
-          <input
-            type="datetime-local"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="flex-1 bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          />
-          {value && (
-            <button
-              type="button"
-              onClick={() => onChange("")}
-              aria-label="발생 시간 비우기"
-              title="발생 시간 비우기"
-              className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+    <label className="block">
+      <span className="block text-caption text-brand-muted mb-xxs">
+        {label}
+      </span>
+      <div className="flex items-center gap-xs">
+        <input
+          type="datetime-local"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          // min-w-0 lets the flex item shrink below the browser's
+          // intrinsic min-width for datetime-local, keeping the
+          // clear (×) button in view inside a 320px-wide panel.
+          className="flex-1 min-w-0 bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            aria-label={`${label} 시간 비우기`}
+            title={`${label} 시간 비우기`}
+            className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          )}
-        </div>
-      </label>
-    </div>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </label>
   );
 }

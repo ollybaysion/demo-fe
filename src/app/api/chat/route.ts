@@ -5,12 +5,14 @@ export const dynamic = "force-dynamic";
 
 const TOKEN_INTERVAL_MS = 100;
 
+type ChatTimeRange = { start?: string; end?: string };
+
 type ChatRequestBody = {
   messages: Message[];
   /** Optional 설비 정보 table (#16) included by the client. */
   context?: ContextRow[];
-  /** Optional 발생 시간 (datetime-local string), e.g. "2026-05-02T14:30". */
-  occurredAt?: string;
+  /** Optional 발생 시간 범위 (datetime-local strings). */
+  timeRange?: ChatTimeRange;
 };
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
@@ -21,11 +23,15 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
 function buildMockResponse(
   lastUserContent: string,
   context?: ContextRow[],
-  occurredAt?: string,
+  timeRange?: ChatTimeRange,
 ): string {
   const parts: string[] = [];
   if (context && context.length > 0) parts.push(`설비 ${context.length}행`);
-  if (occurredAt) parts.push(`발생 시간 ${occurredAt}`);
+  if (timeRange && (timeRange.start || timeRange.end)) {
+    const start = timeRange.start || "(미지정)";
+    const end = timeRange.end || "(미지정)";
+    parts.push(`발생 시간 ${start} ~ ${end}`);
+  }
   const ctxNote = parts.length > 0 ? ` (${parts.join(", ")} 받음)` : "";
   return `'${lastUserContent}' 라고 물으셨네요${ctxNote}. 아직 백엔드가 연결되지 않았습니다.`;
 }
@@ -61,7 +67,7 @@ export async function POST(request: Request): Promise<Response> {
   const responseText = buildMockResponse(
     lastUser.content,
     body.context,
-    body.occurredAt,
+    body.timeRange,
   );
   const characters = [...responseText];
   const messageId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;

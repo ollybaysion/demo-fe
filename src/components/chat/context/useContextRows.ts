@@ -6,7 +6,11 @@ import { readJson, writeJson } from "@/lib/storage";
 import type { ContextRow, ContextValue } from "@/lib/types";
 
 const STORAGE_KEY = "fdc-agent:context-rows";
-const OCCURRED_AT_KEY = "fdc-agent:context-occurred-at";
+const TIME_RANGE_KEY = "fdc-agent:context-time-range";
+
+export type TimeRange = { start: string; end: string };
+
+const EMPTY_RANGE: TimeRange = { start: "", end: "" };
 
 function newId(): string {
   return `ctx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -24,10 +28,30 @@ function defaultRows(): ContextRow[] {
   return [emptyRow()];
 }
 
+/** Today's start (00:00) and end (23:59) in datetime-local format. */
+function todayRange(): TimeRange {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return {
+    start: `${yyyy}-${mm}-${dd}T00:00`,
+    end: `${yyyy}-${mm}-${dd}T23:59`,
+  };
+}
+
+function isValidRange(v: unknown): v is TimeRange {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as TimeRange).start === "string" &&
+    typeof (v as TimeRange).end === "string"
+  );
+}
+
 /**
- * Migrate persisted rows to the current schema. Tolerates older shapes
- * from prior PR iterations (string -> [string] for multi cols, etc.)
- * so testers don't lose their input on schema bumps.
+ * Tolerates older shapes (string -> [string] for multi cols, missing
+ * keys, etc.) so prior PR testers don't lose their input.
  */
 function migrateRows(input: unknown): ContextRow[] | null {
   if (!Array.isArray(input)) return null;
@@ -64,21 +88,23 @@ function migrateRows(input: unknown): ContextRow[] | null {
 
 export function useContextRows() {
   const [rows, setRows] = useState<ContextRow[]>(defaultRows);
-  // datetime-local input value, e.g. "2026-05-02T14:30". Empty string =
-  // 미입력 (전송 시 제외).
-  const [occurredAt, setOccurredAt] = useState<string>("");
+  // Empty on SSR + first client render to avoid hydration mismatch with
+  // today's date (timezone-dependent). Filled on mount via useEffect.
+  const [timeRange, setTimeRange] = useState<TimeRange>(EMPTY_RANGE);
 
-  // Hydrate from localStorage on mount only.
   useEffect(() => {
-    const stored = readJson<unknown>(STORAGE_KEY, null);
-    const migrated = migrateRows(stored);
+    const storedRows = readJson<unknown>(STORAGE_KEY, null);
+    const migrated = migrateRows(storedRows);
     if (migrated) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRows(migrated);
     }
-    const storedTime = readJson<string | null>(OCCURRED_AT_KEY, null);
-    if (typeof storedTime === "string") {
-      setOccurredAt(storedTime);
+    const storedRange = readJson<unknown>(TIME_RANGE_KEY, null);
+    if (isValidRange(storedRange)) {
+      setTimeRange(storedRange);
+    } else {
+      // No prior value — default to today 00:00 ~ 23:59.
+      setTimeRange(todayRange());
     }
   }, []);
 
@@ -86,8 +112,10 @@ export function useContextRows() {
     writeJson(STORAGE_KEY, rows);
   }, [rows]);
   useEffect(() => {
-    writeJson(OCCURRED_AT_KEY, occurredAt);
-  }, [occurredAt]);
+    // Don't persist the empty placeholder before hydration finishes.
+    if (timeRange.start === "" && timeRange.end === "") return;
+    writeJson(TIME_RANGE_KEY, timeRange);
+  }, [timeRange]);
 
   const setCell = useCallback(
     (rowId: string, key: string, value: ContextValue) => {
@@ -111,15 +139,24 @@ export function useContextRows() {
     });
   }, []);
 
+  const setStart = useCallback((next: string) => {
+    setTimeRange((prev) => ({ ...prev, start: next }));
+  }, []);
+
+  const setEnd = useCallback((next: string) => {
+    setTimeRange((prev) => ({ ...prev, end: next }));
+  }, []);
+
   const reset = useCallback(() => {
     setRows(defaultRows());
-    setOccurredAt("");
+    setTimeRange(todayRange());
   }, []);
 
   return {
     rows,
-    occurredAt,
-    setOccurredAt,
+    timeRange,
+    setStart,
+    setEnd,
     setCell,
     addRow,
     deleteRow,

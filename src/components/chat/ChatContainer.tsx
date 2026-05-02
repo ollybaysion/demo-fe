@@ -40,8 +40,9 @@ export function ChatContainer() {
   const [panelOpen, setPanelOpen] = useState(false);
   const {
     rows,
-    occurredAt,
-    setOccurredAt,
+    timeRange,
+    setStart,
+    setEnd,
     setCell,
     addRow,
     deleteRow,
@@ -52,10 +53,13 @@ export function ChatContainer() {
     async (
       history: Message[],
       context: ContextRow[],
-      occurredAtSnapshot: string,
+      timeRangeSnapshot: { start: string; end: string },
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
+
+      const hasRange =
+        timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
 
       try {
         const res = await fetch("/api/chat", {
@@ -64,7 +68,7 @@ export function ChatContainer() {
           body: JSON.stringify({
             messages: history,
             context,
-            occurredAt: occurredAtSnapshot || undefined,
+            timeRange: hasRange ? timeRangeSnapshot : undefined,
           }),
         });
 
@@ -134,9 +138,9 @@ export function ChatContainer() {
       const nextHistory = [...messages, userMessage];
       setMessages(nextHistory);
       setIsStreaming(true);
-      void sendToApi(nextHistory, nonEmptyRows(rows), occurredAt);
+      void sendToApi(nextHistory, nonEmptyRows(rows), timeRange);
     },
-    [messages, rows, occurredAt, sendToApi],
+    [messages, rows, timeRange, sendToApi],
   );
 
   const handleRetry = useCallback(() => {
@@ -145,10 +149,10 @@ export function ChatContainer() {
       if (lastUserIndex === -1) return prev;
       const trimmed = prev.slice(0, lastUserIndex + 1);
       setIsStreaming(true);
-      void sendToApi(trimmed, nonEmptyRows(rows), occurredAt);
+      void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
       return trimmed;
     });
-  }, [rows, occurredAt, sendToApi]);
+  }, [rows, timeRange, sendToApi]);
 
   return (
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
@@ -184,8 +188,9 @@ export function ChatContainer() {
       <ContextPanel
         open={panelOpen}
         rows={rows}
-        occurredAt={occurredAt}
-        onOccurredAtChange={setOccurredAt}
+        timeRange={timeRange}
+        onStartChange={setStart}
+        onEndChange={setEnd}
         onCellChange={setCell}
         onAdd={addRow}
         onDelete={deleteRow}
