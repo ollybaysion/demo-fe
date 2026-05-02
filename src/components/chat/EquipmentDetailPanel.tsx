@@ -52,14 +52,21 @@ export function EquipmentDetailPanel({
       aria-label="설비 상세 정보 확장 패널"
       aria-hidden={!open}
       className={[
-        // ContextPanel은 right: 0 ~ 320px 차지. 본 패널은 그 왼쪽.
+        // ContextPanel은 right: 0 ~ 320px 차지. 본 패널은 그 왼쪽 fixed.
         "fixed top-0 bottom-0 z-30",
-        "transition-transform duration-200 ease-out",
         "bg-brand-canvas border-l border-brand-hairline shadow-md",
         "flex flex-col",
-        open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
-      style={{ right: "320px", width: "70vw" }}
+      // Closed state must clear the context panel's 320px slot so the
+      // hidden detail panel doesn't overlap it. translateX(100%) alone
+      // only moves by the panel's own width — we add 320px so the
+      // element ends up fully past the viewport right edge.
+      style={{
+        right: "320px",
+        width: "70vw",
+        transform: open ? "translateX(0)" : "translateX(calc(100% + 320px))",
+        transition: "transform 200ms ease-out",
+      }}
     >
       <header className="px-lg py-md border-b border-brand-hairline-soft flex items-center justify-between gap-sm">
         <div>
