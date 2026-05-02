@@ -43,7 +43,10 @@ export function ContextRowNested({
           onChange={(e) =>
             equipmentCol && onChange(equipmentCol.key, e.target.value)
           }
-          className="flex-1 bg-transparent text-brand-ink placeholder:text-brand-muted-soft font-sans text-body-sm border-b border-transparent focus:border-brand-primary focus:outline-none transition-colors"
+          // min-w-0 lets the flex item shrink below intrinsic min-width
+          // so the trailing X button stays inside the 320px panel even
+          // for long equipment names.
+          className="flex-1 min-w-0 bg-transparent text-brand-ink placeholder:text-brand-muted-soft font-sans text-body-sm border-b border-transparent focus:border-brand-primary focus:outline-none transition-colors"
         />
         <button
           type="button"
@@ -51,9 +54,22 @@ export function ContextRowNested({
           disabled={!canDelete}
           aria-label="이 설비 행 삭제"
           title={canDelete ? "이 설비 행 삭제" : "마지막 행은 삭제할 수 없습니다"}
-          className="shrink-0 text-caption text-brand-muted hover:text-brand-error disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs px-xxs py-xxs transition-colors"
+          className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-error disabled:text-brand-muted-soft disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
-          삭제
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
       </div>
 
