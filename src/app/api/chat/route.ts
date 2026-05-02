@@ -1,4 +1,4 @@
-import type { Message } from "@/lib/types";
+import type { ContextRow, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +7,8 @@ const TOKEN_INTERVAL_MS = 100;
 
 type ChatRequestBody = {
   messages: Message[];
+  /** Optional domain context table (#16) included by the client. */
+  context?: ContextRow[];
 };
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
@@ -14,8 +16,15 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
   return new TextEncoder().encode(payload);
 }
 
-function buildMockResponse(lastUserContent: string): string {
-  return `'${lastUserContent}' 라고 물으셨네요. 아직 백엔드가 연결되지 않았습니다.`;
+function buildMockResponse(
+  lastUserContent: string,
+  context?: ContextRow[],
+): string {
+  const ctxNote =
+    context && context.length > 0
+      ? ` (컨텍스트 ${context.length}행 받음)`
+      : "";
+  return `'${lastUserContent}' 라고 물으셨네요${ctxNote}. 아직 백엔드가 연결되지 않았습니다.`;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -46,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const responseText = buildMockResponse(lastUser.content);
+  const responseText = buildMockResponse(lastUser.content, body.context);
   const characters = [...responseText];
   const messageId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 

@@ -2,11 +2,16 @@
 
 import { useCallback, useState } from "react";
 import { parseSseStream } from "@/lib/sse";
-import type { Message } from "@/lib/types";
+import type { ContextRow, Message } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
+import {
+  ContextPanel,
+  ContextToggleHandle,
+  useContextRows,
+} from "./context";
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
@@ -15,73 +20,88 @@ function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Strip rows that are entirely empty so we don't ship blank context to
+ * the API. Partially filled rows go through as-is.
+ */
+function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
+  return rows.filter((r) =>
+    Object.values(r.values).some((v) => v.trim().length > 0),
+  );
+}
+
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const { rows, setCell, addRow, deleteRow, reset } = useContextRows();
 
-  const sendToApi = useCallback(async (history: Message[]) => {
-    const assistantId = newId();
-    let assistantInserted = false;
+  const sendToApi = useCallback(
+    async (history: Message[], context: ContextRow[]) => {
+      const assistantId = newId();
+      let assistantInserted = false;
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
-      });
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: history, context }),
+        });
 
-      if (!res.ok || !res.body) {
-        const reason =
-          res.status === 0
-            ? "네트워크 연결을 확인해주세요."
-            : `요청 실패 (${res.status}). 잠시 후 다시 시도해주세요.`;
-        appendErrorMessage(setMessages, reason);
-        return;
-      }
-
-      // Insert empty assistant placeholder once we know the response is OK.
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantId,
-          role: "assistant",
-          content: "",
-          createdAt: Date.now(),
-        },
-      ]);
-      assistantInserted = true;
-
-      for await (const ev of parseSseStream<TokenPayload | ErrorPayload>(res.body)) {
-        if (ev.event === "token") {
-          const piece = (ev.data as TokenPayload).content;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: m.content + piece }
-                : m,
-            ),
-          );
-        } else if (ev.event === "done") {
-          break;
-        } else if (ev.event === "error") {
-          const msg = (ev.data as ErrorPayload).message ?? "응답 생성 중 오류";
-          appendErrorMessage(setMessages, msg);
-          break;
+        if (!res.ok || !res.body) {
+          const reason =
+            res.status === 0
+              ? "네트워크 연결을 확인해주세요."
+              : `요청 실패 (${res.status}). 잠시 후 다시 시도해주세요.`;
+          appendErrorMessage(setMessages, reason);
+          return;
         }
-      }
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : "응답을 받지 못했습니다.";
-      // If we already inserted an assistant bubble with partial content, keep it
-      // and append a separate error bubble so streamed content isn't lost.
-      if (!assistantInserted) {
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantId,
+            role: "assistant",
+            content: "",
+            createdAt: Date.now(),
+          },
+        ]);
+        assistantInserted = true;
+
+        for await (const ev of parseSseStream<TokenPayload | ErrorPayload>(
+          res.body,
+        )) {
+          if (ev.event === "token") {
+            const piece = (ev.data as TokenPayload).content;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: m.content + piece }
+                  : m,
+              ),
+            );
+          } else if (ev.event === "done") {
+            break;
+          } else if (ev.event === "error") {
+            const msg =
+              (ev.data as ErrorPayload).message ?? "응답 생성 중 오류";
+            appendErrorMessage(setMessages, msg);
+            break;
+          }
+        }
+      } catch (err) {
+        const reason =
+          err instanceof Error ? err.message : "응답을 받지 못했습니다.";
         appendErrorMessage(setMessages, reason);
-      } else {
-        appendErrorMessage(setMessages, reason);
+        // assistantInserted exists for callers that want to know whether
+        // the partial bubble was emitted; current behavior is identical.
+        void assistantInserted;
+      } finally {
+        setIsStreaming(false);
       }
-    } finally {
-      setIsStreaming(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const handleSubmit = useCallback(
     (text: string) => {
@@ -94,50 +114,67 @@ export function ChatContainer() {
       const nextHistory = [...messages, userMessage];
       setMessages(nextHistory);
       setIsStreaming(true);
-      void sendToApi(nextHistory);
+      void sendToApi(nextHistory, nonEmptyRows(rows));
     },
-    [messages, sendToApi],
+    [messages, rows, sendToApi],
   );
 
   const handleRetry = useCallback(() => {
-    // Drop the most recent error bubble + any preceding empty/partial assistant
-    // bubble that immediately follows the last user, then re-fetch from there.
     setMessages((prev) => {
       const lastUserIndex = findLastIndex(prev, (m) => m.role === "user");
       if (lastUserIndex === -1) return prev;
       const trimmed = prev.slice(0, lastUserIndex + 1);
       setIsStreaming(true);
-      void sendToApi(trimmed);
+      void sendToApi(trimmed, nonEmptyRows(rows));
       return trimmed;
     });
-  }, [sendToApi]);
+  }, [rows, sendToApi]);
 
   return (
-    <div className="flex h-dvh flex-col bg-brand-canvas text-brand-ink">
-      <ChatHeader />
+    <div className="flex h-dvh bg-brand-canvas text-brand-ink">
+      {/* Chat column */}
+      <div className="flex flex-1 min-w-0 flex-col">
+        <ChatHeader />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-chat-narrow px-lg py-xl">
-          {messages.length === 0 ? (
-            <ChatEmptyState />
-          ) : (
-            <MessageList
-              messages={messages}
-              isStreaming={isStreaming}
-              onRetry={handleRetry}
-            />
-          )}
-        </div>
-      </main>
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-chat-narrow px-lg py-xl">
+            {messages.length === 0 ? (
+              <ChatEmptyState />
+            ) : (
+              <MessageList
+                messages={messages}
+                isStreaming={isStreaming}
+                onRetry={handleRetry}
+              />
+            )}
+          </div>
+        </main>
 
-      <div
-        className="bg-brand-canvas"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
-          <ChatInput onSubmit={handleSubmit} disabled={isStreaming} />
+        <div
+          className="bg-brand-canvas"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
+            <ChatInput onSubmit={handleSubmit} disabled={isStreaming} />
+          </div>
         </div>
       </div>
+
+      {/* Right-side context panel (push layout) */}
+      <ContextPanel
+        open={panelOpen}
+        rows={rows}
+        onCellChange={setCell}
+        onAdd={addRow}
+        onDelete={deleteRow}
+        onReset={reset}
+      />
+
+      {/* Toggle handle (fixed) — sits at panel's left edge when open */}
+      <ContextToggleHandle
+        open={panelOpen}
+        onToggle={() => setPanelOpen((o) => !o)}
+      />
     </div>
   );
 }
