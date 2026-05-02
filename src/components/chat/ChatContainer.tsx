@@ -10,6 +10,8 @@ import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
+import { SummaryPanel } from "./SummaryPanel";
+import { SummaryToggleHandle } from "./SummaryToggleHandle";
 import {
   ContextPanel,
   ContextToggleHandle,
@@ -47,7 +49,11 @@ function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
+  // Single source of truth for the right-side slot — at most one panel
+  // is shown at a time; flipping flips both visually.
+  const [rightPanel, setRightPanel] = useState<"context" | "summary" | null>(
+    null,
+  );
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
@@ -208,7 +214,7 @@ export function ChatContainer() {
         let effectiveTimeRange = timeRange;
         if (currentTurn?.contextPanel) {
           replaceRows(currentTurn.contextPanel);
-          setPanelOpen(true); // surface the just-filled panel
+          setRightPanel("context"); // surface the just-filled panel
         }
         if (currentTurn?.timeRange) {
           replaceTimeRange(currentTurn.timeRange);
@@ -328,9 +334,9 @@ export function ChatContainer() {
         </div>
       </div>
 
-      {/* Right-side context panel (push layout) */}
+      {/* Right-side context panel (push layout) — mutex with summary */}
       <ContextPanel
-        open={panelOpen}
+        open={rightPanel === "context"}
         rows={rows}
         timeRange={timeRange}
         onStartChange={setStart}
@@ -347,11 +353,37 @@ export function ChatContainer() {
         onReset={reset}
       />
 
-      {/* Toggle handle (fixed) — sits at panel's left edge when open */}
-      <ContextToggleHandle
-        open={panelOpen}
-        onToggle={() => setPanelOpen((o) => !o)}
+      {/* Right-side summary panel (#24) — mutex with context */}
+      <SummaryPanel
+        open={rightPanel === "summary"}
+        rows={rows}
+        timeRange={timeRange}
       />
+
+      {/* Right-edge floating handle stack — context on top, summary
+          stacks below once at least one message exists. */}
+      <div
+        className={[
+          "fixed top-1/4 right-0 z-20 flex flex-col gap-xs",
+          "transition-transform duration-200 ease-out",
+          rightPanel !== null ? "translate-x-[-320px]" : "translate-x-0",
+        ].join(" ")}
+      >
+        <ContextToggleHandle
+          isOpen={rightPanel === "context"}
+          onToggle={() =>
+            setRightPanel((prev) => (prev === "context" ? null : "context"))
+          }
+        />
+        {messages.length > 0 && (
+          <SummaryToggleHandle
+            isOpen={rightPanel === "summary"}
+            onToggle={() =>
+              setRightPanel((prev) => (prev === "summary" ? null : "summary"))
+            }
+          />
+        )}
+      </div>
 
       <ConfirmDialog
         open={resetDialogOpen}
