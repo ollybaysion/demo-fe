@@ -63,48 +63,50 @@ export function SummaryPanel({ open, rows, timeRange }: Props) {
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <Section title="설비 정보">
-            <EquipmentList rows={rows} />
-          </Section>
-          <Section title="발생 시간">
-            <TimeRangeReadout range={timeRange} />
-          </Section>
-          <Section title="요약">
-            <p className="text-body-sm text-brand-muted">{summaryText}</p>
-            <div className="mt-md flex items-center gap-xs">
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="h-8 px-md rounded-md text-button bg-brand-primary text-brand-on-primary hover:bg-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-colors"
-              >
-                복사
-              </button>
-              <button
-                type="button"
-                disabled
-                title="백엔드 연결 후 활성됩니다"
-                className="h-8 px-md rounded-md text-button bg-brand-primary-disabled text-brand-muted cursor-not-allowed"
-              >
-                다시 요약
-              </button>
-            </div>
-            {copyStatus === "success" && (
-              <p
-                role="status"
-                className="mt-xs text-caption text-brand-success"
-              >
-                클립보드에 복사되었습니다.
-              </p>
-            )}
-            {copyStatus === "error" && (
-              <p
-                role="status"
-                className="mt-xs text-caption text-brand-error"
-              >
-                복사에 실패했습니다. 브라우저 권한을 확인해주세요.
-              </p>
-            )}
-          </Section>
+          <div className="px-lg py-lg flex flex-col gap-lg">
+            <Section title="설비 정보">
+              <EquipmentList rows={rows} />
+            </Section>
+            <Section title="발생 시간">
+              <TimeRangeReadout range={timeRange} />
+            </Section>
+            <Section title="요약">
+              <p className="text-body-sm text-brand-muted">{summaryText}</p>
+              <div className="mt-md flex items-center gap-xs">
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="h-8 px-md rounded-md text-button bg-brand-primary text-brand-on-primary hover:bg-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-colors"
+                >
+                  복사
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  title="백엔드 연결 후 활성됩니다"
+                  className="h-8 px-md rounded-md text-button bg-brand-primary-disabled text-brand-muted cursor-not-allowed"
+                >
+                  다시 요약
+                </button>
+              </div>
+              {copyStatus === "success" && (
+                <p
+                  role="status"
+                  className="mt-xs text-caption text-brand-success"
+                >
+                  클립보드에 복사되었습니다.
+                </p>
+              )}
+              {copyStatus === "error" && (
+                <p
+                  role="status"
+                  className="mt-xs text-caption text-brand-error"
+                >
+                  복사에 실패했습니다. 브라우저 권한을 확인해주세요.
+                </p>
+              )}
+            </Section>
+          </div>
         </div>
       </div>
     </aside>
@@ -119,8 +121,10 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="px-lg pt-lg pb-md border-b border-brand-hairline-soft last:border-b-0">
-      <h3 className="font-sans text-title-md text-brand-ink mb-md">{title}</h3>
+    <section>
+      <h3 className="font-sans text-title-sm text-brand-muted mb-xs">
+        {title}
+      </h3>
       {children}
     </section>
   );
