@@ -79,7 +79,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={fontVariables}>
+    <html lang="ko" className={fontVariables} suppressHydrationWarning>
       <body className="bg-brand-canvas text-brand-ink font-sans antialiased">
         <Script id="theme-boot" strategy="beforeInteractive">
           {themeBootScript}
