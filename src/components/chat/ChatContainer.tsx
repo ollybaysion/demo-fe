@@ -424,6 +424,20 @@ export function ChatContainer() {
     return [];
   }, [messages]);
 
+  // 가장 최근 채팅 인입 비교 메시지의 마크다운 (#79 Phase 3) —
+  // SummaryPanel 의 [비교 결과] Section + 클립보드 복사에 자동 동봉.
+  // EquipmentDetailPanel 이 buildCompareMessage 로 만든 메시지는 id 가
+  // `compare_` prefix.
+  const lastCompareDigest = useMemo<string | undefined>(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "assistant" && m.id.startsWith("compare_")) {
+        return m.content;
+      }
+    }
+    return undefined;
+  }, [messages]);
+
   // 데모 모드에서 다음 turn 에 매칭되는 user 텍스트 — 일치하지 않는 chip
   // 은 SuggestedQuestions 가 비활성화. 비-데모 (실 백엔드) 일 때는 모든
   // chip 활성.
@@ -585,6 +599,7 @@ export function ChatContainer() {
         open={rightPanel === "summary"}
         rows={rows}
         timeRange={timeRange}
+        compareDigest={lastCompareDigest}
       />
 
       {/* Left-edge floating handle — mirror of right stack */}
