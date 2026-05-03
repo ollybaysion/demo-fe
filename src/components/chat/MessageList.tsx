@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Message } from "@/lib/types";
-import { ChatMessage } from "./ChatMessage";
+import { ChatMessage } from "./message/ChatMessage";
 import { TypingDots } from "./TypingDots";
 
 type Props = {

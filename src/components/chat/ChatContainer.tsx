@@ -25,11 +25,11 @@ import type {
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
-import { EquipmentDetailPanel } from "./EquipmentDetailPanel";
+import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
-import { SummaryPanel } from "./SummaryPanel";
-import { SummaryToggleHandle } from "./SummaryToggleHandle";
+import { SummaryPanel } from "./summary/SummaryPanel";
+import { SummaryToggleHandle } from "./summary/SummaryToggleHandle";
 import {
   ContextPanel,
   ContextToggleHandle,
