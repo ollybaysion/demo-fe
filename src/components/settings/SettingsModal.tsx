@@ -26,7 +26,7 @@ export type Settings = {
 const SETTINGS_KEY = "fdc-fe.settings.v1";
 
 const DEFAULT_SETTINGS: Settings = {
-  theme: "system",
+  theme: "cool-gray",
   fontSize: "md",
   language: "ko",
   model: "default",
