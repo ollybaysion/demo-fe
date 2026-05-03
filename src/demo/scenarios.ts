@@ -160,7 +160,7 @@ export const SCENARIOS: readonly Scenario[] = [
                 from: "09:02:00",
                 to: "09:08:45",
                 label: "MAIN_ETCH",
-                fill: "rgba(20,20,19,0.04)",
+                fill: "rgba(20,20,19,0.08)",
               },
               {
                 axis: "x",
