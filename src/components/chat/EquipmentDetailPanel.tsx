@@ -1,10 +1,12 @@
 "use client";
 
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -436,11 +438,27 @@ function CompareView({
 }) {
   const [recipe, setRecipe] = useState<string>(COMPARE_RECIPES[0]);
   const [windowDays, setWindowDays] = useState<CompareWindowDays>(7);
+  // 알람 popover 의 "이 시점 센서 차트로 보기" cross-link (#79 Phase 2).
+  // 클릭 시 모든 sensor chart 에 vertical reference line + 일정 시간 후
+  // 자동 사라짐(또는 사용자가 다른 시점 클릭 시 갱신).
+  const [highlight, setHighlight] = useState<{
+    side: "current" | "baseline";
+    time: number;
+  } | null>(null);
+  // sensor chart 배경 음영 — current 의 range 이벤트를 깔거나 / 안 깔거나.
+  // baseline 까지 깔면 어지러워 spec 권고대로 단일 사이드 토글.
+  const [shadeSide, setShadeSide] = useState<"current" | "none">("current");
+  const seriesRef = useRef<HTMLDivElement>(null);
 
   const data = useMemo<CompareData | null>(() => {
     if (!currentId || !peerId) return null;
     return getCompareData(currentId, peerId, recipe, windowDays);
   }, [currentId, peerId, recipe, windowDays]);
+
+  function handleCrossLink(side: "current" | "baseline", time: number) {
+    setHighlight({ side, time });
+    seriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   if (!currentId) {
     return (
@@ -520,9 +538,22 @@ function CompareView({
           있을 때만 노출. x축은 공정 시작 시점 기준 경과 분(t=0). */}
       {data.series.length > 0 && (
         <Card>
-          <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
-            센서 시계열 비교
-          </h4>
+          <div ref={seriesRef} className="flex items-baseline justify-between gap-md mb-sm flex-wrap">
+            <h4 className="font-sans text-title-sm text-brand-ink">
+              센서 시계열 비교
+            </h4>
+            <label className="flex items-center gap-xs text-caption text-brand-muted">
+              <span>이벤트 음영</span>
+              <select
+                value={shadeSide}
+                onChange={(e) => setShadeSide(e.target.value as "current" | "none")}
+                className="bg-brand-canvas text-brand-ink rounded-sm border border-brand-hairline px-xs py-0 text-caption focus:outline-none focus:border-brand-primary"
+              >
+                <option value="current">현재 ({data.current.equipmentId})</option>
+                <option value="none">표시 안 함</option>
+              </select>
+            </label>
+          </div>
           <p className="text-caption text-brand-muted mb-md">
             x = 공정 시작 시점 기준 경과 분 (t=0). 두 설비의 매칭 run 을
             같은 시점에 정렬해 추세 차이를 한눈에 확인.
@@ -531,6 +562,11 @@ function CompareView({
             series={data.series}
             currentId={data.current.equipmentId}
             baselineId={data.baseline.equipmentId}
+            shadeEvents={
+              shadeSide === "current" ? data.chamberEvents.current : []
+            }
+            highlightTime={highlight?.time ?? null}
+            highlightSide={highlight?.side ?? null}
           />
         </Card>
       )}
@@ -543,21 +579,19 @@ function CompareView({
           <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
             챔버 이벤트 비교
           </h4>
-          <CompareChamberEvents
-            data={data}
-          />
+          <CompareChamberEvents data={data} />
         </Card>
       )}
 
       {/* 설비 알람 lane (#79 Phase 2) — severity 색 + popover + 카운트
-          매트릭스. */}
+          매트릭스 + cross-link. */}
       {(data.alarms.current.length > 0 ||
         data.alarms.baseline.length > 0) && (
         <Card>
           <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
             설비 알람 비교
           </h4>
-          <CompareAlarms data={data} />
+          <CompareAlarms data={data} onCrossLink={handleCrossLink} />
         </Card>
       )}
     </section>
@@ -715,10 +749,16 @@ function CompareSeriesGrid({
   series,
   currentId,
   baselineId,
+  shadeEvents,
+  highlightTime,
+  highlightSide,
 }: {
   series: SensorSeries[];
   currentId: string;
   baselineId: string;
+  shadeEvents: ChamberEvent[];
+  highlightTime: number | null;
+  highlightSide: "current" | "baseline" | null;
 }) {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-md">
@@ -728,6 +768,9 @@ function CompareSeriesGrid({
           series={s}
           currentId={currentId}
           baselineId={baselineId}
+          shadeEvents={shadeEvents}
+          highlightTime={highlightTime}
+          highlightSide={highlightSide}
         />
       ))}
     </div>
@@ -738,10 +781,16 @@ function CompareSeriesChart({
   series,
   currentId,
   baselineId,
+  shadeEvents,
+  highlightTime,
+  highlightSide,
 }: {
   series: SensorSeries;
   currentId: string;
   baselineId: string;
+  shadeEvents: ChamberEvent[];
+  highlightTime: number | null;
+  highlightSide: "current" | "baseline" | null;
 }) {
   return (
     <div className="rounded-md border border-brand-hairline bg-brand-canvas p-sm">
@@ -779,6 +828,50 @@ function CompareSeriesChart({
               }}
               labelFormatter={(t) => `경과 ${t}분`}
             />
+            {/* range 챔버 이벤트 → 배경 음영 + 상단 라벨. */}
+            {shadeEvents
+              .filter((e) => e.end !== undefined)
+              .map((e, i) => (
+                <ReferenceArea
+                  key={`shade-${i}`}
+                  x1={e.start}
+                  x2={e.end}
+                  fill={CHAMBER_EVENT_COLORS[e.type]}
+                  fillOpacity={0.10}
+                  ifOverflow="extendDomain"
+                />
+              ))}
+            {/* point 챔버 이벤트 → 옅은 vertical line. */}
+            {shadeEvents
+              .filter((e) => e.end === undefined)
+              .map((e, i) => (
+                <ReferenceLine
+                  key={`shadeP-${i}`}
+                  x={e.start}
+                  stroke={CHAMBER_EVENT_COLORS[e.type]}
+                  strokeOpacity={0.45}
+                  strokeDasharray="2 3"
+                />
+              ))}
+            {/* 알람 cross-link highlight — 두꺼운 vertical line. */}
+            {highlightTime !== null && (
+              <ReferenceLine
+                x={highlightTime}
+                stroke={
+                  highlightSide === "baseline"
+                    ? "var(--color-brand-accent-teal)"
+                    : "var(--color-brand-error)"
+                }
+                strokeWidth={2}
+                ifOverflow="extendDomain"
+                label={{
+                  value: `t=${highlightTime}`,
+                  position: "top",
+                  fill: "var(--color-brand-ink)",
+                  fontSize: 10,
+                }}
+              />
+            )}
             <Line
               type="monotone"
               dataKey={currentId}
@@ -878,6 +971,18 @@ function CompareChamberEvents({ data }: { data: CompareData }) {
     10,
   );
 
+  // "한쪽만" 매칭 — 같은 타입이 다른 lane 에 한 건도 없으면 outline 강조 (#79).
+  const baseTypeSet = new Set(data.chamberEvents.baseline.map((e) => e.type));
+  const curTypeSet = new Set(data.chamberEvents.current.map((e) => e.type));
+  const annotatedCurrent = data.chamberEvents.current.map((e) => ({
+    ...e,
+    soloSide: !baseTypeSet.has(e.type),
+  }));
+  const annotatedBaseline = data.chamberEvents.baseline.map((e) => ({
+    ...e,
+    soloSide: !curTypeSet.has(e.type),
+  }));
+
   return (
     <div className="flex flex-col gap-sm">
       {/* 타입 필터 chip */}
@@ -915,14 +1020,18 @@ function CompareChamberEvents({ data }: { data: CompareData }) {
 
       <EventLane
         label={`현재 (${data.current.equipmentId})`}
-        events={data.chamberEvents.current.filter((e) => enabled.has(e.type))}
+        events={annotatedCurrent.filter((e) => enabled.has(e.type))}
         xMax={xMax}
       />
       <EventLane
         label={`baseline (${data.baseline.equipmentId})`}
-        events={data.chamberEvents.baseline.filter((e) => enabled.has(e.type))}
+        events={annotatedBaseline.filter((e) => enabled.has(e.type))}
         xMax={xMax}
       />
+      <p className="text-caption text-brand-muted">
+        ▣ 점선 outline = 다른 설비엔 같은 타입 이벤트가 없는 &lsquo;한쪽만&rsquo;
+        케이스.
+      </p>
     </div>
   );
 }
@@ -933,7 +1042,7 @@ function EventLane({
   xMax,
 }: {
   label: string;
-  events: ChamberEvent[];
+  events: Array<ChamberEvent & { soloSide?: boolean }>;
   xMax: number;
 }) {
   return (
@@ -949,23 +1058,30 @@ function EventLane({
             : 0.6;
           const isPoint = e.end === undefined;
           const color = CHAMBER_EVENT_COLORS[e.type];
+          const solo = e.soloSide;
           return (
             <div
               key={i}
-              title={`${CHAMBER_EVENT_LABELS[e.type]} · ${e.label} · ${e.start}${e.end !== undefined ? `~${e.end}` : ""} 분`}
+              title={`${CHAMBER_EVENT_LABELS[e.type]} · ${e.label}${solo ? " · 한쪽만" : ""} · ${e.start}${e.end !== undefined ? `~${e.end}` : ""} 분`}
               className="absolute top-0 bottom-0"
               style={{
                 left: `${left}%`,
                 width: `${width}%`,
-                background: isPoint ? "transparent" : color,
+                background: isPoint ? "transparent" : solo ? "transparent" : color,
                 opacity: isPoint ? 1 : 0.85,
                 borderLeft: isPoint ? `2px solid ${color}` : undefined,
+                outline: solo ? `2px dashed ${color}` : undefined,
+                outlineOffset: solo ? "-2px" : undefined,
               }}
             >
               {!isPoint && (
                 <span
                   className="absolute inset-0 flex items-center justify-start px-xxs whitespace-nowrap overflow-hidden text-caption"
-                  style={{ color: "var(--color-brand-on-primary)" }}
+                  style={{
+                    color: solo
+                      ? "var(--color-brand-ink)"
+                      : "var(--color-brand-on-primary)",
+                  }}
                 >
                   {e.label}
                 </span>
@@ -995,7 +1111,13 @@ const ALARM_SEVERITY_COLOR: Record<AlarmSeverity, string> = {
   critical: "var(--color-brand-error)",
 };
 
-function CompareAlarms({ data }: { data: CompareData }) {
+function CompareAlarms({
+  data,
+  onCrossLink,
+}: {
+  data: CompareData;
+  onCrossLink: (side: "current" | "baseline", time: number) => void;
+}) {
   const xMax = Math.max(
     data.current.matchedRun?.durationMin ?? 0,
     data.baseline.matchedRun?.durationMin ?? 0,
@@ -1037,7 +1159,7 @@ function CompareAlarms({ data }: { data: CompareData }) {
         <SeverityDot s="critical" /> critical
       </div>
 
-      {/* popover — 활성 알람 상세 */}
+      {/* popover — 활성 알람 상세 + 센서 차트 cross-link */}
       {popover && (
         <AlarmDetail
           alarm={
@@ -1051,6 +1173,13 @@ function CompareAlarms({ data }: { data: CompareData }) {
               : data.baseline.equipmentId
           }
           onClose={close}
+          onCrossLink={() => {
+            const a =
+              popover.side === "current"
+                ? data.alarms.current[popover.index]
+                : data.alarms.baseline[popover.index];
+            onCrossLink(popover.side, a.time);
+          }}
         />
       )}
 
@@ -1142,10 +1271,12 @@ function AlarmDetail({
   alarm,
   equipmentId,
   onClose,
+  onCrossLink,
 }: {
   alarm: AlarmEvent;
   equipmentId: string;
   onClose: () => void;
+  onCrossLink: () => void;
 }) {
   const rc = alarm.rootCause;
   return (
@@ -1200,6 +1331,15 @@ function AlarmDetail({
           </>
         )}
       </dl>
+      <div className="mt-xs">
+        <button
+          type="button"
+          onClick={onCrossLink}
+          className="inline-flex items-center gap-xxs px-sm py-xxs rounded-pill border border-brand-primary text-caption text-brand-primary hover:bg-brand-primary hover:text-brand-on-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+        >
+          이 시점 센서 차트로 보기 →
+        </button>
+      </div>
     </div>
   );
 }
