@@ -409,6 +409,15 @@ export function ChatContainer() {
     return [];
   }, [messages]);
 
+  // 데모 모드에서 다음 turn 에 매칭되는 user 텍스트 — 일치하지 않는 chip
+  // 은 SuggestedQuestions 가 비활성화. 비-데모 (실 백엔드) 일 때는 모든
+  // chip 활성.
+  const enabledFollowUp = useMemo<string | undefined>(() => {
+    if (!demoState || demoState.ended) return undefined;
+    const scenario = SCENARIOS.find((s) => s.id === demoState.scenarioId);
+    return scenario?.turns[demoState.turnIndex]?.user;
+  }, [demoState]);
+
   function handleContextToggle() {
     setRightPanel((prev) => {
       const next = prev === "context" ? null : "context";
@@ -512,6 +521,7 @@ export function ChatContainer() {
                   onSelect={handleSubmit}
                   questions={followUpRecommendations}
                   ariaLabel="추천 후속 질문"
+                  enabledQuestion={enabledFollowUp}
                 />
               )}
             <ChatInput

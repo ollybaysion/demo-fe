@@ -1,0 +1,157 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - heading [level=2] [ref=e6]: 이전 대화
+        - paragraph [ref=e8]: 아직 저장된 대화가 없습니다.
+    - generic [ref=e9]:
+      - banner [ref=e10]:
+        - generic [ref=e11]:
+          - heading "FDC Agent" [level=1] [ref=e12]
+          - button "새 대화 시작" [ref=e13]:
+            - img [ref=e14]
+            - generic [ref=e16]: 새 대화
+      - main [ref=e17]:
+        - log [ref=e164]:
+          - listitem [ref=e165]:
+            - generic [ref=e166]:
+              - generic [ref=e167]: 설비 데이터가 왜 이렇게 발생했는지 궁금합니다.
+              - button "메시지 복사" [ref=e169]:
+                - img [ref=e170]
+                - generic [ref=e173]: 복사
+          - listitem [ref=e174]:
+            - generic [ref=e175]:
+              - paragraph [ref=e178]: 설비 정보와 발생 시간을 입력해주세요. 메시지로 입력하거나 오른쪽 패널을 활용해주세요. 이미지도 가능합니다.
+              - generic [ref=e179]:
+                - button "메시지 복사" [ref=e180]:
+                  - img [ref=e181]
+                  - generic [ref=e184]: 복사
+                - button "좋아요" [ref=e185]:
+                  - img [ref=e186]
+                - button "아쉬워요" [ref=e188]:
+                  - img [ref=e189]
+      - generic [ref=e42]:
+        - button "도구 / 첨부 (개발 예정)" [ref=e43]:
+          - img [ref=e44]
+        - textbox "채팅 메시지 입력" [ref=e46]:
+          - /placeholder: 메시지를 입력하세요
+          - text: ETCH-02 설비 A 챔버 APC_PRESSURE 센서 09:00부터 09:10까지 입니다.
+        - button "음성 입력 (개발 예정)" [ref=e47]:
+          - img [ref=e48]
+    - complementary [ref=e51]:
+      - generic [ref=e52]:
+        - button [ref=e54]:
+          - img [ref=e55]
+          - text: 상세 보기
+        - generic [ref=e57]:
+          - generic [ref=e58]:
+            - heading [level=2] [ref=e59]: 설비 정보
+            - generic [ref=e60]:
+              - generic [ref=e191]:
+                - generic [ref=e192]:
+                  - generic [ref=e193]: 설비명*
+                  - textbox [ref=e194]:
+                    - /placeholder: "예: ETCH-01"
+                    - text: ETCH-01
+                  - button [disabled] [ref=e195]:
+                    - img [ref=e196]
+                - generic [ref=e199]:
+                  - generic [ref=e200]:
+                    - generic [ref=e201]:
+                      - generic [ref=e202]: 챔버
+                      - textbox [ref=e203]:
+                        - /placeholder: "예: A"
+                        - text: A
+                      - button [disabled] [ref=e204]:
+                        - img [ref=e205]
+                    - generic [ref=e208]:
+                      - paragraph [ref=e209]: 센서명
+                      - list [ref=e210]:
+                        - listitem [ref=e211]:
+                          - textbox [ref=e213]:
+                            - /placeholder: "예: APC_PRESSURE"
+                            - text: APC_PRESSURE
+                          - button [ref=e214]:
+                            - img [ref=e215]
+                      - button [ref=e218]:
+                        - img [ref=e219]
+                        - text: 센서명 추가
+                  - button [ref=e221]:
+                    - img [ref=e222]
+                    - text: 챔버 추가
+              - generic [ref=e95]:
+                - button [ref=e96]:
+                  - img [ref=e97]
+                  - text: 설비 추가
+                - button [ref=e99]: 초기화
+          - generic [ref=e100]:
+            - heading [level=2] [ref=e101]: 발생 시간
+            - generic [ref=e102]:
+              - generic [ref=e103]:
+                - generic [ref=e104]: 시작
+                - generic [ref=e105]:
+                  - textbox [ref=e106]: 2026-05-03T00:00
+                  - button [ref=e224]:
+                    - img [ref=e225]
+              - generic [ref=e107]:
+                - generic [ref=e108]: 종료
+                - generic [ref=e109]:
+                  - textbox [ref=e110]: 2026-05-03T23:59
+                  - button [ref=e228]:
+                    - img [ref=e229]
+              - generic [ref=e111]:
+                - button [ref=e112]: 10분
+                - button [ref=e113]: 30분
+                - button [ref=e114]: 1시간
+                - button [ref=e115]: 3시간
+                - button [ref=e116]: 6시간
+                - button [ref=e117]: 12시간
+                - button [ref=e118]: 하루
+    - complementary [ref=e119]:
+      - generic [ref=e120]:
+        - generic [ref=e121]:
+          - heading [level=2] [ref=e122]: 대화 요약
+          - paragraph [ref=e123]: 운영 담당자에게 인계할 정보를 한눈에.
+        - generic [ref=e125]:
+          - generic [ref=e126]:
+            - heading [level=3] [ref=e127]: 설비 정보
+            - list [ref=e128]:
+              - listitem [ref=e232]:
+                - generic [ref=e233]:
+                  - generic [ref=e234]: "설비명:"
+                  - generic [ref=e235]: ETCH-01
+                - generic [ref=e236]:
+                  - generic [ref=e237]:
+                    - generic [ref=e238]: "챔버:"
+                    - generic [ref=e239]: A
+                  - generic [ref=e241]:
+                    - generic [ref=e242]: "센서명:"
+                    - generic [ref=e243]: APC_PRESSURE
+          - generic [ref=e141]:
+            - heading [level=3] [ref=e142]: 발생 시간
+            - paragraph [ref=e143]: 2026-05-03T00:00 ~ 2026-05-03T23:59
+          - generic [ref=e144]:
+            - heading [level=3] [ref=e145]: 요약
+            - paragraph [ref=e146]: 백엔드 아직 없음 — 요약 기능은 연결 후 활성됩니다.
+            - generic [ref=e147]:
+              - button [ref=e148]: 복사
+              - button [disabled] [ref=e149]: 다시 요약
+    - button "이전 대화 패널 열기" [ref=e151]:
+      - img [ref=e152]
+      - generic [ref=e156]:
+        - text: 이전
+        - text: 대화
+    - generic [ref=e157]:
+      - button "설비 정보 입력" [ref=e158]:
+        - img [ref=e159]
+        - generic [ref=e163]:
+          - text: 설비 정보
+          - text: 입력
+      - button "대화 요약 패널 열기" [ref=e244]:
+        - img [ref=e245]
+        - generic [ref=e248]:
+          - text: 대화
+          - text: 요약
+  - button "Open Next.js Dev Tools" [ref=e254] [cursor=pointer]:
+    - img [ref=e255]
+  - alert [ref=e258]

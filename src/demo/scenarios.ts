@@ -122,6 +122,13 @@ export const SCENARIOS: readonly Scenario[] = [
         user: "설비 데이터가 왜 이렇게 발생했는지 궁금합니다.",
         assistant:
           "설비 정보와 발생 시간을 입력해주세요. 메시지로 입력하거나 오른쪽 패널을 활용해주세요. 이미지도 가능합니다.",
+        recommendQuestion: [
+          // 첫 chip 은 다음 turn 의 user 와 동일 — 활성 chip. 나머지는
+          // 데모에 응답이 없어 disabled (안내용 placeholder).
+          "ETCH-02 설비 A 챔버 APC_PRESSURE 센서 09:00부터 09:10까지 입니다.",
+          "오른쪽 패널에 직접 입력하기",
+          "이미지로 첨부하기",
+        ],
       },
       {
         user: "ETCH-02 설비 A 챔버 APC_PRESSURE 센서 09:00부터 09:10까지 입니다.",
