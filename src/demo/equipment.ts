@@ -155,3 +155,143 @@ export function getPeers(name: string): EquipmentDetail[] {
     (e) => e.model === me.model && e.id !== me.id,
   );
 }
+
+// ────────────────────────────────────────────────────────────────────
+// Comparison v2 (#79) — Phase 1 mock
+// ────────────────────────────────────────────────────────────────────
+//
+// 1:1 비교 (현재 설비 vs 단일 동종설비), post-setup 매칭 모드.
+// 백엔드 미연결 단계에서 일관된 deterministic mock 을 제공.
+
+export type SensorStats = {
+  sensor: string;
+  mean: number;
+  stddev: number;
+  max: number;
+  min: number;
+  anomalies: number;
+};
+
+export type CompareWindowDays = 1 | 7 | 30;
+
+export type CompareSide = {
+  equipmentId: string;
+  /** ISO 형식 — 마지막 셋업/설비 변경 시점. */
+  setupTime: string;
+  /** post-setup 매칭으로 잡힌 run. null 이면 윈도우 내 매칭 run 없음. */
+  matchedRun: { id: string; startTime: string; durationMin: number } | null;
+  sensorStats: SensorStats[];
+};
+
+export type CompareData = {
+  recipe: string;
+  windowDays: CompareWindowDays;
+  current: CompareSide;
+  baseline: CompareSide;
+};
+
+export const COMPARE_RECIPES = ["RECIPE_X", "RECIPE_Y", "RECIPE_Z"] as const;
+export const COMPARE_WINDOWS: readonly CompareWindowDays[] = [1, 7, 30];
+
+const COMPARE_SENSORS: ReadonlyArray<{
+  name: string;
+  base: { mean: number; stddev: number; max: number; min: number };
+}> = [
+  { name: "APC_PRESSURE", base: { mean: 0.95, stddev: 0.04, max: 1.05, min: 0.85 } },
+  { name: "RF_FORWARD", base: { mean: 1720, stddev: 25, max: 1780, min: 1650 } },
+  { name: "TEMP_TC1", base: { mean: 243, stddev: 1.2, max: 247, min: 240 } },
+  { name: "GAS_FLOW_SiH4", base: { mean: 200, stddev: 3, max: 210, min: 190 } },
+];
+
+function hash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function offsetFor(equipmentId: string, recipe: string, sensor: string): number {
+  // -0.12 ~ +0.12 — equipment/recipe/sensor 조합별 deterministic.
+  const r = hash(equipmentId + "|" + recipe + "|" + sensor) % 100;
+  return (r - 50) / 400;
+}
+
+function statsFor(
+  equipmentId: string,
+  recipe: string,
+): SensorStats[] {
+  return COMPARE_SENSORS.map(({ name, base }) => {
+    const o = offsetFor(equipmentId, recipe, name);
+    const mean = round(base.mean * (1 + o));
+    const stddev = round(base.stddev * (1 + Math.abs(o) * 1.4));
+    const max = round(base.max * (1 + Math.max(o, 0) * 1.2));
+    const min = round(base.min * (1 + Math.min(o, 0) * 1.2));
+    const anomalies = Math.max(0, Math.round(Math.abs(o) * 12));
+    return { sensor: name, mean, stddev, max, min, anomalies };
+  });
+}
+
+function round(v: number): number {
+  // 작은 값(<10)은 소수 3자리, 중간 값(<100)은 1자리, 큰 값은 정수.
+  if (v < 10) return Math.round(v * 1000) / 1000;
+  if (v < 100) return Math.round(v * 10) / 10;
+  return Math.round(v);
+}
+
+function setupTimeFor(equipmentId: string): string {
+  // equipment 별로 deterministic — 4월 둘째~넷째 주 사이 임의 일자.
+  const day = 10 + (hash("setup|" + equipmentId) % 18);
+  const hh = (hash("h|" + equipmentId) % 14) + 7;
+  const mm = (hash("m|" + equipmentId) % 4) * 15;
+  return `2026-04-${pad2(day)}T${pad2(hh)}:${pad2(mm)}`;
+}
+
+function matchedRunFor(
+  equipmentId: string,
+  recipe: string,
+  windowDays: CompareWindowDays,
+): CompareSide["matchedRun"] {
+  // 일부 (equipment + recipe + window) 조합은 "매칭 없음" — 좁은 window 예외 검증.
+  const skip = hash("skip|" + equipmentId + recipe) % 7 === 0;
+  if (skip && windowDays === 1) return null;
+  const setupTs = new Date(setupTimeFor(equipmentId) + "Z").getTime();
+  const offsetH =
+    (hash("run|" + equipmentId + recipe) % (windowDays * 24 - 4)) + 2;
+  const start = new Date(setupTs + offsetH * 3_600_000);
+  const id = `RUN-${equipmentId}-${recipe}-${pad2(start.getUTCDate())}${pad2(start.getUTCHours())}`;
+  const durationMin = 35 + (hash("dur|" + equipmentId + recipe) % 25);
+  return { id, startTime: isoLocalMinute(start), durationMin };
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+function isoLocalMinute(d: Date): string {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+
+/**
+ * 1:1 비교 mock. (#79 Phase 1, post-setup 모드)
+ */
+export function getCompareData(
+  currentId: string,
+  baselineId: string,
+  recipe: string,
+  windowDays: CompareWindowDays,
+): CompareData {
+  return {
+    recipe,
+    windowDays,
+    current: {
+      equipmentId: currentId,
+      setupTime: setupTimeFor(currentId),
+      matchedRun: matchedRunFor(currentId, recipe, windowDays),
+      sensorStats: statsFor(currentId, recipe),
+    },
+    baseline: {
+      equipmentId: baselineId,
+      setupTime: setupTimeFor(baselineId),
+      matchedRun: matchedRunFor(baselineId, recipe, windowDays),
+      sensorStats: statsFor(baselineId, recipe),
+    },
+  };
+}
