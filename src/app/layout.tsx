@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Inter, JetBrains_Mono, Noto_Serif_KR } from "next/font/google";
 import localFont from "next/font/local";
+import Script from "next/script";
 import "./globals.css";
 
 // Latin display
@@ -80,7 +81,9 @@ export default function RootLayout({
   return (
     <html lang="ko" className={fontVariables}>
       <body className="bg-brand-canvas text-brand-ink font-sans antialiased">
-        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <Script id="theme-boot" strategy="beforeInteractive">
+          {themeBootScript}
+        </Script>
         {children}
       </body>
     </html>
