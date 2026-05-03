@@ -2,6 +2,7 @@
 
 import { type ReactNode, useState } from "react";
 import type { Message } from "@/lib/types";
+import { MarkdownContent } from "./markdown/MarkdownContent";
 import { StreamingCursor } from "./StreamingCursor";
 
 /**
@@ -60,13 +61,19 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
       <div
         aria-busy={streaming || undefined}
         className={[
-          "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body whitespace-pre-wrap",
+          "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body",
+          // user 입력은 사용자가 친 그대로(개행 보존). assistant 본문은
+          // MarkdownContent 가 자체적으로 블록 요소 처리.
           isUser
-            ? "bg-brand-primary text-brand-on-primary"
+            ? "whitespace-pre-wrap bg-brand-primary text-brand-on-primary"
             : "bg-brand-surface-card text-brand-ink",
         ].join(" ")}
       >
-        {message.content}
+        {isUser ? (
+          message.content
+        ) : (
+          <MarkdownContent content={message.content} />
+        )}
         {streaming && <StreamingCursor />}
       </div>
       {!streaming && (
