@@ -93,7 +93,19 @@ type ChartPayload = {
     title?: string;
     xLabel?: string;
     yLabel?: string;
+    referenceLines?: ReferenceLine[];   // 임계값 / 이벤트 마커
   };
+};
+
+// 차트 위에 그릴 보조 선
+//   - axis: 'y' + value(숫자) → 가로(수평) 선  (예: 임계값)
+//   - axis: 'x' + value(숫자/문자열) → 세로(수직) 선  (예: 이벤트 시점)
+type ReferenceLine = {
+  axis: 'x' | 'y';
+  value: number | string;
+  label?: string;
+  color?: string;     // hex; 미지정 시 default amber
+  dashed?: boolean;   // true 면 점선
 };
 
 // equipment 응답 표 (3종 공통)
@@ -102,6 +114,40 @@ type EquipmentTable = {
   rows: Array<Record<string, string | number | null>>;
 };
 ```
+
+**ChartPayload 예시 — APC_PRESSURE 시계열 (data-shape 시나리오):**
+
+```json
+{
+  "type": "line",
+  "data": [
+    { "timestamp": "09:00:00", "step": "PRE_HEAT",   "APC_PRESSURE (mTorr)": 0.30 },
+    { "timestamp": "09:01:00", "step": "PRE_HEAT",   "APC_PRESSURE (mTorr)": 0.55 },
+    { "timestamp": "09:02:00", "step": "MAIN_ETCH",  "APC_PRESSURE (mTorr)": 1.20 },
+    { "timestamp": "09:03:00", "step": "MAIN_ETCH",  "APC_PRESSURE (mTorr)": 2.25 },
+    { "timestamp": "09:04:00", "step": "MAIN_ETCH",  "APC_PRESSURE (mTorr)": 2.72 },
+    { "timestamp": "09:05:00", "step": "MAIN_ETCH",  "APC_PRESSURE (mTorr)": 2.92 },
+    { "timestamp": "09:06:00", "step": "MAIN_ETCH",  "APC_PRESSURE (mTorr)": 3.00 },
+    { "timestamp": "09:07:00", "step": "MAIN_ETCH",  "APC_PRESSURE (mTorr)": 2.78 },
+    { "timestamp": "09:08:00", "step": "MAIN_ETCH",  "APC_PRESSURE (mTorr)": 2.30 },
+    { "timestamp": "09:09:00", "step": "POST_PURGE", "APC_PRESSURE (mTorr)": 1.20 },
+    { "timestamp": "09:10:00", "step": "POST_PURGE", "APC_PRESSURE (mTorr)": 0.60 }
+  ],
+  "options": {
+    "title": "APC_PRESSURE (mTorr) — 09:00~09:10 트렌드",
+    "xKey": "timestamp",
+    "yKeys": ["APC_PRESSURE (mTorr)"],
+    "xLabel": "시각",
+    "yLabel": "mTorr",
+    "referenceLines": [
+      { "axis": "y", "value": 3.0,         "label": "Max 3.0", "dashed": true },
+      { "axis": "x", "value": "09:06:00",  "label": "Peak" }
+    ]
+  }
+}
+```
+
+> `data` 의 row 객체 안에 `xKey` / `yKeys` 외 추가 키(예: `step`)는 자유롭게 둘 수 있고 차트 렌더에는 사용되지 않음 — 같은 row 가 표(#34)에서도 쓰이는 경우 공통 키 유지에 유리.
 
 ## 4. POST /api/fdc/v1/chat
 
