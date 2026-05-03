@@ -156,6 +156,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                 key={key}
                 timeline={entry.payload}
                 defaultExpanded={defaultExpanded}
+                bubbleRef={bubbleRef}
               />
             );
           })}
@@ -190,6 +191,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                 key={key}
                 timeline={entry.payload}
                 defaultExpanded={defaultExpanded}
+                bubbleRef={bubbleRef}
               />
             );
           })}
