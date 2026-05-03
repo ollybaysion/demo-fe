@@ -145,7 +145,35 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
           ].join(" ")}
         >
           {isUser ? (
-            message.content
+            <>
+              {/* (#91) 첨부 thumbnail — content 위에 grid. 텍스트만 있을
+                  때와 첨부 있을 때 두 케이스 모두 자연스럽게. */}
+              {message.attachments && message.attachments.length > 0 && (
+                <ul
+                  className={[
+                    "grid grid-cols-2 gap-xxs",
+                    message.content ? "mb-xs" : "",
+                  ].join(" ")}
+                >
+                  {message.attachments.map((a) => (
+                    <li key={a.id}>
+                      {a.dataUrl ? (
+                        // base64 inline preview — 작은 이미지라 next/image 안 씀.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={a.dataUrl}
+                          alt={a.name}
+                          className="max-w-full max-h-40 rounded-sm bg-brand-surface-soft"
+                        />
+                      ) : (
+                        <span className="text-caption">{a.name}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {message.content}
+            </>
           ) : (
             // 스트리밍 중에도 MarkdownContent 가 토큰마다 점진 렌더.
             // ErrorBoundary 로 감싸 마크다운 라이브러리 throw 시 그 메시지만

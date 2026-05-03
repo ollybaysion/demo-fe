@@ -120,11 +120,30 @@ export type MessageEventTimelineEntry = MessageEventTimeline & {
   side?: PairedSide;
 };
 
+/**
+ * 메시지 첨부 — 이미지 paste/drop (#91). Phase 1 은 base64 inline 만,
+ * 백엔드 업로드 endpoint 도입 후 url 변형 가능.
+ */
+export type MessageAttachment = {
+  id: string;
+  type: "image";
+  /** image/png · image/jpeg · image/webp · image/gif 만 허용 (#91). */
+  mime: string;
+  /** 파일명 — paste 의 경우 자동 생성(`pasted-{ts}.png`). */
+  name: string;
+  sizeBytes: number;
+  /** base64 inline. 백엔드 endpoint 도입 후엔 url 로 대체 가능. */
+  dataUrl?: string;
+  url?: string;
+};
+
 export type Message = {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: number;
+  /** 첨부 (#91) — user 메시지에서 사용. */
+  attachments?: MessageAttachment[];
   /** Paired data tables (#34, #45) — 어시스턴트 메시지에만. */
   tables?: MessageTableEntry[];
   /** Paired charts (#37, #45) — 어시스턴트 메시지에만. */
