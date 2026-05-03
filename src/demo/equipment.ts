@@ -183,11 +183,31 @@ export type CompareSide = {
   sensorStats: SensorStats[];
 };
 
+/**
+ * 센서별 시계열 (#79 Phase 2). x축은 공정 시작 시점 기준 경과 분 (t=0).
+ * key 는 각 설비 id — recharts 가 같은 key 를 두 series 로 쓰지 못하므로
+ * UI 에서 series name 을 fold 한다.
+ */
+export type SensorSeriesPoint = {
+  /** 경과 분 (정수). */
+  t: number;
+  /** equipment id 별 값. */
+  [equipmentId: string]: number;
+};
+
+export type SensorSeries = {
+  sensor: string;
+  /** 데이터 포인트 (시간순). 각 point 에 두 설비 값 병합. */
+  data: SensorSeriesPoint[];
+};
+
 export type CompareData = {
   recipe: string;
   windowDays: CompareWindowDays;
   current: CompareSide;
   baseline: CompareSide;
+  /** 센서별 시계열 (#79 Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 배열. */
+  series: SensorSeries[];
 };
 
 export const COMPARE_RECIPES = ["RECIPE_X", "RECIPE_Y", "RECIPE_Z"] as const;
@@ -270,7 +290,46 @@ function isoLocalMinute(d: Date): string {
 }
 
 /**
- * 1:1 비교 mock. (#79 Phase 1, post-setup 모드)
+ * 센서 시계열 mock 생성 — deterministic. 각 설비/센서/recipe 별로
+ * 약간 다른 패턴.
+ */
+function seriesFor(
+  currentId: string,
+  baselineId: string,
+  recipe: string,
+  durationMin: number,
+): SensorSeries[] {
+  // 1분 간격 — durationMin 까지. 너무 길어지지 않도록 cap.
+  const points = Math.min(durationMin + 1, 90);
+  return COMPARE_SENSORS.map(({ name, base }) => {
+    const oc = offsetFor(currentId, recipe, name);
+    const ob = offsetFor(baselineId, recipe, name);
+    const data: SensorSeriesPoint[] = [];
+    for (let t = 0; t < points; t++) {
+      const phase = t / points;
+      // STEP 형태로 ramp up → 평탄 → ramp down. 이상 위해 mid 에 살짝 spike.
+      const shape =
+        phase < 0.15
+          ? phase / 0.15
+          : phase > 0.85
+            ? (1 - phase) / 0.15
+            : 1;
+      const wobbleC = Math.sin((t + hash(currentId + name)) / 4) * 0.02;
+      const wobbleB = Math.sin((t + hash(baselineId + name)) / 4) * 0.02;
+      const valueC = base.mean * shape * (1 + oc + wobbleC);
+      const valueB = base.mean * shape * (1 + ob + wobbleB);
+      data.push({
+        t,
+        [currentId]: round(valueC),
+        [baselineId]: round(valueB),
+      });
+    }
+    return { sensor: name, data };
+  });
+}
+
+/**
+ * 1:1 비교 mock. (#79 Phase 1 + Phase 2 — post-setup 모드)
  */
 export function getCompareData(
   currentId: string,
@@ -278,20 +337,30 @@ export function getCompareData(
   recipe: string,
   windowDays: CompareWindowDays,
 ): CompareData {
+  const currentRun = matchedRunFor(currentId, recipe, windowDays);
+  const baselineRun = matchedRunFor(baselineId, recipe, windowDays);
+  const dur = Math.min(
+    currentRun?.durationMin ?? 0,
+    baselineRun?.durationMin ?? 0,
+  );
   return {
     recipe,
     windowDays,
     current: {
       equipmentId: currentId,
       setupTime: setupTimeFor(currentId),
-      matchedRun: matchedRunFor(currentId, recipe, windowDays),
+      matchedRun: currentRun,
       sensorStats: statsFor(currentId, recipe),
     },
     baseline: {
       equipmentId: baselineId,
       setupTime: setupTimeFor(baselineId),
-      matchedRun: matchedRunFor(baselineId, recipe, windowDays),
+      matchedRun: baselineRun,
       sensorStats: statsFor(baselineId, recipe),
     },
+    series:
+      currentRun && baselineRun
+        ? seriesFor(currentId, baselineId, recipe, dur)
+        : [],
   };
 }

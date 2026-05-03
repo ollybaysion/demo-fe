@@ -2,6 +2,15 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   COL_NAMES,
   COMPARE_RECIPES,
   COMPARE_WINDOWS,
@@ -9,6 +18,7 @@ import {
   type CompareSide,
   type CompareWindowDays,
   type EquipmentDetail,
+  type SensorSeries,
   type SensorStats,
   getCompareData,
   getEquipmentDetail,
@@ -501,6 +511,25 @@ function CompareView({
           </p>
         )}
       </Card>
+
+      {/* 센서 시계열 겹침 차트 (#79 Phase 2) — 매칭 run 양쪽 모두에 데이터
+          있을 때만 노출. x축은 공정 시작 시점 기준 경과 분(t=0). */}
+      {data.series.length > 0 && (
+        <Card>
+          <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
+            센서 시계열 비교
+          </h4>
+          <p className="text-caption text-brand-muted mb-md">
+            x = 공정 시작 시점 기준 경과 분 (t=0). 두 설비의 매칭 run 을
+            같은 시점에 정렬해 추세 차이를 한눈에 확인.
+          </p>
+          <CompareSeriesGrid
+            series={data.series}
+            currentId={data.current.equipmentId}
+            baselineId={data.baseline.equipmentId}
+          />
+        </Card>
+      )}
     </section>
   );
 }
@@ -645,6 +674,124 @@ function CompareStatsTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * 센서별 작은 line chart 그리드 (#79 Phase 2). 각 차트는 같은 시간축
+ * 위에 현재 vs baseline 2 series. xl 미만 1열, xl 이상 2열.
+ */
+function CompareSeriesGrid({
+  series,
+  currentId,
+  baselineId,
+}: {
+  series: SensorSeries[];
+  currentId: string;
+  baselineId: string;
+}) {
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-md">
+      {series.map((s) => (
+        <CompareSeriesChart
+          key={s.sensor}
+          series={s}
+          currentId={currentId}
+          baselineId={baselineId}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CompareSeriesChart({
+  series,
+  currentId,
+  baselineId,
+}: {
+  series: SensorSeries;
+  currentId: string;
+  baselineId: string;
+}) {
+  return (
+    <div className="rounded-md border border-brand-hairline bg-brand-canvas p-sm">
+      <div className="text-body-sm text-brand-ink mb-xs font-medium">
+        {series.sensor}
+      </div>
+      <div style={{ width: "100%", height: 180 }}>
+        <ResponsiveContainer>
+          <LineChart
+            data={series.data}
+            margin={{ top: 8, right: 16, bottom: 24, left: 8 }}
+          >
+            <CartesianGrid stroke="var(--color-brand-hairline-soft)" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="t"
+              tick={{ fontSize: 11, fill: "var(--color-brand-muted)" }}
+              tickLine={false}
+              label={{
+                value: "경과 분",
+                position: "insideBottom",
+                offset: -8,
+                style: { fontSize: 11, fill: "var(--color-brand-muted)" },
+              }}
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: "var(--color-brand-muted)" }}
+              tickLine={false}
+              width={48}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "var(--color-brand-canvas)",
+                border: "1px solid var(--color-brand-hairline)",
+                fontSize: 12,
+              }}
+              labelFormatter={(t) => `경과 ${t}분`}
+            />
+            <Line
+              type="monotone"
+              dataKey={currentId}
+              stroke="var(--color-brand-primary)"
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+            <Line
+              type="monotone"
+              dataKey={baselineId}
+              stroke="var(--color-brand-accent-teal)"
+              strokeWidth={2}
+              strokeDasharray="4 3"
+              dot={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex items-center gap-md mt-xs text-caption text-brand-muted">
+        <LegendDot color="var(--color-brand-primary)" /> 현재 ({currentId})
+        <LegendDot color="var(--color-brand-accent-teal)" dashed />
+        baseline ({baselineId})
+      </div>
+    </div>
+  );
+}
+
+function LegendDot({ color, dashed }: { color: string; dashed?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: "inline-block",
+        width: 16,
+        height: 0,
+        borderTopWidth: 2,
+        borderTopStyle: dashed ? "dashed" : "solid",
+        borderTopColor: color,
+        verticalAlign: "middle",
+      }}
+    />
   );
 }
 
