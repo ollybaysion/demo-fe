@@ -138,15 +138,19 @@ function renderChart(
   );
 
   // 수평(y) / 수직(x) reference 선들. 임계값 / 평균 / 이벤트 시점 등.
+  // 라벨은 항상 plot 영역 안쪽(`insideTopRight`)에 두어 위/우측 가장자리를
+  // 벗어나지 않게 — 차트 폭이 좁을 때 라벨이 잘리지 않도록.
+  // 글자도 13px medium 으로 키워 가독성 확보.
   const refLines = referenceLines.map((rl, i) => {
     const stroke = rl.color ?? "#e8a55a"; // brand-accent-amber default
     const strokeDasharray = rl.dashed ? "4 4" : undefined;
     const labelEl = rl.label
       ? {
           value: rl.label,
-          fontSize: 11,
+          fontSize: 13,
+          fontWeight: 500,
           fill: stroke,
-          position: rl.axis === "x" ? ("top" as const) : ("right" as const),
+          position: "insideTopRight" as const,
         }
       : undefined;
     return rl.axis === "x" ? (
