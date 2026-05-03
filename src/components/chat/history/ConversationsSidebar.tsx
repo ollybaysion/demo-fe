@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { ContextRow } from "@/lib/types";
 import type { TimeRange } from "../context/useContextRows";
 import type { Conversation } from "./useConversations";
@@ -24,17 +23,6 @@ export function ConversationsSidebar({
   activeId,
   onSelect,
 }: Props) {
-  // 상대 시간 라벨용 "지금" 스냅샷. 사이드바 마운트 시점에 한 번,
-  // 그리고 1분마다 갱신해 "3시간 전" 라벨이 떠 있는 동안 너무 벗어나지
-  // 않게 한다. Date.now() 를 render 중 직접 호출하지 않기 위함.
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-
   return (
     <aside
       aria-label="이전 대화 사이드바"
@@ -63,7 +51,6 @@ export function ConversationsSidebar({
                   key={c.id}
                   conversation={c}
                   active={c.id === activeId}
-                  now={now}
                   onClick={() => onSelect(c.id)}
                 />
               ))}
@@ -82,23 +69,17 @@ export function ConversationsSidebar({
 function ConversationItem({
   conversation,
   active,
-  now,
   onClick,
 }: {
   conversation: Conversation;
   active: boolean;
-  now: number | null;
   onClick: () => void;
 }) {
   const contextLine = formatContextSummary(
     conversation.context.rows,
     conversation.context.timeRange,
   );
-  // now 가 아직 설정되지 않은 첫 렌더에서는 절대 날짜로 표기.
-  const timeLine =
-    now === null
-      ? formatDate(new Date(conversation.updatedAt))
-      : formatRelativeTime(conversation.updatedAt, now);
+  const timeLine = formatDateTime(new Date(conversation.updatedAt));
 
   return (
     <li>
@@ -148,21 +129,6 @@ function Empty({ children }: { children: React.ReactNode }) {
 // Formatters (#11 spec)
 // ────────────────────────────────────────────────────────────────────
 
-const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-const WEEK_MS = 7 * DAY_MS;
-
-/** "방금" / "12분 전" / "3시간 전" / "2일 전" / "2026-04-12". */
-function formatRelativeTime(ts: number, now: number): string {
-  const diff = Math.max(0, now - ts);
-  if (diff < MINUTE_MS) return "방금";
-  if (diff < HOUR_MS) return `${Math.floor(diff / MINUTE_MS)}분 전`;
-  if (diff < DAY_MS) return `${Math.floor(diff / HOUR_MS)}시간 전`;
-  if (diff < WEEK_MS) return `${Math.floor(diff / DAY_MS)}일 전`;
-  return formatDate(new Date(ts));
-}
-
 function formatDate(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -174,6 +140,11 @@ function formatTime(d: Date): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mi = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mi}`;
+}
+
+/** `2026-05-03 14:23` — 항목의 마지막 갱신 시각 (날짜 + 시간). */
+function formatDateTime(d: Date): string {
+  return `${formatDate(d)} ${formatTime(d)}`;
 }
 
 /**
