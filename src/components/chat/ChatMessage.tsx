@@ -307,12 +307,12 @@ function ActionGroup({
           {paneToggle && (
             <ActionButton
               onClick={paneToggle.onToggle}
-              aria-label={paneToggle.collapsed ? "패널 펼치기" : "패널 접기"}
+              aria-label={paneToggle.collapsed ? "패널 활성화" : "패널 비활성화"}
               aria-pressed={paneToggle.collapsed}
               active={paneToggle.collapsed}
             >
               <PanelToggleIcon collapsed={paneToggle.collapsed} />
-              <span>{paneToggle.collapsed ? "패널 펼치기" : "패널 접기"}</span>
+              <span>{paneToggle.collapsed ? "패널 활성화" : "패널 비활성화"}</span>
             </ActionButton>
           )}
         </>
