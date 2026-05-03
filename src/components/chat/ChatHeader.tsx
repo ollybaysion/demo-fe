@@ -13,9 +13,10 @@ export function ChatHeader({ onNewConversation }: Props) {
             onClick={onNewConversation}
             aria-label="새 대화 시작"
             title="새 대화"
-            className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            className="shrink-0 inline-flex items-center gap-xs h-9 px-sm rounded-md text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
             <NewChatIcon />
+            <span className="font-sans text-button">새 대화</span>
           </button>
         )}
       </div>
