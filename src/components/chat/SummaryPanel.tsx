@@ -24,16 +24,21 @@ type Props = {
   open: boolean;
   rows: ContextRow[];
   timeRange: TimeRange;
+  /**
+   * 채팅에 인입된 비교 결과의 마크다운 본문 (#79 Phase 3). 있으면
+   * "비교 결과" Section + 클립보드 복사 본문에 자동 동봉. 없으면 미노출.
+   */
+  compareDigest?: string;
 };
 
-export function SummaryPanel({ open, rows, timeRange }: Props) {
+export function SummaryPanel({ open, rows, timeRange, compareDigest }: Props) {
   const summaryText = PHASE1_PLACEHOLDER;
   const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">(
     "idle",
   );
 
   async function handleCopy() {
-    const text = formatPanelText(rows, timeRange, summaryText);
+    const text = formatPanelText(rows, timeRange, summaryText, compareDigest);
     try {
       await navigator.clipboard.writeText(text);
       setCopyStatus("success");
@@ -70,6 +75,13 @@ export function SummaryPanel({ open, rows, timeRange }: Props) {
             <Section title="발생 시간">
               <TimeRangeReadout range={timeRange} />
             </Section>
+            {compareDigest && (
+              <Section title="비교 결과 (#79)">
+                <pre className="text-caption text-brand-ink whitespace-pre-wrap font-mono leading-relaxed">
+                  {compareDigest}
+                </pre>
+              </Section>
+            )}
             <Section title="요약">
               <p className="text-body-sm text-brand-muted">{summaryText}</p>
               <div className="mt-md flex items-center gap-xs">
@@ -214,6 +226,7 @@ function formatPanelText(
   rows: ContextRow[],
   timeRange: TimeRange,
   summary: string,
+  compareDigest?: string,
 ): string {
   const lines: string[] = [];
   lines.push("# 대화 요약");
@@ -261,6 +274,12 @@ function formatPanelText(
   lines.push("");
   lines.push("## 요약");
   lines.push(summary);
+
+  if (compareDigest) {
+    lines.push("");
+    lines.push("## 비교 결과");
+    lines.push(compareDigest);
+  }
 
   return lines.join("\n");
 }
