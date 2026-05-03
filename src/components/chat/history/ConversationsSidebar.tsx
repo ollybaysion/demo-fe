@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { ContextRow } from "@/lib/types";
 import type { TimeRange } from "../context/useContextRows";
 import type { Conversation } from "./useConversations";
@@ -23,6 +24,17 @@ export function ConversationsSidebar({
   activeId,
   onSelect,
 }: Props) {
+  // 상대 시간 라벨용 "지금" 스냅샷. 마운트 시 한 번 + 1분마다 갱신해
+  // "3시간 전" 라벨이 너무 벗어나지 않게. Date.now() 를 render 중 직접
+  // 호출하지 않기 위함.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <aside
       aria-label="이전 대화 사이드바"
@@ -51,6 +63,7 @@ export function ConversationsSidebar({
                   key={c.id}
                   conversation={c}
                   active={c.id === activeId}
+                  now={now}
                   onClick={() => onSelect(c.id)}
                 />
               ))}
@@ -69,17 +82,23 @@ export function ConversationsSidebar({
 function ConversationItem({
   conversation,
   active,
+  now,
   onClick,
 }: {
   conversation: Conversation;
   active: boolean;
+  now: number | null;
   onClick: () => void;
 }) {
   const contextLine = formatContextSummary(
     conversation.context.rows,
     conversation.context.timeRange,
   );
-  const timeLine = formatDateTime(new Date(conversation.updatedAt));
+  // now 가 아직 set 되지 않은 첫 렌더에서는 절대 날짜로 fallback.
+  const timeLine =
+    now === null
+      ? formatDate(new Date(conversation.updatedAt))
+      : formatRelativeTime(conversation.updatedAt, now);
 
   return (
     <li>
@@ -129,6 +148,21 @@ function Empty({ children }: { children: React.ReactNode }) {
 // Formatters (#11 spec)
 // ────────────────────────────────────────────────────────────────────
 
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const WEEK_MS = 7 * DAY_MS;
+
+/** "방금" / "12분 전" / "3시간 전" / "2일 전" / "2026-04-12". */
+function formatRelativeTime(ts: number, now: number): string {
+  const diff = Math.max(0, now - ts);
+  if (diff < MINUTE_MS) return "방금";
+  if (diff < HOUR_MS) return `${Math.floor(diff / MINUTE_MS)}분 전`;
+  if (diff < DAY_MS) return `${Math.floor(diff / HOUR_MS)}시간 전`;
+  if (diff < WEEK_MS) return `${Math.floor(diff / DAY_MS)}일 전`;
+  return formatDate(new Date(ts));
+}
+
 function formatDate(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -142,16 +176,13 @@ function formatTime(d: Date): string {
   return `${hh}:${mi}`;
 }
 
-/** `2026-05-03 14:23` — 항목의 마지막 갱신 시각 (날짜 + 시간). */
-function formatDateTime(d: Date): string {
-  return `${formatDate(d)} ${formatTime(d)}`;
-}
-
 /**
- * 행/시간 범위를 한 줄 컨텍스트로 요약.
- * - 설비 1개: `ETCH-01 · 13:00~14:00` (같은 날), `ETCH-01 · 2026-05-02 13:00~...` (다른 날)
- * - 여러 개: `ETCH-01 외 2 · 2026-05-02`
- * - 시간 비면 시간 부분 생략, 설비도 시간도 비면 빈 문자열
+ * 행/발생 시간을 한 줄 컨텍스트로 요약.
+ * - 설비 1개 + 발생 시간: `ETCH-01 · 2026-05-02 13:00~14:00` (같은 날),
+ *   `ETCH-01 · 2026-05-01 13:00 ~ 2026-05-02 14:00` (다른 날)
+ * - 한쪽만 채워진 발생 시간: `2026-05-02 13:00`
+ * - 여러 설비: `ETCH-01 외 2 · 2026-05-02 13:00~14:00`
+ * - 발생 시간 비면 시간 부분 생략, 설비도 시간도 비면 빈 문자열
  */
 function formatContextSummary(
   rows: ContextRow[],
@@ -177,12 +208,12 @@ function formatContextSummary(
   if (startValid && endValid) {
     const sameDay = formatDate(start) === formatDate(end);
     timePart = sameDay
-      ? `${formatTime(start)}~${formatTime(end)}`
-      : `${formatDate(start)} ~ ${formatDate(end)}`;
+      ? `${formatDate(start)} ${formatTime(start)}~${formatTime(end)}`
+      : `${formatDate(start)} ${formatTime(start)} ~ ${formatDate(end)} ${formatTime(end)}`;
   } else if (startValid) {
-    timePart = formatDate(start);
+    timePart = `${formatDate(start)} ${formatTime(start)}`;
   } else if (endValid) {
-    timePart = formatDate(end);
+    timePart = `${formatDate(end)} ${formatTime(end)}`;
   }
 
   if (equipPart && timePart) return `${equipPart} · ${timePart}`;
