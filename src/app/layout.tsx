@@ -79,10 +79,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={fontVariables}>
-      <head>
+      <body className="bg-brand-canvas text-brand-ink font-sans antialiased">
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
-      </head>
-      <body className="bg-brand-canvas text-brand-ink font-sans antialiased">{children}</body>
+        {children}
+      </body>
     </html>
   );
 }
