@@ -158,9 +158,19 @@ src/
 |---|---|---|
 | `NODE_ENV` | `development` / `production` | Next.js 표준 |
 | `LOG_LEVEL` | dev: `debug`, prod: `info` | pino 로그 레벨 |
+| `BACKEND_URL` | (없음 — mock 동작) | 설정 시 모든 `/api/fdc/v1/*` route 가 그쪽으로 forward |
 
-백엔드 endpoint URL 등은 추후 `NEXT_PUBLIC_*` 또는 server-only env 로
-추가 예정.
+## Mock vs Backend
+
+명확화:
+
+- **클라이언트**는 항상 동일 path (`/api/fdc/v1/...`) 를 호출. 분기 없음.
+- **각 `route.ts`** 는 `BACKEND_URL` 환경 변수 한 곳으로 동작 모드를 결정 — `src/lib/backend.ts` 의 `forwardOrMock` helper 가 일괄 처리:
+  - `BACKEND_URL` **미설정** → route 안의 mock 응답 (`src/demo/equipment.ts` 등에서 import).
+  - `BACKEND_URL` **설정** → 같은 path 를 그쪽으로 forward (요청 method / body / 일부 헤더 보존, hop-by-hop 헤더 제거).
+- **데모 모드**는 별개 — 시나리오 starter 클릭 시 `chat` 응답이 미리 정해진 텍스트로 SSE 재생되는 흐름. mock route 와 다른 축이며, 데모 시나리오를 켜둔 상태에서도 `BACKEND_URL` 이 설정돼 있으면 chat 도 백엔드로 forward.
+
+> SSE 인 `/api/fdc/v1/chat` 은 현재 mock SSE 만 처리. 백엔드 swap 시 그 route.ts 안에서 `fetch` 응답을 그대로 stream pipe 하도록 별도 작업 필요 (Phase 3 또는 후속).
 
 ## Deployment (Docker)
 
