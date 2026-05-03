@@ -78,11 +78,14 @@ export const uc5: Scenario = {
             title: "EMO 직전 1시간 주요 센서",
             xKey: "시간",
             yKeys: ["APC_PRESSURE", "RF_FORWARD", "TEMP"],
+            // EMO 직전 1분 내 알람 3건(13:43/44/45) 이 모이는 구간이라
+            // 라벨을 모두 달면 겹쳐 안 보임. 양 끝점만 라벨로 강조하고
+            // 중간 알람들은 vertical 마커만 — 자세한 시퀀스는 알람 표에.
             referenceLines: [
               { axis: "x", value: "13:32", label: "TEMP 상승 경고" },
-              { axis: "x", value: "13:38", label: "RF_REFLECTED 비정상" },
-              { axis: "x", value: "13:43", label: "RF_FORWARD 임계" },
-              { axis: "x", value: "13:44", label: "GAS_FLOW 급변" },
+              { axis: "x", value: "13:38" },
+              { axis: "x", value: "13:43" },
+              { axis: "x", value: "13:44" },
               { axis: "x", value: "13:45", label: "EMO 트리거" },
             ],
           },
