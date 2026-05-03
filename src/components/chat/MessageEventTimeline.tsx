@@ -605,16 +605,15 @@ function formatTimeLabel(v: number, sample: string | number): string {
     const h = Math.floor(totalSec / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
     const s = totalSec % 60;
-    const hasSec =
-      sampleStr.split(":").length >= 3 &&
-      /:\d{2}$/.test(sampleStr.split(":").slice(-1)[0]);
+    // sample 이 HH:MM:SS 면 초까지, HH:MM 이면 분까지.
+    const hasSec = sampleStr.split(":").length === 3;
     return hasSec
       ? `${pad2(h)}:${pad2(m)}:${pad2(s)}`
       : `${pad2(h)}:${pad2(m)}`;
   }
   const d = new Date(v);
   if (!Number.isNaN(d.getTime())) {
-    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
   return String(Math.round(v));
 }
