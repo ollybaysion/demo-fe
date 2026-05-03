@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import { parseSseStream } from "@/lib/sse";
-import type { ContextRow, Message, MessageTable } from "@/lib/types";
+import type {
+  ContextRow,
+  Message,
+  MessageChart,
+  MessageTable,
+} from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
@@ -25,7 +30,11 @@ import {
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
-type StreamPayload = TokenPayload | ErrorPayload | MessageTable;
+type StreamPayload =
+  | TokenPayload
+  | ErrorPayload
+  | MessageTable
+  | MessageChart;
 
 type DemoMeta = { scenarioId: string; turnIndex: number };
 type DemoState = DemoMeta & { ended: boolean };
@@ -148,9 +157,11 @@ export function ChatContainer() {
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
-      // 표 페이로드(#34) 는 모든 토큰 스트리밍이 끝난 뒤 `done` 이벤트
-      // 시점에 한 번에 적용 → 응답이 다 끝나고 자연스럽게 표가 등장.
+      // 표(#34) / 차트(#37) 페이로드는 모든 토큰 스트리밍이 끝난 뒤
+      // `done` 이벤트 시점에 한 번에 적용 → 응답이 다 끝나고 자연스럽게
+      // 등장.
       let pendingTable: MessageTable | null = null;
+      let pendingChart: MessageChart | null = null;
 
       const hasRange =
         timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
@@ -200,14 +211,24 @@ export function ChatContainer() {
           } else if (ev.event === "table") {
             // 들어오는 즉시 적용하지 않고 보관 — `done` 시점에 한 번에 적용.
             pendingTable = ev.data as MessageTable;
+          } else if (ev.event === "chart") {
+            pendingChart = ev.data as MessageChart;
           } else if (ev.event === "done") {
-            // 모든 토큰이 끝난 시점 — 표가 있으면 이때 화면에 등장.
-            if (pendingTable && assistantInserted) {
+            // 모든 토큰이 끝난 시점 — 표 / 차트가 있으면 이때 화면에 등장.
+            if (
+              assistantInserted &&
+              (pendingTable || pendingChart)
+            ) {
               const table = pendingTable;
+              const chart = pendingChart;
               setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, table } : m,
-                ),
+                prev.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const next: Message = { ...m };
+                  if (table) next.table = table;
+                  if (chart) next.chart = chart;
+                  return next;
+                }),
               );
             }
             break;

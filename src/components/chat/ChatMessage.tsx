@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Message } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
+import { MessageChart } from "./MessageChart";
 import { MessageDataTable } from "./MessageDataTable";
 
 /**
@@ -68,6 +69,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
 
   const isUser = message.role === "user";
   const hasTable = !isUser && !!message.table;
+  const hasChart = !isUser && !!message.chart;
 
   return (
     <li
@@ -119,6 +121,11 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
             expanded={tableExpanded}
             onToggleExpand={() => setTableExpanded((v) => !v)}
           />
+        </div>
+      )}
+      {hasChart && message.chart && (
+        <div className="xl:col-start-3 xl:row-start-1 min-w-0 flex justify-start">
+          <MessageChart chart={message.chart} />
         </div>
       )}
     </li>

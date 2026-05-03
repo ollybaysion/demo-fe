@@ -111,12 +111,14 @@ export async function POST(request: Request): Promise<Response> {
   // Demo mode: scripted assistant text bypasses the echo formatter.
   let responseText: string;
   let responseTable: ReturnType<typeof pickTable> = undefined;
+  let responseChart: ReturnType<typeof pickChart> = undefined;
   if (body.demo) {
     const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
     const turn = scenario?.turns[body.demo.turnIndex];
     if (turn) {
       responseText = turn.assistant;
       responseTable = pickTable(turn);
+      responseChart = pickChart(turn);
     } else {
       responseText =
         "데모 시나리오의 마지막 응답을 이미 재생했습니다. 헤더의 '다시 시작' 버튼으로 새 시나리오를 선택하세요.";
@@ -138,11 +140,14 @@ export async function POST(request: Request): Promise<Response> {
           controller.enqueue(encodeSseEvent("token", { content: ch }));
           await sleep(TOKEN_INTERVAL_MS);
         }
-        // 표 페이로드는 모든 토큰이 끝난 직후 한 번 emit. 클라이언트는
-        // `done` 시점에 적용 → 응답이 모두 끝나고 자연스럽게 표가 등장.
-        // 백엔드(/api/fdc/v1/chat) 도 같은 패턴 권장.
+        // 표(#34) / 차트(#37) 페이로드는 모든 토큰이 끝난 직후 emit.
+        // 클라이언트는 `done` 시점에 한 번에 적용 → 응답이 모두 끝나고
+        // 자연스럽게 등장. 백엔드(/api/fdc/v1/chat) 도 같은 패턴 권장.
         if (responseTable) {
           controller.enqueue(encodeSseEvent("table", responseTable));
+        }
+        if (responseChart) {
+          controller.enqueue(encodeSseEvent("chart", responseChart));
         }
         controller.enqueue(
           encodeSseEvent("done", { messageId, finishReason: "stop" }),
@@ -173,4 +178,34 @@ function pickTable(
   turn: { table?: { rows: Record<string, unknown>[]; columns?: string[] } },
 ): { rows: Record<string, unknown>[]; columns?: string[] } | undefined {
   return turn.table;
+}
+
+function pickChart(
+  turn: {
+    chart?: {
+      type: "line" | "bar" | "area";
+      data: Record<string, unknown>[];
+      options?: {
+        title?: string;
+        xKey?: string;
+        yKeys?: string[];
+        xLabel?: string;
+        yLabel?: string;
+      };
+    };
+  },
+):
+  | {
+      type: "line" | "bar" | "area";
+      data: Record<string, unknown>[];
+      options?: {
+        title?: string;
+        xKey?: string;
+        yKeys?: string[];
+        xLabel?: string;
+        yLabel?: string;
+      };
+    }
+  | undefined {
+  return turn.chart;
 }

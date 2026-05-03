@@ -12,7 +12,7 @@
  * 한 번씩 등장하도록 분포시켜 둠.
  */
 
-import type { ContextRow, MessageTable } from "@/lib/types";
+import type { ContextRow, MessageChart, MessageTable } from "@/lib/types";
 
 export type ScenarioTurn = {
   user: string;
@@ -30,6 +30,10 @@ export type ScenarioTurn = {
    * 어시스턴트 메시지의 좌측 gutter 에 표로 paired 되어 보임.
    */
   table?: MessageTable;
+  /**
+   * Paired chart (#37). 어시스턴트 메시지의 우측 gutter 에 차트로 paired.
+   */
+  chart?: MessageChart;
 };
 
 export type Scenario = {
@@ -47,6 +51,52 @@ export type Scenario = {
    */
   turns: ScenarioTurn[];
 };
+
+// data-shape 시나리오의 APC_PRESSURE 시계열 — 표(#34) 와 차트(#37) 가
+// 같은 데이터를 공유해 시각적 일관성 유지.
+const APC_PRESSURE_TREND: readonly Record<string, unknown>[] = [
+  { timestamp: "09:00:00", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.30 },
+  { timestamp: "09:00:15", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.35 },
+  { timestamp: "09:00:30", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.42 },
+  { timestamp: "09:00:45", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.51 },
+  { timestamp: "09:01:00", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.55 },
+  { timestamp: "09:01:15", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.58 },
+  { timestamp: "09:01:30", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.60 },
+  { timestamp: "09:01:45", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.65 },
+  { timestamp: "09:02:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.20 },
+  { timestamp: "09:02:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.55 },
+  { timestamp: "09:02:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.78 },
+  { timestamp: "09:02:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.05 },
+  { timestamp: "09:03:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.25 },
+  { timestamp: "09:03:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.40 },
+  { timestamp: "09:03:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.55 },
+  { timestamp: "09:03:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.65 },
+  { timestamp: "09:04:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.72 },
+  { timestamp: "09:04:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.80 },
+  { timestamp: "09:04:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.85 },
+  { timestamp: "09:04:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.90 },
+  { timestamp: "09:05:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.92 },
+  { timestamp: "09:05:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.95 },
+  { timestamp: "09:05:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.98 },
+  { timestamp: "09:05:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.99 },
+  { timestamp: "09:06:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 3.00 },
+  { timestamp: "09:06:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.98 },
+  { timestamp: "09:06:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.92 },
+  { timestamp: "09:06:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.85 },
+  { timestamp: "09:07:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.78 },
+  { timestamp: "09:07:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.65 },
+  { timestamp: "09:07:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.55 },
+  { timestamp: "09:07:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.45 },
+  { timestamp: "09:08:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.30 },
+  { timestamp: "09:08:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.10 },
+  { timestamp: "09:08:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.85 },
+  { timestamp: "09:08:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.55 },
+  { timestamp: "09:09:00", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 1.20 },
+  { timestamp: "09:09:15", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.95 },
+  { timestamp: "09:09:30", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.80 },
+  { timestamp: "09:09:45", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.70 },
+  { timestamp: "09:10:00", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.60 },
+];
 
 export const SCENARIOS: readonly Scenario[] = [
   {
@@ -75,54 +125,51 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "> STEP 종료 시점 기준으로 데이터가 발생하기 때문에 09:10에 센서값 3으로 데이터가 발생했습니다.",
         ].join("\n"),
-        // 좌측 paired 표: 15초 간격 APC_PRESSURE 트렌드 41행 (09:00~09:10).
-        // STEP 종료 시점인 09:06:00 부근에서 최댓값 3.00 으로 피크. 풍선보다
-        // 표가 길어 행 overflow 동작을 확인할 수 있음.
+        // 좌측 paired 표(#34) + 우측 paired 차트(#37) 가 같은 시계열을
+        // 공유. STEP 종료 시점인 09:06:00 부근에서 최댓값 3.00 으로 피크.
         table: {
           columns: ["timestamp", "step", "APC_PRESSURE (mTorr)"],
-          rows: [
-            { timestamp: "09:00:00", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.30 },
-            { timestamp: "09:00:15", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.35 },
-            { timestamp: "09:00:30", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.42 },
-            { timestamp: "09:00:45", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.51 },
-            { timestamp: "09:01:00", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.55 },
-            { timestamp: "09:01:15", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.58 },
-            { timestamp: "09:01:30", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.60 },
-            { timestamp: "09:01:45", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.65 },
-            { timestamp: "09:02:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.20 },
-            { timestamp: "09:02:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.55 },
-            { timestamp: "09:02:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.78 },
-            { timestamp: "09:02:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.05 },
-            { timestamp: "09:03:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.25 },
-            { timestamp: "09:03:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.40 },
-            { timestamp: "09:03:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.55 },
-            { timestamp: "09:03:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.65 },
-            { timestamp: "09:04:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.72 },
-            { timestamp: "09:04:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.80 },
-            { timestamp: "09:04:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.85 },
-            { timestamp: "09:04:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.90 },
-            { timestamp: "09:05:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.92 },
-            { timestamp: "09:05:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.95 },
-            { timestamp: "09:05:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.98 },
-            { timestamp: "09:05:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.99 },
-            { timestamp: "09:06:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 3.00 },
-            { timestamp: "09:06:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.98 },
-            { timestamp: "09:06:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.92 },
-            { timestamp: "09:06:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.85 },
-            { timestamp: "09:07:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.78 },
-            { timestamp: "09:07:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.65 },
-            { timestamp: "09:07:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.55 },
-            { timestamp: "09:07:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.45 },
-            { timestamp: "09:08:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.30 },
-            { timestamp: "09:08:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.10 },
-            { timestamp: "09:08:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.85 },
-            { timestamp: "09:08:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.55 },
-            { timestamp: "09:09:00", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 1.20 },
-            { timestamp: "09:09:15", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.95 },
-            { timestamp: "09:09:30", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.80 },
-            { timestamp: "09:09:45", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.70 },
-            { timestamp: "09:10:00", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.60 },
-          ],
+          rows: APC_PRESSURE_TREND.slice(),
+        },
+        chart: {
+          type: "line",
+          data: APC_PRESSURE_TREND.slice(),
+          options: {
+            title: "APC_PRESSURE (mTorr) — 09:00~09:10 트렌드",
+            xKey: "timestamp",
+            yKeys: ["APC_PRESSURE (mTorr)"],
+            xLabel: "시각",
+            yLabel: "mTorr",
+            referenceLines: [
+              // 수평선: 임계값 (점선)
+              { axis: "y", value: 3.0, label: "Max 3.0", dashed: true },
+              // 수직선: 피크 시각 (실선, amber default 으로 강조)
+              { axis: "x", value: "09:06:00", label: "Peak" },
+            ],
+            // STEP 구간 — 경계 수직선 대신 영역에 라벨. MAIN_ETCH 만 옅은
+            // 음영으로 구분, 양옆은 음영 없이 라벨만.
+            referenceAreas: [
+              {
+                axis: "x",
+                from: "09:00:00",
+                to: "09:01:45",
+                label: "PRE_HEAT",
+              },
+              {
+                axis: "x",
+                from: "09:02:00",
+                to: "09:08:45",
+                label: "MAIN_ETCH",
+                fill: "rgba(20,20,19,0.08)",
+              },
+              {
+                axis: "x",
+                from: "09:09:00",
+                to: "09:10:00",
+                label: "POST_PURGE",
+              },
+            ],
+          },
         },
         contextPanel: [
           {
