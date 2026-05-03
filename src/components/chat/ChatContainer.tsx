@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import { parseSseStream } from "@/lib/sse";
-import type { ContextRow, Message } from "@/lib/types";
+import type { ContextRow, Message, MessageTable } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
@@ -25,6 +25,7 @@ import {
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
+type StreamPayload = TokenPayload | ErrorPayload | MessageTable;
 
 type DemoMeta = { scenarioId: string; turnIndex: number };
 type DemoState = DemoMeta & { ended: boolean };
@@ -147,6 +148,9 @@ export function ChatContainer() {
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
+      // 표 페이로드(#34) 가 토큰보다 먼저 도착할 수 있어 어시스턴트
+      // 메시지 삽입까지 잠깐 들고 있는다.
+      let pendingTable: MessageTable | null = null;
 
       const hasRange =
         timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
@@ -183,9 +187,7 @@ export function ChatContainer() {
         ]);
         assistantInserted = true;
 
-        for await (const ev of parseSseStream<TokenPayload | ErrorPayload>(
-          res.body,
-        )) {
+        for await (const ev of parseSseStream<StreamPayload>(res.body)) {
           if (ev.event === "token") {
             const piece = (ev.data as TokenPayload).content;
             setMessages((prev) =>
@@ -195,6 +197,19 @@ export function ChatContainer() {
                   : m,
               ),
             );
+          } else if (ev.event === "table") {
+            const table = ev.data as MessageTable;
+            // 어시스턴트 메시지가 이미 화면에 있으면 그 자리에 매달고,
+            // 그렇지 않으면(=토큰보다 먼저 도착) 잠시 보류.
+            if (assistantInserted) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, table } : m,
+                ),
+              );
+            } else {
+              pendingTable = table;
+            }
           } else if (ev.event === "done") {
             break;
           } else if (ev.event === "error") {
@@ -203,6 +218,15 @@ export function ChatContainer() {
             appendErrorMessage(setMessages, msg);
             break;
           }
+        }
+        // 토큰이 한 글자도 오기 전에 done 이 와도(이론상) pendingTable
+        // 이 남아있을 수 있어 마지막에 한 번 flush.
+        if (pendingTable) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, table: pendingTable! } : m,
+            ),
+          );
         }
       } catch (err) {
         const reason =
@@ -406,7 +430,17 @@ export function ChatContainer() {
         <ChatHeader onNewConversation={handleNewConversation} />
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-chat-narrow px-lg py-xl">
+          {/* 메시지 목록은 xl+ 에서 좌·우 gutter 가 생기도록 wider 컨테이너
+              로 확장 (#34 paired 표 / 향후 #37 paired 차트 자리). 빈 시작
+              화면은 기존 narrow 폭 그대로. */}
+          <div
+            className={[
+              "mx-auto px-lg py-xl",
+              messages.length === 0
+                ? "max-w-chat-narrow"
+                : "max-w-chat-narrow xl:max-w-marketing",
+            ].join(" ")}
+          >
             {messages.length === 0 ? (
               <ChatEmptyState onScenarioStart={handleScenarioStart} />
             ) : (

@@ -1,10 +1,24 @@
 export type MessageRole = "user" | "assistant" | "error";
 
+/**
+ * 어시스턴트 응답에 paired 되는 표 데이터 (#34).
+ *
+ * 백엔드(/api/fdc/v1/chat) 페이로드 구조와 호환:
+ *   { content, table?: { rows, columns? } }
+ * `columns` 가 비면 첫 row 의 키에서 자동 추출.
+ */
+export type MessageTable = {
+  rows: Record<string, unknown>[];
+  columns?: string[];
+};
+
 export type Message = {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: number;
+  /** Paired data table (#34) — 어시스턴트 메시지에만. */
+  table?: MessageTable;
 };
 
 /**

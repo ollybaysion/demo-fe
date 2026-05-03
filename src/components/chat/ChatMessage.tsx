@@ -3,6 +3,7 @@
 import { type ReactNode, useState } from "react";
 import type { Message } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
+import { MessageDataTable } from "./MessageDataTable";
 
 /**
  * 메시지 단위 액션 (#30).
@@ -49,37 +50,51 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
   }
 
   const isUser = message.role === "user";
+  const hasTable = !isUser && !!message.table;
 
   return (
     <li
       className={[
-        "group flex flex-col",
-        isUser ? "items-end" : "items-start",
+        "group grid gap-xs",
+        // xl+ : 좌측 gutter | 풍선 (max 768) | 우측 gutter (#37 차트 자리, 현재 비움).
+        // 그 이하 viewport 에서는 단일 컬럼 스택 — 풍선 아래 표가 인라인 fallback.
+        "xl:grid-cols-[1fr_minmax(0,768px)_1fr] xl:gap-md xl:items-start",
       ].join(" ")}
     >
       <div
-        aria-busy={streaming || undefined}
         className={[
-          "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body",
-          isUser
-            ? "whitespace-pre-wrap bg-brand-primary text-brand-on-primary"
-            : "bg-brand-surface-card text-brand-ink",
+          "flex flex-col xl:col-start-2 xl:row-start-1 min-w-0",
+          isUser ? "items-end" : "items-start",
         ].join(" ")}
       >
-        {isUser ? (
-          message.content
-        ) : (
-          // 스트리밍 중에도 MarkdownContent 가 토큰마다 점진 렌더. 별도
-          // 깜빡이 커서는 두지 않음 — 콘텐츠가 자라는 자체가 진행 신호.
-          <MarkdownContent content={message.content} />
+        <div
+          aria-busy={streaming || undefined}
+          className={[
+            "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body",
+            isUser
+              ? "whitespace-pre-wrap bg-brand-primary text-brand-on-primary"
+              : "bg-brand-surface-card text-brand-ink",
+          ].join(" ")}
+        >
+          {isUser ? (
+            message.content
+          ) : (
+            // 스트리밍 중에도 MarkdownContent 가 토큰마다 점진 렌더.
+            <MarkdownContent content={message.content} />
+          )}
+        </div>
+        {!streaming && (
+          <ActionGroup
+            message={message}
+            isUser={isUser}
+            onRegenerate={isUser ? undefined : onRegenerate}
+          />
         )}
       </div>
-      {!streaming && (
-        <ActionGroup
-          message={message}
-          isUser={isUser}
-          onRegenerate={isUser ? undefined : onRegenerate}
-        />
+      {hasTable && message.table && (
+        <div className="xl:col-start-1 xl:row-start-1 min-w-0">
+          <MessageDataTable table={message.table} />
+        </div>
       )}
     </li>
   );

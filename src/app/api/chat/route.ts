@@ -110,11 +110,13 @@ export async function POST(request: Request): Promise<Response> {
 
   // Demo mode: scripted assistant text bypasses the echo formatter.
   let responseText: string;
+  let responseTable: ReturnType<typeof pickTable> = undefined;
   if (body.demo) {
     const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
     const turn = scenario?.turns[body.demo.turnIndex];
     if (turn) {
       responseText = turn.assistant;
+      responseTable = pickTable(turn);
     } else {
       responseText =
         "데모 시나리오의 마지막 응답을 이미 재생했습니다. 헤더의 '다시 시작' 버튼으로 새 시나리오를 선택하세요.";
@@ -132,6 +134,12 @@ export async function POST(request: Request): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
+        // 표 페이로드는 토큰 시작 전에 한 번 흘려보냄. UI 가 텍스트가
+        // 채워지는 동안에도 좌측 gutter 에 표를 띄울 수 있도록.
+        // 백엔드(/api/fdc/v1/chat) 도 같은 패턴 권장.
+        if (responseTable) {
+          controller.enqueue(encodeSseEvent("table", responseTable));
+        }
         for (const ch of characters) {
           controller.enqueue(encodeSseEvent("token", { content: ch }));
           await sleep(TOKEN_INTERVAL_MS);
@@ -159,4 +167,10 @@ export async function POST(request: Request): Promise<Response> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function pickTable(
+  turn: { table?: { rows: Record<string, unknown>[]; columns?: string[] } },
+): { rows: Record<string, unknown>[]; columns?: string[] } | undefined {
+  return turn.table;
 }

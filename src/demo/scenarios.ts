@@ -12,7 +12,7 @@
  * 한 번씩 등장하도록 분포시켜 둠.
  */
 
-import type { ContextRow } from "@/lib/types";
+import type { ContextRow, MessageTable } from "@/lib/types";
 
 export type ScenarioTurn = {
   user: string;
@@ -25,6 +25,11 @@ export type ScenarioTurn = {
   contextPanel?: ContextRow[];
   /** 이 턴 user 메시지 전송 시 발생 시간을 함께 갱신. */
   timeRange?: { start: string; end: string };
+  /**
+   * Paired data table (#34). 백엔드 페이로드 구조를 그대로 모킹 —
+   * 어시스턴트 메시지의 좌측 gutter 에 표로 paired 되어 보임.
+   */
+  table?: MessageTable;
 };
 
 export type Scenario = {
@@ -70,6 +75,24 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "> STEP 종료 시점 기준으로 데이터가 발생하기 때문에 09:10에 센서값 3으로 데이터가 발생했습니다.",
         ].join("\n"),
+        // 좌측 paired 표: 분 단위 APC_PRESSURE 트렌드. STEP 종료 시점인
+        // 09:10 에 최댓값 3 으로 데이터가 발생했음을 본문 분석과 같이 본다.
+        table: {
+          columns: ["timestamp", "step", "APC_PRESSURE (mTorr)"],
+          rows: [
+            { timestamp: "09:00", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.4 },
+            { timestamp: "09:01", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.5 },
+            { timestamp: "09:02", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.8 },
+            { timestamp: "09:03", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.4 },
+            { timestamp: "09:04", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.7 },
+            { timestamp: "09:05", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.9 },
+            { timestamp: "09:06", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 3.0 },
+            { timestamp: "09:07", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.8 },
+            { timestamp: "09:08", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.6 },
+            { timestamp: "09:09", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 1.2 },
+            { timestamp: "09:10", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.6 },
+          ],
+        },
         contextPanel: [
           {
             id: "demo-shape-eq-1",
@@ -179,6 +202,14 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "EMO 직전의 *GasLeak* 가 멈춤의 직접 원인일 가능성이 높습니다.",
         ].join("\n"),
+        table: {
+          columns: ["timestamp", "alarm", "severity", "note"],
+          rows: [
+            { timestamp: "14:23:11", alarm: "GasLeak", severity: "warning", note: "SiH4 line" },
+            { timestamp: "14:25:47", alarm: "GasLeak", severity: "warning", note: "SiH4 line (recur)" },
+            { timestamp: "14:26:02", alarm: "EMO", severity: "critical", note: "Emergency Off — auto interlock" },
+          ],
+        },
       },
       {
         user: "GasLeak 알람의 원인 센서가 무엇인가요?",
