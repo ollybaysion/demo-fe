@@ -5,7 +5,7 @@ import { readJson, writeJson } from "@/lib/storage";
 import { applyTheme, type Theme } from "@/lib/theme";
 
 /**
- * 설정 화면 (#12 + #77 테마 확장).
+ * 설정 화면 — 테마 확장 포함.
  *
  * 테마는 light / dark / sepia / cool-gray / high-contrast / system 6종.
  * 폰트 / 언어 / 모델 은 v1 UI 자리 — 실제 동작은 후속 PR.

@@ -1,5 +1,5 @@
 /**
- * UC-12: 알람 threshold 조정 가이드 (#65)
+ * UC-12: 알람 threshold 조정 가이드
  */
 
 import type { Scenario } from "./types";

@@ -1,5 +1,5 @@
 /**
- * Mock equipment / chamber / sensor / peer 데이터 (#27 Phase 1).
+ * Mock equipment / chamber / sensor / peer 데이터 (Phase 1).
  *
  * 칼럼은 데모용으로 col1~col10. Phase 2 에서 백엔드 API
  *   GET /api/equipment/:id
@@ -157,7 +157,7 @@ export function getPeers(name: string): EquipmentDetail[] {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Comparison v2 (#79) — Phase 1 mock
+// Comparison v2 — Phase 1 mock
 // ────────────────────────────────────────────────────────────────────
 //
 // 1:1 비교 (현재 설비 vs 단일 동종설비), post-setup 매칭 모드.
@@ -184,7 +184,7 @@ export type CompareSide = {
 };
 
 /**
- * 센서별 시계열 (#79 Phase 2). x축은 공정 시작 시점 기준 경과 분 (t=0).
+ * 센서별 시계열 (Phase 2). x축은 공정 시작 시점 기준 경과 분 (t=0).
  * key 는 각 설비 id — recharts 가 같은 key 를 두 series 로 쓰지 못하므로
  * UI 에서 series name 을 fold 한다.
  */
@@ -202,7 +202,7 @@ export type SensorSeries = {
 };
 
 /**
- * 챔버 이벤트 (#79 Phase 2). point = end 없음, range = end 있음.
+ * 챔버 이벤트 (Phase 2). point = end 없음, range = end 있음.
  * type 별로 lane 색 / 필터 매칭.
  */
 export type ChamberEventType =
@@ -220,7 +220,7 @@ export type ChamberEvent = {
 };
 
 /**
- * 설비 알람 (#79 Phase 2). 대부분 point. severity 별 색.
+ * 설비 알람 (Phase 2). 대부분 point. severity 별 색.
  */
 export type AlarmSeverity = "info" | "warning" | "critical";
 
@@ -243,11 +243,11 @@ export type CompareData = {
   windowDays: CompareWindowDays;
   current: CompareSide;
   baseline: CompareSide;
-  /** 센서별 시계열 (#79 Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 배열. */
+  /** 센서별 시계열 (Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 배열. */
   series: SensorSeries[];
-  /** 챔버 이벤트 (#79 Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 객체. */
+  /** 챔버 이벤트 (Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 객체. */
   chamberEvents: { current: ChamberEvent[]; baseline: ChamberEvent[] };
-  /** 설비 알람 (#79 Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 객체. */
+  /** 설비 알람 (Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 객체. */
   alarms: { current: AlarmEvent[]; baseline: AlarmEvent[] };
 };
 
@@ -370,7 +370,7 @@ function seriesFor(
 }
 
 /**
- * 챔버 이벤트 mock (#79 Phase 2). 같은 run duration 안에서 setup →
+ * 챔버 이벤트 mock (Phase 2). 같은 run duration 안에서 setup →
  * recipe_change → cleaning → maintenance 일부를 deterministic 으로 배치.
  * 양쪽 설비별로 시점/지속이 약간 다르게.
  */
@@ -417,7 +417,7 @@ function chamberEventsFor(
 }
 
 /**
- * 알람 mock (#79 Phase 2). 코드 풀에서 deterministic 하게 골라 시점·
+ * 알람 mock (Phase 2). 코드 풀에서 deterministic 하게 골라 시점·
  * severity·root cause 부여. 양쪽 설비에 공통 / 단독 알람 섞임.
  */
 const ALARM_POOL: ReadonlyArray<{
@@ -464,7 +464,7 @@ function alarmsFor(
 }
 
 /**
- * 1:1 비교 mock. (#79 Phase 1 + Phase 2 — post-setup 모드)
+ * 1:1 비교 mock. (Phase 1 + Phase 2 — post-setup 모드)
  */
 export function getCompareData(
   currentId: string,

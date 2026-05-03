@@ -18,7 +18,7 @@ type Props = {
   /**
    * When provided, the input is locked to this exact text (rendered as
    * ghost-styled value), the user can only press Enter to submit, and
-   * typing is blocked. Used by demo scenarios (#19) to constrain the
+   * typing is blocked. Used by demo scenarios to constrain the
    * presenter to the scripted next message.
    */
   lockedValue?: string;
@@ -31,7 +31,7 @@ type Props = {
 
 const TEXTAREA_MAX_HEIGHT = 200;
 
-// 이미지 첨부 (#91) 제약.
+// 이미지 첨부 제약.
 const MAX_ATTACH_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME = new Set([
   "image/png",
@@ -183,7 +183,7 @@ export function ChatInput({
       onDragOver={handleDragOver}
       onDragLeave={() => setDragActive(false)}
     >
-      {/* 첨부 thumbnail strip (#91) */}
+      {/* 첨부 thumbnail strip */}
       {attachments.length > 0 && (
         <ul className="flex flex-wrap items-center gap-xs mb-xs">
           {attachments.map((a) => (

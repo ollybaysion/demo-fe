@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 /**
- * 보안 헤더 (#88).
+ * 보안 헤더.
  *
  * Next.js 가 inline script (hydration / theme boot) 와 inline style
  * (Tailwind v4 / next/font) 을 광범위하게 사용하므로 CSP 는
@@ -54,8 +54,18 @@ if (isProd) {
 
 const nextConfig: NextConfig = {
   // Emit a self-contained server bundle under .next/standalone for
-  // Docker multi-stage runtime. See Dockerfile and #7 for context.
+  // Docker multi-stage runtime. See Dockerfile for context.
   output: "standalone",
+  // .md import 를 raw text 로 — 도움말 본문 등을 ts string 으로 두지
+  // 않고 .md 파일 그대로 편집/리뷰 가능하게.
+  turbopack: {
+    rules: {
+      "*.md": {
+        loaders: ["raw-loader"],
+        as: "*.js",
+      },
+    },
+  },
   async headers() {
     return [
       {

@@ -1,5 +1,5 @@
 /**
- * 테마 적용 (#77).
+ * 테마 적용.
  *
  * `<html data-theme="...">` attribute 로 globals.css 의 `[data-theme=*]`
  * override 블록을 활성화. 적용은 runtime — Tailwind v4 utility 가
@@ -11,7 +11,7 @@
  *   - "sepia"  — 따뜻한 종이색
  *   - "cool-gray" — 차가운 모노크롬
  *   - "high-contrast" — 고대비 (접근성)
- *   - "system" — 자동 감지는 #77 out of scope. 현재는 light 로 fallback.
+ *   - "system" — 자동 감지 미구현, 현재는 light 로 fallback.
  */
 
 export type Theme =

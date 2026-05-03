@@ -7,7 +7,7 @@ import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 
 /**
- * 어시스턴트 메시지 본문을 마크다운으로 렌더링 (#31).
+ * 어시스턴트 메시지 본문을 마크다운으로 렌더링.
  *
  * - GFM (테이블/취소선/체크리스트 등) 지원
  * - HTML 직접 렌더링은 rehype-sanitize 로 차단 — `dangerouslySetInnerHTML` 미사용
@@ -68,7 +68,7 @@ const components: Components = {
   ),
   li: ({ children }) => <li>{children}</li>,
   a: ({ href, children }) => {
-    // (#89) URL scheme whitelist — rehype-sanitize 가 javascript:/data:/
+    // URL scheme whitelist — rehype-sanitize 가 javascript:/data:/
     // vbscript: 등을 거의 차단하지만 sanitizer 우회 / 설정 누락 대비
     // 명시적 layer. 화이트리스트 외 링크는 anchor 자체를 제거하고
     // 텍스트만 노출.
@@ -133,7 +133,7 @@ const components: Components = {
 };
 
 /**
- * 마크다운 링크의 href 가 안전한 scheme 인지 검사 (#89).
+ * 마크다운 링크의 href 가 안전한 scheme 인지 검사.
  *
  * - 절대 URL: `https:` / `http:` / `mailto:` 만 허용
  * - 상대 경로 (`/foo`, `./foo`, `#anchor`) 는 허용

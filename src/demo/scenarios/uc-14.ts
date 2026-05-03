@@ -1,5 +1,5 @@
 /**
- * UC-14: 사용법·권한 문의 (#67)
+ * UC-14: 사용법·권한 문의
  */
 
 import type { Scenario } from "./types";

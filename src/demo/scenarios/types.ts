@@ -22,15 +22,15 @@ export type ScenarioTurn = {
   contextPanel?: ContextRow[];
   /** 이 턴 user 메시지 전송 시 발생 시간을 함께 갱신. */
   timeRange?: { start: string; end: string };
-  /** Paired tables (#34, #45). */
+  /** Paired tables. */
   tables?: MessageTableEntry[];
-  /** Paired charts (#37, #45). */
+  /** Paired charts. */
   charts?: MessageChartEntry[];
-  /** Paired event timelines (#49). */
+  /** Paired event timelines. */
   eventTimelines?: MessageEventTimelineEntry[];
   /**
-   * 추천 후속 질문 (#40). 어시스턴트 응답 후 ChatInput 위에 chip 으로
-   * 노출. 첫 chip 은 다음 turn 의 `user` 와 일치하도록 정렬 (#52, #46) —
+   * 추천 후속 질문. 어시스턴트 응답 후 ChatInput 위에 chip 으로
+   * 노출. 첫 chip 은 다음 turn 의 `user` 와 일치하도록 정렬 —
    * 데모 모드에서 골드 테두리로 강조, 나머지는 disabled.
    */
   recommendQuestion?: string[];
