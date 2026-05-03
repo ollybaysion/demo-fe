@@ -6,20 +6,20 @@
 
 - **Base URL**: 백엔드 도메인은 환경별 결정. 예: `https://fdc-api.internal/`
 - **버전 prefix**: `/api/fdc/v1`
-- **인증**: 미정 (#14 / #90). 도입 시 `Authorization: Bearer <token>` 권장.
+- **인증**: 미정. 도입 시 `Authorization: Bearer <token>` 권장.
 - **공통 응답 헤더**:
   - `X-Request-Id` — 요청 추적 ID. 클라이언트는 같은 ID 로 서버 로그 추적 가능. 모든 응답(2xx/4xx/5xx) 에 포함되어야 한다.
-- **공통 보안 헤더** (#88): 프론트엔드 Next 가 이미 응답에 첨부하므로 백엔드는 불필요. 백엔드가 직접 노출되는 환경이면 동일 헤더를 별도 추가.
+- **공통 보안 헤더**: 프론트엔드 Next 가 이미 응답에 첨부하므로 백엔드는 불필요. 백엔드가 직접 노출되는 환경이면 동일 헤더를 별도 추가.
 
 ## 목차
 
 1. [POST /api/fdc/v1/chat](#1-post-apifdcv1chat) — 채팅 (SSE 스트림)
-2. [POST /api/fdc/v1/summary](#2-post-apifdcv1summary) — 운영자 인계용 대화 요약 (#24)
-3. [POST /api/fdc/v1/upload](#3-post-apifdcv1upload) — 이미지 첨부 업로드 (#91)
-4. [GET /api/fdc/v1/equipment/:id](#4-get-apifdcv1equipmentid) — 설비 상세 (#27)
+2. [POST /api/fdc/v1/summary](#2-post-apifdcv1summary) — 운영자 인계용 대화 요약
+3. [POST /api/fdc/v1/upload](#3-post-apifdcv1upload) — 이미지 첨부 업로드
+4. [GET /api/fdc/v1/equipment/:id](#4-get-apifdcv1equipmentid) — 설비 상세
 5. [GET /api/fdc/v1/equipment/:id/peers](#5-get-apifdcv1equipmentidpeers) — 동종 설비 목록
 6. [GET /api/fdc/v1/equipment/:id/setup-events](#6-get-apifdcv1equipmentidsetup-events) — 셋업 이벤트
-7. [GET /api/fdc/v1/equipment/:id/compare](#7-get-apifdcv1equipmentidcompare) — 1:1 비교 (#79)
+7. [GET /api/fdc/v1/equipment/:id/compare](#7-get-apifdcv1equipmentidcompare) — 1:1 비교
 8. [데이터 모델](#데이터-모델) — Message / Table / Chart / Timeline / Attachment / Context
 9. [에러 형식](#에러-형식)
 10. [보안 / 운영 정책](#보안--운영-정책)
@@ -53,7 +53,7 @@ type ChatRequestBody = {
   timeRange?: { start?: string; end?: string };
 
   /**
-   * 데모 모드 메타 (#19) — 클라이언트가 정해진 시나리오를 재생할 때.
+   * 데모 모드 메타 — 클라이언트가 정해진 시나리오를 재생할 때.
    * 백엔드 운영 환경에서는 무시 또는 거부 가능.
    */
   demo?: { scenarioId: string; turnIndex: number };
@@ -62,7 +62,7 @@ type ChatRequestBody = {
 
 전체 데이터 모델은 §[데이터 모델](#데이터-모델) 참고.
 
-#### Validation 한도 (#83)
+#### Validation 한도
 
 | 항목 | 한도 | 위반 시 에러 코드 |
 |---|---|---|
@@ -106,17 +106,37 @@ type DonePayload = {
   messageId: string;
   finishReason: "stop" | "length" | "error";
 
-  /** Paired tables (#34, #45). 비면 미동봉. */
+  /** Paired tables. 비면 미동봉. */
   tables?: MessageTableEntry[];
 
-  /** Paired charts (#37, #45). 비면 미동봉. */
+  /** Paired charts. 비면 미동봉. */
   charts?: MessageChartEntry[];
 
-  /** Paired event timelines (#49). 비면 미동봉. */
+  /** Paired event timelines. 비면 미동봉. */
   eventTimelines?: MessageEventTimelineEntry[];
 
-  /** 추천 후속 질문 (#40). 비면 미동봉. */
+  /** 추천 후속 질문. 비면 미동봉. */
   recommendQuestion?: string[];
+
+  /**
+   * 사용자 메시지에서 백엔드가 추출한 컨텍스트. 비-데모 모드에서 우측
+   * 컨텍스트 패널을 자동 갱신한다. 데모 모드는 시나리오의
+   * `turn.contextPanel` 흐름이 우선이라 무시.
+   *
+   * - `rows` — 추출된 설비/챔버/센서 행. 비면 변경 없음.
+   * - `rowsMode` — `"replace"` (default, 통째 교체) 또는 `"append"`
+   *   (기존 행 끝에 추가). "ETCH-03 도 같이 봐줘" 같이 의도가 추가일 때
+   *   `"append"` 로 보낸다.
+   * - `timeRange` — 새 발생 시간. 미동봉 시 변경 없음. 항상 replace.
+   *
+   * 추출 자체는 백엔드 책임 (LLM / NLU / rule). 미동봉이거나 빈 객체면
+   * 클라이언트는 패널을 건드리지 않는다.
+   */
+  extractedContext?: {
+    rows?: ContextRow[];
+    rowsMode?: "replace" | "append";
+    timeRange?: { start?: string; end?: string };
+  };
 };
 ```
 
@@ -135,7 +155,7 @@ data: {"message":"stream error"}
 type ErrorPayload = { message: string };
 ```
 
-> ⚠️ **보안 (#85)**: production 환경에서 `message` 에 stack / 내부 경로 / DB 메시지 등 sensitive 정보를 절대 포함하지 말 것. 상세는 server log 에만. 프론트엔드는 이 이벤트를 `stream` 분류로 받아 사용자에게는 generic 카피("응답 도중에 연결이 끊겼어요") 만 노출한다.
+> ⚠️ **보안**: production 환경에서 `message` 에 stack / 내부 경로 / DB 메시지 등 sensitive 정보를 절대 포함하지 말 것. 상세는 server log 에만. 프론트엔드는 이 이벤트를 `stream` 분류로 받아 사용자에게는 generic 카피("응답 도중에 연결이 끊겼어요") 만 노출한다.
 
 ### 예시 흐름
 
@@ -163,7 +183,7 @@ data: {"messageId":"msg_xyz","finishReason":"stop","tables":[{"title":"...","col
 
 ## 2. POST /api/fdc/v1/summary
 
-운영자 인계용 대화 요약 (#24, UC-15). 현재 mock 단계에서는 frontend 가 클라이언트에서 만든 텍스트만 클립보드 복사. 백엔드 도입 시 LLM 또는 정형 요약 응답.
+운영자 인계용 대화 요약 (UC-15). 현재 mock 단계에서는 frontend 가 클라이언트에서 만든 텍스트만 클립보드 복사. 백엔드 도입 시 LLM 또는 정형 요약 응답.
 
 ### Request
 
@@ -188,7 +208,7 @@ type SummaryResponse = {
 
 ## 3. POST /api/fdc/v1/upload
 
-채팅 입력의 이미지 첨부 업로드 (#91). 현재 frontend 는 base64 inline 으로 메시지에 동봉하지만, 큰 이미지는 별도 endpoint 로 업로드 후 url 만 message 에 포함하는 게 권장.
+채팅 입력의 이미지 첨부 업로드. 현재 frontend 는 base64 inline 으로 메시지에 동봉하지만, 큰 이미지는 별도 endpoint 로 업로드 후 url 만 message 에 포함하는 게 권장.
 
 ### Request
 
@@ -223,7 +243,7 @@ type UploadResponse = {
 
 ## 4. GET /api/fdc/v1/equipment/:id
 
-설비 상세 정보 (#27). 컨텍스트 패널에 입력된 설비명으로 호출.
+설비 상세 정보. 컨텍스트 패널에 입력된 설비명으로 호출.
 
 ### Response
 
@@ -256,7 +276,7 @@ type PeersResponse = EquipmentDetail[];
 
 ## 6. GET /api/fdc/v1/equipment/:id/setup-events
 
-설비별 셋업/설비 변경 이벤트 시점 — 비교(#79)의 post-setup 매칭 모드용.
+설비별 셋업/설비 변경 이벤트 시점 — 비교의 post-setup 매칭 모드용.
 
 ### Response
 
@@ -275,7 +295,7 @@ type SetupEventsResponse = Array<{
 
 ## 7. GET /api/fdc/v1/equipment/:id/compare
 
-1:1 비교 (#79 v2). 현재 설비 vs 단일 동종설비.
+1:1 비교 (v2). 현재 설비 vs 단일 동종설비.
 
 ### Query
 
@@ -360,22 +380,22 @@ type Message = {
   content: string;             // 마크다운
   createdAt: number;           // epoch ms
 
-  /** Paired data tables (#34, #45) — 어시스턴트 메시지에만. */
+  /** Paired data tables — 어시스턴트 메시지에만. */
   tables?: MessageTableEntry[];
 
-  /** Paired charts (#37, #45) — 어시스턴트 메시지에만. */
+  /** Paired charts — 어시스턴트 메시지에만. */
   charts?: MessageChartEntry[];
 
-  /** Paired event timelines (#49) — 어시스턴트 메시지에만. */
+  /** Paired event timelines — 어시스턴트 메시지에만. */
   eventTimelines?: MessageEventTimelineEntry[];
 
-  /** 추천 후속 질문 (#40). */
+  /** 추천 후속 질문. */
   recommendQuestion?: string[];
 
-  /** 첨부 (#91) — user 메시지. */
+  /** 첨부 — user 메시지. */
   attachments?: MessageAttachment[];
 
-  /** 에러 상세 (#32) — error role 만. */
+  /** 에러 상세 — error role 만. */
   errorDetail?: {
     kind: "network" | "timeout" | "http-4xx" | "http-5xx" | "stream" | "unknown";
     status?: number;
@@ -471,7 +491,7 @@ type MessageAttachment = {
 };
 ```
 
-### ContextRow (설비 정보 입력 #16)
+### ContextRow (설비 정보 입력)
 
 ```typescript
 type ContextSensor = { id: string; name: string };
@@ -517,17 +537,17 @@ type ErrorResponse = {
 
 ### SSE 도중 에러 (`event: error`)
 
-스트림 시작 후 발생한 에러는 HTTP status 가 이미 200 이라 변경 불가. SSE `error` 이벤트 + 클라이언트가 stream 분류로 처리. 상세는 server log 에만 (#85).
+스트림 시작 후 발생한 에러는 HTTP status 가 이미 200 이라 변경 불가. SSE `error` 이벤트 + 클라이언트가 stream 분류로 처리. 상세는 server log 에만.
 
 ---
 
 ## 보안 / 운영 정책
 
-### 입력 검증 (#83)
+### 입력 검증
 
 위 §1 의 한도 표 참조. 백엔드는 클라이언트 검증을 신뢰하지 말고 동일 한도를 서버 측에서 다시 적용.
 
-### 응답 sanitize (#85)
+### 응답 sanitize
 
 - production 의 SSE `error.message` 와 5xx body 의 `message` 에 stack / 내부 경로 / DB 메시지 노출 금지.
 - 상세는 server log 의 동일 `requestId` 항목으로 추적.
@@ -545,16 +565,16 @@ type ErrorResponse = {
 
 ### 헤더 / CORS
 
-- 인증 도입 시 `Authorization` 만 사용 — `Cookie` 비권장 (CSRF / localStorage 정책 #87 참고).
+- 인증 도입 시 `Authorization` 만 사용 — `Cookie` 비권장 (CSRF / localStorage 정책 후속).
 - CORS: 동일 호스트 (Next 프록시) 가 기본. 별도 도메인 운영 시 `Access-Control-Allow-Origin` 명시 + preflight.
 
-### 로깅 (#103)
+### 로깅
 
 - 모든 응답에 `X-Request-Id` 헤더.
 - 동일 ID 로 server-side 구조화 로그(JSON) 와 매칭 가능해야 함.
 - 자동 redact: 헤더 `authorization` / `cookie` / `x-api-key`, 페이로드 `password` / `token` / `secret` / `apiKey` , 메시지 본문 (length 등 메타만 별도 필드).
 
-### 인증 / 권한 (#14, #90 — 도입 예정)
+### 인증 / 권한 (도입 예정)
 
 - `FDC.read` — 센서 추세 조회 / 분석 / 비교
 - `FDC.config` — 트리거 / 수집 설정 변경
