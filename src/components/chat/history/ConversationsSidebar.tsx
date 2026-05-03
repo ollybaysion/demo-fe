@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ContextRow } from "@/lib/types";
 import type { TimeRange } from "../context/useContextRows";
 import type { Conversation } from "./useConversations";
 
 /**
- * 좌측 320px 사이드바. 대화 이력 목록 + 풀텍스트 검색.
+ * 좌측 320px 사이드바. 대화 이력 목록.
  *
  * 우측 ContextPanel 과 같은 push-layout(`w-0 ↔ w-[320px]`) 패턴을 미러.
  * 자세한 디자인 결정은 issue #11 본문 참고.
@@ -24,7 +24,6 @@ export function ConversationsSidebar({
   activeId,
   onSelect,
 }: Props) {
-  const [query, setQuery] = useState("");
   // 상대 시간 라벨용 "지금" 스냅샷. 사이드바 마운트 시점에 한 번,
   // 그리고 1분마다 갱신해 "3시간 전" 라벨이 떠 있는 동안 너무 벗어나지
   // 않게 한다. Date.now() 를 render 중 직접 호출하지 않기 위함.
@@ -35,12 +34,6 @@ export function ConversationsSidebar({
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter((c) => matchesQuery(c, q));
-  }, [conversations, query]);
 
   return (
     <aside
@@ -55,20 +48,17 @@ export function ConversationsSidebar({
     >
       <div className="w-[320px] h-full flex flex-col">
         <div className="px-lg pt-lg pb-md border-b border-brand-hairline-soft">
-          <h2 className="font-sans text-title-md text-brand-ink mb-md">
+          <h2 className="font-sans text-title-md text-brand-ink">
             이전 대화
           </h2>
-          <SearchInput value={query} onChange={setQuery} />
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 ? (
             <Empty>아직 저장된 대화가 없습니다.</Empty>
-          ) : filtered.length === 0 ? (
-            <Empty>검색 결과 없음</Empty>
           ) : (
             <ul className="flex flex-col">
-              {filtered.map((c) => (
+              {conversations.map((c) => (
                 <ConversationItem
                   key={c.id}
                   conversation={c}
@@ -82,81 +72,6 @@ export function ConversationsSidebar({
         </div>
       </div>
     </aside>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Search input
-// ────────────────────────────────────────────────────────────────────
-
-function SearchInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="relative">
-      <SearchIcon />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="제목 / 컨텍스트 / 본문 검색"
-        aria-label="대화 검색"
-        className="w-full bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline pl-9 pr-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          aria-label="검색어 지우기"
-          className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-full text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-        >
-          <XGlyph />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      className="absolute left-sm top-1/2 -translate-y-1/2 text-brand-muted-soft pointer-events-none"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <circle cx="11" cy="11" r="7" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  );
-}
-
-function XGlyph() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
   );
 }
 
@@ -230,7 +145,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Formatters & search predicate (#11 spec)
+// Formatters (#11 spec)
 // ────────────────────────────────────────────────────────────────────
 
 const MINUTE_MS = 60 * 1000;
@@ -239,7 +154,7 @@ const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 
 /** "방금" / "12분 전" / "3시간 전" / "2일 전" / "2026-04-12". */
-export function formatRelativeTime(ts: number, now: number): string {
+function formatRelativeTime(ts: number, now: number): string {
   const diff = Math.max(0, now - ts);
   if (diff < MINUTE_MS) return "방금";
   if (diff < HOUR_MS) return `${Math.floor(diff / MINUTE_MS)}분 전`;
@@ -267,7 +182,7 @@ function formatTime(d: Date): string {
  * - 여러 개: `ETCH-01 외 2 · 2026-05-02`
  * - 시간 비면 시간 부분 생략, 설비도 시간도 비면 빈 문자열
  */
-export function formatContextSummary(
+function formatContextSummary(
   rows: ContextRow[],
   range: TimeRange,
 ): string {
@@ -301,14 +216,4 @@ export function formatContextSummary(
 
   if (equipPart && timePart) return `${equipPart} · ${timePart}`;
   return equipPart || timePart;
-}
-
-function matchesQuery(c: Conversation, q: string): boolean {
-  if (c.title.toLowerCase().includes(q)) return true;
-  const ctx = formatContextSummary(c.context.rows, c.context.timeRange);
-  if (ctx.toLowerCase().includes(q)) return true;
-  for (const m of c.messages) {
-    if (m.content.toLowerCase().includes(q)) return true;
-  }
-  return false;
 }
