@@ -1,5 +1,6 @@
 import { CONTEXT_LABELS } from "@/config/contextColumns";
 import { SCENARIOS } from "@/demo/scenarios";
+import { makeRequestLogger, newRequestId } from "@/lib/logger";
 import type { ContextRow, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -20,12 +21,16 @@ const MAX_MESSAGES = 100;
 const MAX_MESSAGE_CONTENT_CHARS = 10_000;
 const MAX_CONTEXT_ROWS = 50;
 
-function rejectTooLarge(
+function rejectTooLargeWithId(
   error: string,
   limit: number,
   actual: number,
+  requestId: string,
 ): Response {
-  return Response.json({ error, limit, actual }, { status: 400 });
+  return Response.json(
+    { error, limit, actual },
+    { status: 400, headers: { "X-Request-Id": requestId } },
+  );
 }
 
 type ChatTimeRange = { start?: string; end?: string };
@@ -101,46 +106,76 @@ function buildMockResponse(
   return `'${lastUserContent}' 라고 물으셨네요${ctxNote}. 아직 백엔드가 연결되지 않았습니다.`;
 }
 
+/**
+ * 400 응답에도 X-Request-Id 가 따라가도록 헬퍼.
+ */
+function badRequest(
+  body: Record<string, unknown>,
+  requestId: string,
+): Response {
+  return Response.json(body, {
+    status: 400,
+    headers: { "X-Request-Id": requestId },
+  });
+}
+
 export async function POST(request: Request): Promise<Response> {
+  // #103 — 요청 단위 logger + requestId. 응답 헤더에도 첨부해 클라이언트
+  // 가 같은 ID 로 서버 로그를 추적할 수 있게.
+  const requestId = newRequestId();
+  const log = makeRequestLogger(requestId, "POST /api/chat");
+  const startedAt = Date.now();
+
   let body: ChatRequestBody;
   try {
     body = (await request.json()) as ChatRequestBody;
   } catch {
-    return Response.json(
-      { error: "invalid JSON body" },
-      { status: 400 },
-    );
+    log.warn("invalid JSON body");
+    return badRequest({ error: "invalid JSON body" }, requestId);
   }
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
-    return Response.json(
-      { error: "messages is required" },
-      { status: 400 },
-    );
+    log.warn("messages required");
+    return badRequest({ error: "messages is required" }, requestId);
   }
 
   // #83 — size/length 한도 검증.
   if (body.messages.length > MAX_MESSAGES) {
-    return rejectTooLarge(
+    log.warn(
+      { limit: MAX_MESSAGES, actual: body.messages.length },
+      "messages_too_many",
+    );
+    return rejectTooLargeWithId(
       "messages_too_many",
       MAX_MESSAGES,
       body.messages.length,
+      requestId,
     );
   }
   for (const m of body.messages) {
     if (typeof m?.content === "string" && m.content.length > MAX_MESSAGE_CONTENT_CHARS) {
-      return rejectTooLarge(
+      log.warn(
+        { limit: MAX_MESSAGE_CONTENT_CHARS, actual: m.content.length },
+        "message_content_too_long",
+      );
+      return rejectTooLargeWithId(
         "message_content_too_long",
         MAX_MESSAGE_CONTENT_CHARS,
         m.content.length,
+        requestId,
       );
     }
   }
   if (Array.isArray(body.context) && body.context.length > MAX_CONTEXT_ROWS) {
-    return rejectTooLarge(
+    log.warn(
+      { limit: MAX_CONTEXT_ROWS, actual: body.context.length },
+      "context_too_large",
+    );
+    return rejectTooLargeWithId(
       "context_too_large",
       MAX_CONTEXT_ROWS,
       body.context.length,
+      requestId,
     );
   }
 
@@ -148,11 +183,20 @@ export async function POST(request: Request): Promise<Response> {
     .reverse()
     .find((m) => m.role === "user");
   if (!lastUser) {
-    return Response.json(
-      { error: "no user message found" },
-      { status: 400 },
-    );
+    log.warn("no user message found");
+    return badRequest({ error: "no user message found" }, requestId);
   }
+
+  log.info(
+    {
+      messageCount: body.messages.length,
+      contextRows: body.context?.length ?? 0,
+      demo: body.demo
+        ? { scenarioId: body.demo.scenarioId, turnIndex: body.demo.turnIndex }
+        : undefined,
+    },
+    "chat request accepted",
+  );
 
   // Demo mode: scripted assistant text bypasses the echo formatter.
   let responseText: string;
@@ -213,14 +257,28 @@ export async function POST(request: Request): Promise<Response> {
               : {}),
           }),
         );
+        log.info(
+          {
+            durationMs: Date.now() - startedAt,
+            messageId,
+            chars: characters.length,
+          },
+          "chat request done",
+        );
         controller.close();
       } catch (err) {
         // (#85) production 에서는 stack / 내부 경로 / DB 메시지 등이 SSE
         // payload 로 누출되지 않도록 generic 메시지만 전송. 상세는 server
-        // log 로만 남김 (dev 한정).
-        if (process.env.NODE_ENV !== "production") {
-          console.error("[/api/chat] SSE stream error:", err);
-        }
+        // log 로만 남김.
+        log.error(
+          {
+            err: err instanceof Error
+              ? { type: err.name, message: err.message, stack: err.stack }
+              : { raw: String(err) },
+            durationMs: Date.now() - startedAt,
+          },
+          "stream error",
+        );
         const message =
           process.env.NODE_ENV !== "production"
             ? err instanceof Error
@@ -238,6 +296,7 @@ export async function POST(request: Request): Promise<Response> {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Request-Id": requestId,
     },
   });
 }
