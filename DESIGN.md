@@ -694,15 +694,39 @@ A chat page is a single-column conversation centered at `{container.chat-narrow}
 
 **`chat-send-button`** — A `{component.button-primary}` variant for sending messages. Background `{colors.primary}`, text `{colors.on-primary}`, type `{typography.button}`, rounded `{rounded.md}`, height 40px, padding 0 × 16px. Sits to the right of `{component.chat-input-textarea}` in the input row, vertically aligned to its bottom. Inherits the active darkening to `{colors.primary-active}` on press.
 
-**`chat-streaming-cursor`** — A 2px-wide × 1.1em-tall coral bar that follows the trailing character of the streaming assistant message. Background `{colors.primary}`, animates with `{motion.cursor-blink}` (800ms infinite). Disappears the instant the stream ends. The cursor is the system's only animated brand voltage — a small, deliberate, recognizable signal that "Claude is thinking."
-
-**`chat-typing-dots`** — Three 6px circles in `{colors.muted-soft}` that bounce in sequence before the first token arrives. Animation `{motion.typing-bounce}` (600ms infinite), staggered by `{motion.typing-stagger}` (150ms between dots). Muted-soft (not coral) is intentional — the system reserves coral for completed actions, not anticipation.
+**`chat-typing-dots`** — Three 6px circles in `{colors.muted-soft}` that bounce in sequence before the first token arrives. Animation `{motion.typing-bounce}` (600ms infinite), staggered by `{motion.typing-stagger}` (150ms between dots). Muted-soft (not coral) is intentional — the system reserves coral for completed actions, not anticipation. Streaming itself uses progressive token rendering inside `{component.chat-bubble-assistant}` with no trailing cursor — a distinct cursor was tested and felt distracting against Markdown that grows as it arrives.
 
 **`chat-header`** — Replaces `{component.top-nav}` for chat pages. Height 64px, background `{colors.canvas}`, 1px hairline bottom border in `{colors.hairline}`. Carries the wordmark left-aligned in `{typography.title-lg}` (StyreneB / Inter 22px / 500). The chat header strips the marketing nav menu — chat is a focused workspace, not a marketing surface.
 
 **`chat-empty-state`** — Shown when the conversation has no messages yet. A centered `{typography.display-md}` Copernicus serif headline (e.g., "How can I help?") with a `{typography.body-md}` sub-line in `{colors.muted}`. No illustrations, no photos — the cream canvas + serif headline carries the editorial voice on its own.
 
-**`inline-code`** — In-message code reference (e.g., a function name inside a sentence). Background `{colors.surface-card}`, text `{colors.ink}`, type `{typography.inline-code}` (JetBrains Mono 14px), rounded `{rounded.xs}`, padding 2px × 6px. Distinct from multi-line code blocks (see §v2 Roadmap → `{component.code-block-in-message}`).
+**`inline-code`** — In-message code reference (e.g., a function name inside a sentence). Background `{colors.surface-card}`, text `{colors.ink}`, type `{typography.inline-code}` (JetBrains Mono 14px), rounded `{rounded.xs}`, padding 2px × 6px. Distinct from multi-line `{component.code-block-in-message}`.
+
+**`code-block-in-message`** — Multi-line code fence inside an assistant message. Dark navy surface `{colors.surface-dark}` with `{colors.on-dark}` text and Prism syntax highlighting (vsDark theme). Header strip with language label (mono, muted) on the left and inline `{component.button-icon-circular}`-style `[복사]` on the right; transient `[복사됨]` confirmation for ~1.5s. Renders inside `{typography.chat-message-body}` flow at `{rounded.md}` (the only place dark navy crosses into the chat surface — kept tight to code only).
+
+**`markdown-rendering-policy`** — Assistant message bodies render as Markdown via `react-markdown` + `remark-gfm` + `rehype-sanitize`. Allowed: headings, lists (ordered / unordered), GFM tables, blockquote, links (whitelisted schemes only — `https:` / `http:` / `mailto:` / relative; everything else is stripped to plain text), inline code, code blocks (see above), strong / em / strikethrough, horizontal rule. Raw HTML is sanitized away. A `MarkdownErrorBoundary` wraps each assistant body so a parser throw degrades that bubble to plain `whitespace-pre-wrap` text without breaking neighbors.
+
+**`chat-message-action-group`** — Small action row that surfaces under each non-streaming message bubble. Per `{component.button-icon-circular}` styling at the smaller end (text-caption, `{colors.muted}` resting → `{colors.ink}` on hover, opacity 0.6 → 1.0 on hover/focus-within). User messages: `[복사]`. Assistant messages: `[복사] [👍] [👎]` plus, when paired panels are present, `[패널 접기/펼치기]` (header-only fold) and `[패널 비활성화/활성화]` (full hide/show). Feedback toggles are local-state (휘발) until a backend endpoint exists.
+
+**`chat-attachment-chip`** — Pill chip rendered above `{component.chat-input-textarea}` for each pasted/dropped image (`Ctrl+V` or drag&drop). Background `{colors.canvas}`, hairline border, rounded `{rounded.md}`, with a 40×40 thumbnail (`object-cover`) + filename (truncated) + `[×]` remove button. Allowed MIME `image/png · image/jpeg · image/webp · image/gif`, single-file 5MB cap, max 4 per message; violations show an inline `role="alert"` caption in `{colors.error}`. Once sent, the image renders on the user bubble as a 2-up grid (`max-h-40` per item).
+
+**`chat-suggested-question-chip`** — Pill chip stack above `{component.chat-input-textarea}`, `{rounded.pill}`, 1px `{colors.primary}` outline at rest, fills to `{colors.primary}` on hover. Two modes: (1) empty-state example questions before the first message, (2) backend-supplied follow-up suggestions after a streamed response. In the demo mode only the first chip — the one that exactly matches the next scripted user message — is enabled (gold border carrier); the rest render disabled with a hairline `{colors.primary-disabled}` outline + `cursor-not-allowed` and a tooltip explaining the demo constraint.
+
+**`chat-paired-table`** — Optional companion table for an assistant message, placed in the left or right gutter (`{container.chat-narrow}` 좌·우 `1fr` columns at `xl+`, stacked under the bubble below). Card has a top action bar (title button — toggles fold — plus `[펼치기]` height-cap removal, `[확장]` overlay for wide tables, `[CSV 복사]`). Body is a `{rounded.md}` card with `{colors.hairline}` border, internal vertical scroll capped at ~280px (≈10 rows) with sticky header.
+
+**`chat-paired-chart`** — Companion chart card on the same gutter system. Title bar with chevron toggle, body is a recharts `ResponsiveContainer` (line / bar / area) rendered against `{colors.canvas}`. Reference lines (vertical / horizontal) and reference areas (range bands) are tokens from the message payload — used for STEP boundaries and threshold levels.
+
+**`chat-paired-timeline`** — Custom-SVG Gantt-style timeline (process / step tracks, sub-row stacking via greedy interval scheduling). Same gutter card pattern with header chevron + `[전체 보기]` overlay. Step bars use a per-track color cycle (`accent-teal`, `accent-amber`, `success`, `warning`, `primary`) with thin `{colors.hairline}` dividers between tracks; process bars span the full row in `{colors.muted}`.
+
+**`chat-conversation-history-sidebar`** — Left 320px push-layout sidebar (mirror of right-side context panel — `w-0 ↔ w-[320px]` transition, no overlay). Persistent conversation list grouped by relative time (`방금` / `N분 전` / `N시간 전` / `N일 전` / absolute date), each item showing title + context summary (e.g., `ETCH-01 · 2026-05-02 13:00~14:00`). Tap loads that conversation into the chat. Persistence is client-side `localStorage` only (no backend).
+
+**`chat-equipment-detail-panel`** — Right-edge 70vw push panel layered inside the context panel (handle-on-handle). Tabs for `설비 정보` / `챔버 정보` / `센서 정보` / `설비 데이터 비교`. The compare tab does 1:1 side-by-side stats + line-overlay charts for current vs a single peer, post-setup matching mode (window 1d/7d/30d). Diff cells color-coded (warning tint for >+5% mean, teal tint for >−5%, error-soft for ≥2-event anomaly delta). A `[이 차이를 채팅에 가져오기]` action injects the comparison into the chat as an assistant message (paired stats table + per-sensor charts), so the next user query carries the comparison as history context.
+
+**`chat-summary-panel`** — Right 320px panel for ops handover. Sections: 설비 정보 (key:value rows from the context panel), 발생 시간, 요약 (Phase-1 placeholder until backend), 비교 결과 (auto-bundles whatever was imported via `chat-equipment-detail-panel` — most recent only). `[복사]` flattens everything into a single Markdown payload for paste into mail/messenger.
+
+**`help-fab`** — Bottom-right fixed circular button (44×44, `{colors.primary}` fill, `{rounded.pill}`) with a `?` glyph. Click opens a centered modal whose body is rendered from `src/content/help.md` through `{component.markdown-rendering-policy}`. Close on `[×]` / `Esc` / backdrop click.
+
+**`settings-modal`** — Header `[⚙]` opens a centered modal with theme / font-size / language / model settings. Theme switching applies live (see §Theme Variants). Font size / language / model are placeholder selects until backend or i18n lands.
 
 ### Tokens
 
@@ -710,9 +734,9 @@ A chat page is a single-column conversation centered at `{container.chat-narrow}
 
 **Container** — `{container.chat-narrow}` (768px) is the chat-specific max-width, narrower than `{container.marketing}` (1200px) because reading dense conversation text benefits from a tighter measure. The container is centered on the page.
 
-**Bubble** — `{bubble.max-width-desktop}` (85%) and `{bubble.max-width-mobile}` (92%) cap how wide a single message bubble can grow. The remaining gutter on the opposite side is what gives the visual cue of "user vs assistant."
+**Bubble** — `{bubble.max-width-desktop}` (85%) and `{bubble.max-width-mobile}` (92%) cap how wide a single message bubble can grow. The remaining gutter on the opposite side is what gives the visual cue of "user vs assistant." On `xl+` viewports the chat layout switches to a 3-column grid `[1fr | 768 | 1fr]` so paired tables/charts/timelines flow into the gutters without shifting the bubble out of center.
 
-**Motion** — All chat motion tokens are short and deliberate. `{motion.cursor-blink}` is the only continuous animation visible on a quiet chat. `{motion.message-fade-in}` (200ms) softens new message arrival. `{motion.scroll-smooth}` (300ms) governs auto-scroll to bottom on new content.
+**Motion** — All chat motion tokens are short and deliberate. `{motion.typing-bounce}` is the only continuous animation visible on a quiet chat (and only briefly, before the first token). `{motion.message-fade-in}` (200ms) softens new message arrival. `{motion.scroll-smooth}` (300ms) governs auto-scroll to bottom on new content.
 
 **Easing** — `{easing.standard}` for press / state transitions, `{easing.decelerate}` for new content arrivals.
 
@@ -729,7 +753,7 @@ A chat page is a single-column conversation centered at `{container.chat-narrow}
 - Always use `{component.chat-bubble-user}` (coral) for the user's voice. Coral remains a scarce signal — never paint the assistant or system messages coral.
 - Always use `{component.chat-bubble-assistant}` (cream-card) for the agent's voice. Never invert assistant bubbles to `{colors.surface-dark}`.
 - Keep message-to-message spacing at exactly `{spacing.md}` (16px). If grouping is needed, add a visual divider, not extra padding.
-- Pair the streaming state with two simultaneous signals: input `disabled` and `{component.chat-streaming-cursor}` visible at the message tail.
+- Pair the streaming state with two signals: input `disabled` and progressive token rendering inside `{component.chat-bubble-assistant}`. No standalone trailing cursor.
 - Use `{component.chat-header}` on chat pages, not the marketing `{component.top-nav}`.
 - Show `{component.chat-typing-dots}` (muted-soft, not coral) before the first streamed token arrives.
 
@@ -746,7 +770,7 @@ A chat page is a single-column conversation centered at `{container.chat-narrow}
 | State | Component | Visual |
 |---|---|---|
 | `default` | all chat components | base styling per spec |
-| `streaming` | `{component.chat-bubble-assistant}` | trailing `{component.chat-streaming-cursor}` |
+| `streaming` | `{component.chat-bubble-assistant}` | progressive Markdown token rendering, no trailing cursor |
 | `pending` | `{component.chat-bubble-user}` | opacity 0.6 until server acknowledges |
 | `failed` | `{component.chat-bubble-user}` | hairline border `{colors.error}`, trailing `!` icon, retry link |
 | `loading-initial` | `{component.chat-bubble-assistant}` | content replaced by `{component.chat-typing-dots}` until first token |
@@ -771,19 +795,37 @@ A chat page is a single-column conversation centered at `{container.chat-narrow}
 - Bubble max-width relaxes from 85% (desktop) to 92% (mobile) to recover horizontal breathing room.
 - `{component.chat-header}` does NOT collapse to a hamburger — it's already minimal (wordmark only). Mobile uses the same header at the same height.
 
+### Theme Variants
+
+Five color themes selectable from `{component.settings-modal}`. Cool-Gray is the default — picked for the industrial / cleanroom-adjacent feel of the FDC domain, which sits closer to slate than to warm coral. Themes apply at runtime via a `data-theme` attribute on `<html>`; a small inline boot script reads the persisted choice from `localStorage` before hydration to avoid FOUC. Tailwind v4 utilities are emitted as `var(--color-*)` so each theme just overrides the same set of tokens.
+
+| Theme | Canvas | Ink | Primary | Notes |
+|---|---|---|---|---|
+| `light` | cream `#faf9f5` | near-black `#141413` | coral `#cc785c` | Original brand voltage. Matches the marketing surface. |
+| `dark` | warm-black `#1a1814` | warm off-white `#f5f1e8` | brighter coral `#d68870` | Dark inversion that preserves the cream/coral mood — not cold-blue dark. |
+| `sepia` | warm beige `#f5ebd6` | espresso `#3a2e1f` | deep coral `#b8624a` | Reading-tuned. Useful for long analysis sessions. |
+| `cool-gray` (default) | cool gray `#f4f5f7` | navy-ink `#1c1f24` | slate-blue `#4f6d8a` | Industrial / cleanroom register. The default for FDC. |
+| `high-contrast` | pure white `#ffffff` | pure black `#000000` | strong red `#b00020` | Accessibility-first. Hairlines harden to black; semantic colors saturate. |
+
+`system` is exposed in the settings UI but currently falls back to `light` until OS-level detection is wired up. Theme switching never alters layout — only token values change — so the chat / panels / charts all reflow into the new palette without shifting position.
+
+### Image Attachments (chat-side)
+
+Image paste / drag&drop into `{component.chat-input-textarea}` produces `{component.chat-attachment-chip}` previews. Constraints (client-side first line of defense): MIME whitelist `image/png · image/jpeg · image/webp · image/gif` (no SVG / HTML), 5MB single-file cap, max 4 chips per message; pasted screenshots are auto-named `pasted-{ts}.{ext}`. On send, attachments live on the user `Message` as `attachments[]` (base64 `dataUrl` for now; a future upload endpoint will switch to URL refs). Backend must duplicate validation and add magic-byte checks before any future server-side scan / sandbox.
+
 ### v2 Roadmap
 
-The following are deferred to v2. Names and one-line intent are recorded so v1 stays focused; full token specs land when each item is built.
+The following are still deferred. Names and one-line intent are recorded so the surface stays focused; full token specs land when each item is built.
 
-- **Markdown rendering policy** — define which markdown nodes (paragraph / bold / italic / list / link / blockquote / code) render inside `{typography.chat-message-body}` runs, and which are stripped.
 - **`chat-stop-button`** — a `{component.button-secondary}` variant placed adjacent to `{component.chat-send-button}` during streaming, bound to Esc key, that interrupts an in-progress response.
-- **`chat-attachment-chip`** — a pill-shaped chip representing an uploaded file or image, attached to a user message before send.
-- **`code-block-in-message`** — a chat-tuned variant of `{component.code-window-card}` (smaller padding, inline copy button) for multi-line code in assistant responses.
-- **`chat-message-meta`** — small caption under each message for timestamp, "Edited" markers, or token usage info.
-- **`shadow.*` tokens** — formal elevation scale (none / hairline / raise / modal) for sticky input shadow, toasts, and dialogs.
-- **`z-index.*` tokens** — a layering hierarchy (base / sticky-input / toast / modal / tooltip) so layered components compose without ad-hoc z-index conflicts.
-- **`container.chat-medium`** (1024px) — wider chat layout for a future history sidebar variant.
-- **Dark-mode chat variant** — a dark-surface inversion of the chat surface, pending the trinity-compatible dark token palette.
+- **`chat-message-timestamp-meta`** — small caption under each message for timestamp / "Edited" markers / token usage info.
+- **`shadow.*` tokens** — formal elevation scale (none / hairline / raise / modal). Currently the modal stack uses ad-hoc `shadow-md` / `shadow-xl`; promote to tokens once dialog count grows.
+- **`z-index.*` tokens** — a layering hierarchy (base / sticky-input / toast / modal / tooltip). Currently uses ad-hoc 30 / 40 / 50; same — promote when conflicts surface.
+- **`container.chat-medium`** (1024px) — wider chat layout for a future side-by-side artifact pane.
+- **Toast notifications** — replace inline `role="alert"` / `role="status"` strings (clipboard success, attach errors, etc.) with a unified bottom-right toast stack.
+- **Onboarding & login** — first-touch flow + auth surfaces. Will pull `{colors.primary}` for the auth CTA and reuse the editorial empty-state voice.
+- **Equipment compare v3** — multi-equipment 1:N comparison + non-single baseline modes (avg / reference / user-defined).
+- **Theme: `system` auto-detection** — currently `system` falls back to `light`; wire `prefers-color-scheme` once the dark variant has shipped to production.
 
 ## Responsive Behavior
 
@@ -830,5 +872,5 @@ The following are deferred to v2. Names and one-line intent are recorded so v1 s
 - The Anthropic radial-spike-mark is a brand glyph rendered as inline SVG; it's not formalized as a system token here. Treat it as a logo asset.
 - Animation and transition timings (chat message reveal, code block typewriter effect on the homepage, agentic-flow diagram animations) are not in scope.
 - Form validation states beyond `{component.text-input-focused}` are not extracted — error / success states would need a sign-up or feedback flow to confirm.
-- Chat product components (message bubbles, input chrome, streaming cursor, typing indicator, empty state, inline code) are now defined in §Chat Interface. Items still out of scope and tracked under §Chat Interface > v2 Roadmap include: full markdown rendering policy, file/image attachment chips, conversation history sidebar, message-tool surfaces, and dark-mode chat variant.
+- Chat product components (message bubbles, input chrome, typing indicator, empty state, inline code, code blocks, paired tables/charts/timelines, history sidebar, equipment detail panel, summary panel, help FAB, settings modal, attachment chips) are now defined in §Chat Interface. The originally-planned `chat-streaming-cursor` was removed in v1 — progressive Markdown rendering covers the streaming signal without a trailing cursor. Items still out of scope are listed under §Chat Interface > v2 Roadmap.
 - The "agent" / "computer use" demo cards on certain pages display animated Claude controlling a browser — the static screenshot doesn't fully capture the animation chrome.
