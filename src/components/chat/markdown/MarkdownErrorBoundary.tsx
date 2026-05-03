@@ -29,8 +29,18 @@ export class MarkdownErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: unknown): void {
-    // 콘솔 로그만 — 사용자 알림(토스트 등) 은 별도 이슈.
-    console.error("[MarkdownErrorBoundary] markdown render failed:", error);
+    // (#86) production 에서는 사용자 메시지 본문이 stack trace 에 일부
+    // 포함될 가능성이 있어 error 객체 전체를 dev tools 에 노출하지 않음.
+    // 메시지 한 줄(=라이브러리 자체 throw 메시지) 만 남김. 외부 에러
+    // 추적기(Sentry 등) 도입 시에는 별도 sink 로 송출.
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[MarkdownErrorBoundary] markdown render failed:", error);
+    } else {
+      const message = error instanceof Error ? error.message : "unknown";
+      console.error(
+        `[MarkdownErrorBoundary] markdown render failed: ${message}`,
+      );
+    }
   }
 
   render(): ReactNode {
