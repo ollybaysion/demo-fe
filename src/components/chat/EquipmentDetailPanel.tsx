@@ -140,6 +140,7 @@ export function EquipmentDetailPanel({
       >
         {category === "compare" ? (
           <CompareView
+            panelOpen={open}
             currentId={effectiveSelected}
             currentOptions={equipmentNames}
             onCurrentChange={setSelectedName}
@@ -429,6 +430,7 @@ function WideTable({
  *     셀 자동 강조
  */
 function CompareView({
+  panelOpen,
   currentId,
   currentOptions,
   onCurrentChange,
@@ -437,6 +439,12 @@ function CompareView({
   onPeerChange,
   onImportToChat,
 }: {
+  /**
+   * 부모 패널 open 여부 (#108). 닫힘 상태에서 패널은 display:none 으로
+   * 만 숨겨져 차트 컨테이너 측정값이 0 → recharts width(-1) 경고 발생.
+   * 닫힘 시 차트 자체를 mount 안 하도록 ResponsiveContainer 을 gating.
+   */
+  panelOpen: boolean;
   currentId: string;
   currentOptions: string[];
   onCurrentChange: (v: string) => void;
@@ -657,6 +665,7 @@ function CompareView({
             노출 — 두 설비를 동시에 깔면 시점이 달라 의미가 흐려짐.
           </p>
           <CompareSeriesGrid
+            mounted={panelOpen}
             series={visibleSeries}
             currentId={data.current.equipmentId}
             baselineId={data.baseline.equipmentId}
@@ -848,6 +857,7 @@ function CompareStatsTable({
  * 위에 현재 vs baseline 2 series. xl 미만 1열, xl 이상 2열.
  */
 function CompareSeriesGrid({
+  mounted,
   series,
   currentId,
   baselineId,
@@ -855,6 +865,8 @@ function CompareSeriesGrid({
   highlightTime,
   highlightSide,
 }: {
+  /** 부모 패널 open 여부 (#108) — 닫힘 시 ResponsiveContainer 미마운트. */
+  mounted: boolean;
   series: SensorSeries[];
   currentId: string;
   baselineId: string;
@@ -867,6 +879,7 @@ function CompareSeriesGrid({
       {series.map((s) => (
         <CompareSeriesChart
           key={s.sensor}
+          mounted={mounted}
           series={s}
           currentId={currentId}
           baselineId={baselineId}
@@ -880,6 +893,7 @@ function CompareSeriesGrid({
 }
 
 function CompareSeriesChart({
+  mounted,
   series,
   currentId,
   baselineId,
@@ -887,6 +901,7 @@ function CompareSeriesChart({
   highlightTime,
   highlightSide,
 }: {
+  mounted: boolean;
   series: SensorSeries;
   currentId: string;
   baselineId: string;
@@ -900,6 +915,10 @@ function CompareSeriesChart({
         {series.sensor}
       </div>
       <div style={{ width: "100%", height: 180 }}>
+        {/* 패널 닫힘(display:none) 상태에선 컨테이너 측정값이 0 이라
+            recharts 가 width/height -1 경고 출력. mount 자체를 gating
+            해 경고 + 불필요한 렌더 제거 (#108). */}
+        {mounted && (
         <ResponsiveContainer>
           <LineChart
             data={series.data}
@@ -995,6 +1014,7 @@ function CompareSeriesChart({
             />
           </LineChart>
         </ResponsiveContainer>
+        )}
       </div>
       <div className="flex items-center gap-md mt-xs text-caption text-brand-muted">
         <LegendDot color="var(--color-brand-primary)" /> 현재 ({currentId})
