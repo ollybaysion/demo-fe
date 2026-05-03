@@ -4,27 +4,24 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { MessageTable } from "@/lib/types";
 
 /**
- * 어시스턴트 메시지의 좌측 gutter 에 paired 되는 데이터 표 (#34).
+ * 어시스턴트 메시지의 paired 데이터 표 (#34, #45).
  *
- * - 칼럼 순서: `table.columns` 가 있으면 그 순서, 없으면 첫 row 의 키 순서
- * - 너비: content-sized + 부모 폭을 max — 칼럼 합계가 부모를 넘으면 가로 스크롤
- * - 높이: 부모(`ChatMessage`)에서 측정한 풍선 높이를 `maxHeight` 로 받아
- *   기본은 풍선 높이로 cap 하고 내부 세로 스크롤. 헤더는 sticky.
- *   사용자는 표 액션의 [펼치기] 로 풀 펼침, [CSV 복사] 로 CSV export.
- *   가로가 부모를 초과하는 경우(#42) [확장] 으로 화면 거의 풀 폭의
- *   fixed overlay 로 펼쳐 볼 수 있음 — `EquipmentDetailPanel` 패턴.
- * - read-only — 정렬 / 필터 / 편집 없음 (spec out-of-scope)
+ * - 표 자체에 통합된 제목 행: 테두리 안 맨 위, 헤더 위, 칼럼 전체 폭으로
+ *   제목 + 우측 토글 (▼/▲). 디폴트는 `defaultExpanded` prop 으로 결정
+ *   (좌·우 컬럼 첫 항목만 펼친 상태)
+ * - 펼친 상태에서:
+ *   - 행 cap: ~280px (≈10행) 내부 세로 스크롤 + 헤더 sticky
+ *   - 액션: [펼치기] (cap 해제) / [확장] (overlay #42, 가로 overflow 시) /
+ *     [CSV 복사]
+ * - 너비: `w-fit max-w-full` — 칼럼 합계만큼 + 부모 폭 cap. 초과 시 가로
+ *   스크롤
  *
  * 백엔드(/api/fdc/v1/chat) 페이로드의 `table` 필드를 그대로 받음.
  */
 type Props = {
   table: MessageTable;
-  /** 풍선 높이(px). 표를 풍선 높이로 cap 하기 위함. null/undefined 면 cap 없음. */
-  maxHeight?: number | null;
-  /** true 면 maxHeight 무시하고 풀 펼침. */
-  expanded?: boolean;
-  /** 토글 버튼 핸들러. 없으면 토글 버튼 자체를 노출하지 않음. */
-  onToggleExpand?: () => void;
+  /** 디폴트 펼침 여부 (#45). 미지정 시 true. */
+  defaultExpanded?: boolean;
   /**
    * 풍선 DOM ref — [확장] overlay 의 위치/높이를 풍선과 정렬하기 위함.
    * 비면 overlay 가 viewport 정중앙에 띄워짐 (fallback).
@@ -32,22 +29,25 @@ type Props = {
   bubbleRef?: React.RefObject<HTMLDivElement | null>;
 };
 
+const TABLE_BODY_CAP_PX = 280; // ≈ 10 rows
+
 export function MessageDataTable({
   table,
-  maxHeight,
-  expanded,
-  onToggleExpand,
+  defaultExpanded = true,
   bubbleRef,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowsY, setOverflowsY] = useState(false);
   const [overflowsX, setOverflowsX] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
+  // collapse: 표 전체 본문 보이기/감추기 (제목 바 토글)
+  const [collapseExpanded, setCollapseExpanded] = useState(defaultExpanded);
+  // height-cap-removal: [펼치기] 액션 — 280px cap 해제
+  const [heightExpanded, setHeightExpanded] = useState(false);
   // [확장] overlay — 가로 폭이 부모를 초과할 때 풍선과 같은 높이로 폭만
   // 풀로 펼쳐 표를 보는 모드 (#42). 메시지마다 독립 상태.
   const [maximized, setMaximized] = useState(false);
   // overlay 의 viewport top 좌표만 트래킹 — 높이는 33.33vh 고정 (CSS).
-  // 풍선 위치를 따라 anchor 하되 viewport 안에 들어가도록 clamp.
   const [overlayTop, setOverlayTop] = useState<number | null>(null);
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function MessageDataTable({
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [maxHeight, expanded, table]);
+  }, [heightExpanded, collapseExpanded, table]);
 
   // ESC 키로 overlay 닫기.
   useEffect(() => {
@@ -109,10 +109,11 @@ export function MessageDataTable({
 
   if (table.rows.length === 0 || columns.length === 0) return null;
 
-  const effectiveMaxHeight =
-    !expanded && maxHeight != null ? maxHeight : undefined;
-  const showExpandToggle =
-    !!onToggleExpand && (overflowsY || !!expanded);
+  const title = table.title ?? "표";
+  const effectiveMaxHeight = heightExpanded ? undefined : TABLE_BODY_CAP_PX;
+  // [펼치기]: cap 이 적용된 상태에서 콘텐츠가 잘릴 때만, 또는 이미 펼쳐진
+  // 상태에서 다시 접을 수 있도록 노출.
+  const showHeightToggle = overflowsY || heightExpanded;
   const showMaximizeToggle = overflowsX || maximized;
 
   const handleCopyCsv = async () => {
@@ -125,51 +126,91 @@ export function MessageDataTable({
     }
   };
 
+  const toggleCollapse = () => setCollapseExpanded((v) => !v);
+
   return (
     <>
-      <div className="flex flex-col items-end min-w-0">
-        {/* 표 액션 — 표 상단에 둠. 메시지 액션과 달리 항상 100% opacity. */}
-        <div className="flex gap-xxs mb-xxs">
-          {showExpandToggle && (
-            <TableActionButton
-              onClick={onToggleExpand}
-              aria-label={expanded ? "표 접기" : "표 펼치기"}
-              aria-expanded={!!expanded}
-            >
-              {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-              <span>{expanded ? "접기" : "펼치기"}</span>
-            </TableActionButton>
-          )}
-          {showMaximizeToggle && (
-            <TableActionButton
-              onClick={() => setMaximized((v) => !v)}
-              aria-label={maximized ? "표 확장 닫기" : "표 확장"}
-              aria-expanded={maximized}
-            >
-              {maximized ? <MinimizeIcon /> : <MaximizeIcon />}
-              <span>{maximized ? "축소" : "확장"}</span>
-            </TableActionButton>
-          )}
-          <TableActionButton
-            onClick={handleCopyCsv}
-            aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
+      <div className="w-fit max-w-full border border-brand-ink bg-brand-canvas">
+        {/* 제목 행 — 표 테두리 안 맨 위, 헤더 위. 컬럼 전체 폭.
+            구성: [제목 클릭 영역] [액션 버튼들 (펼친 상태에서만)] [chevron]
+            제목 / chevron 영역은 collapse 토글, 액션 버튼은 자기 동작. */}
+        <div className="w-full flex items-center bg-brand-surface-soft">
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            aria-expanded={collapseExpanded}
+            className="flex-1 min-w-0 flex items-baseline gap-sm text-left px-md py-xs hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
-            {justCopied ? <CheckIcon /> : <CopyIcon />}
-            <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
-          </TableActionButton>
+            <span className="font-sans text-body-sm text-brand-ink truncate">
+              {title}
+            </span>
+            <span className="font-sans text-caption text-brand-muted truncate">
+              {table.rows.length}행 × {columns.length}칼럼
+            </span>
+          </button>
+          {collapseExpanded && (
+            <div className="flex gap-xxs px-xs shrink-0">
+              {showHeightToggle && (
+                <TableActionButton
+                  onClick={() => setHeightExpanded((v) => !v)}
+                  aria-label={heightExpanded ? "표 접기" : "표 풀 펼침"}
+                  aria-expanded={heightExpanded}
+                >
+                  {heightExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                  <span>{heightExpanded ? "접기" : "펼치기"}</span>
+                </TableActionButton>
+              )}
+              {showMaximizeToggle && (
+                <TableActionButton
+                  onClick={() => setMaximized((v) => !v)}
+                  aria-label={maximized ? "표 확장 닫기" : "표 확장"}
+                  aria-expanded={maximized}
+                >
+                  {maximized ? <MinimizeIcon /> : <MaximizeIcon />}
+                  <span>{maximized ? "축소" : "확장"}</span>
+                </TableActionButton>
+              )}
+              <TableActionButton
+                onClick={handleCopyCsv}
+                aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
+              >
+                {justCopied ? <CheckIcon /> : <CopyIcon />}
+                <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
+              </TableActionButton>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            aria-label={collapseExpanded ? "표 접기" : "표 펼치기"}
+            aria-expanded={collapseExpanded}
+            className="shrink-0 px-md py-xs hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <Chevron expanded={collapseExpanded} />
+          </button>
         </div>
-        {/* 디자인: 각진 사각형 + 얇은 검정 테두리. 헤더는 약간 회색 음영. */}
-        <div className="w-fit max-w-full border border-brand-ink bg-brand-canvas">
-          <div
-            ref={scrollRef}
-            className="overflow-auto"
-            style={
-              effectiveMaxHeight != null
-                ? { maxHeight: effectiveMaxHeight }
-                : undefined
-            }
-          >
-            <TableMarkup columns={columns} rows={table.rows} />
+
+        {/* 본문 — 표 영역만. 액션은 제목 행으로 이동됐으므로 여기엔 표만. */}
+        <div
+          className={[
+            "grid transition-[grid-template-rows] duration-200 ease-out",
+            collapseExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          ].join(" ")}
+        >
+          <div className="overflow-hidden">
+            <div className="border-t border-brand-ink">
+              <div
+                ref={scrollRef}
+                className="overflow-auto"
+                style={
+                  effectiveMaxHeight != null
+                    ? { maxHeight: effectiveMaxHeight }
+                    : undefined
+                }
+              >
+                <TableMarkup columns={columns} rows={table.rows} />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -183,6 +224,28 @@ export function MessageDataTable({
         />
       )}
     </>
+  );
+}
+
+function Chevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={[
+        "shrink-0 text-brand-muted transition-transform duration-200",
+        expanded ? "rotate-180" : "rotate-0",
+      ].join(" ")}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }
 
@@ -251,7 +314,7 @@ function TableMarkup({
   rows: Record<string, unknown>[];
 }) {
   return (
-    <table className="text-body-sm font-mono border-collapse">
+    <table className="text-body-sm font-mono border-collapse w-full">
       {/* sticky 헤더 — 세로 스크롤 시 thead 가 상단에 고정. */}
       <thead>
         <tr>

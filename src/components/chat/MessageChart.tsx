@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -41,7 +42,15 @@ const SERIES_COLORS = [
 
 const CHART_HEIGHT = 240;
 
-export function MessageChart({ chart }: { chart: MessageChartPayload }) {
+export function MessageChart({
+  chart,
+  defaultExpanded = true,
+}: {
+  chart: MessageChartPayload;
+  /** 디폴트 펼침 여부 (#45). 미지정 시 true. */
+  defaultExpanded?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const { type, data, options } = chart;
   if (data.length === 0) return null;
 
@@ -55,7 +64,7 @@ export function MessageChart({ chart }: { chart: MessageChartPayload }) {
 
   if (yKeys.length === 0) return null;
 
-  const title = options?.title;
+  const title = options?.title ?? "차트";
   const xLabel = options?.xLabel;
   const yLabel = options?.yLabel;
   const referenceLines = options?.referenceLines ?? [];
@@ -63,26 +72,71 @@ export function MessageChart({ chart }: { chart: MessageChartPayload }) {
 
   return (
     <div className="w-full max-w-full border border-brand-ink bg-brand-canvas">
-      {title && (
-        <div className="px-md py-xs text-caption text-brand-muted border-b border-brand-ink">
-          {title}
+      {/* 제목 + 우측 토글 */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="w-full flex items-center justify-between gap-sm px-md py-xs bg-brand-surface-soft hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+      >
+        <span className="flex items-baseline gap-sm min-w-0 text-left">
+          <span className="font-sans text-body-sm text-brand-ink truncate">
+            {title}
+          </span>
+          <span className="font-sans text-caption text-brand-muted truncate">
+            {type} chart
+          </span>
+        </span>
+        <ChartChevron expanded={expanded} />
+      </button>
+
+      {/* 본문 — 슬라이드 다운/업 */}
+      <div
+        className={[
+          "grid transition-[grid-template-rows] duration-200 ease-out",
+          expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        ].join(" ")}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-brand-ink px-sm py-sm">
+            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+              {renderChart(
+                type,
+                data,
+                xKey,
+                yKeys,
+                xLabel,
+                yLabel,
+                referenceLines,
+                referenceAreas,
+              )}
+            </ResponsiveContainer>
+          </div>
         </div>
-      )}
-      <div className="px-sm py-sm">
-        <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-          {renderChart(
-            type,
-            data,
-            xKey,
-            yKeys,
-            xLabel,
-            yLabel,
-            referenceLines,
-            referenceAreas,
-          )}
-        </ResponsiveContainer>
       </div>
     </div>
+  );
+}
+
+function ChartChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={[
+        "shrink-0 text-brand-muted transition-transform duration-200",
+        expanded ? "rotate-180" : "rotate-0",
+      ].join(" ")}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }
 

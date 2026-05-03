@@ -12,7 +12,11 @@
  * 한 번씩 등장하도록 분포시켜 둠.
  */
 
-import type { ContextRow, MessageChart, MessageTable } from "@/lib/types";
+import type {
+  ContextRow,
+  MessageChartEntry,
+  MessageTableEntry,
+} from "@/lib/types";
 
 export type ScenarioTurn = {
   user: string;
@@ -26,14 +30,14 @@ export type ScenarioTurn = {
   /** 이 턴 user 메시지 전송 시 발생 시간을 함께 갱신. */
   timeRange?: { start: string; end: string };
   /**
-   * Paired data table (#34). 백엔드 페이로드 구조를 그대로 모킹 —
-   * 어시스턴트 메시지의 좌측 gutter 에 표로 paired 되어 보임.
+   * Paired tables (#34, #45). 좌·우 gutter 분배는 FE 가 균형 분배 +
+   * 각 entry 의 `side?` 힌트 (P4). 백엔드 페이로드 구조를 그대로 모킹.
    */
-  table?: MessageTable;
+  tables?: MessageTableEntry[];
   /**
-   * Paired chart (#37). 어시스턴트 메시지의 우측 gutter 에 차트로 paired.
+   * Paired charts (#37, #45). 좌·우 분배는 tables 와 같이 처리.
    */
-  chart?: MessageChart;
+  charts?: MessageChartEntry[];
   /**
    * 추천 후속 질문 (#40). 어시스턴트 응답 후 ChatInput 위에 chip 으로
    * 노출. 클릭 시 즉시 user 메시지로 전송.
@@ -130,13 +134,26 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "> STEP 종료 시점 기준으로 데이터가 발생하기 때문에 09:10에 센서값 3으로 데이터가 발생했습니다.",
         ].join("\n"),
-        // 좌측 paired 표(#34) + 우측 paired 차트(#37) 가 같은 시계열을
-        // 공유. STEP 종료 시점인 09:06:00 부근에서 최댓값 3.00 으로 피크.
-        table: {
-          columns: ["timestamp", "step", "APC_PRESSURE (mTorr)"],
-          rows: APC_PRESSURE_TREND.slice(),
-        },
-        chart: {
+        // 다중 paired 항목 (#45) — 표 2 + 차트 2. 같은 데이터를 다른
+        // 관점(시계열 / STEP별 통계)으로 두 번씩.
+        tables: [
+          {
+            title: "APC_PRESSURE 시계열",
+            columns: ["timestamp", "step", "APC_PRESSURE (mTorr)"],
+            rows: APC_PRESSURE_TREND.slice(),
+          },
+          {
+            title: "STEP별 APC_PRESSURE 통계",
+            columns: ["step", "duration", "min", "avg", "max"],
+            rows: [
+              { step: "PRE_HEAT",   duration: "2 분", min: 0.30, avg: 0.49, max: 0.65 },
+              { step: "MAIN_ETCH",  duration: "7 분", min: 1.20, avg: 2.49, max: 3.00 },
+              { step: "POST_PURGE", duration: "2 분", min: 0.60, avg: 0.85, max: 1.20 },
+            ],
+          },
+        ],
+        charts: [
+          {
           type: "line",
           data: APC_PRESSURE_TREND.slice(),
           options: {
@@ -176,6 +193,21 @@ export const SCENARIOS: readonly Scenario[] = [
             ],
           },
         },
+          {
+            type: "bar",
+            data: [
+              { step: "PRE_HEAT",   avg: 0.49, max: 0.65 },
+              { step: "MAIN_ETCH",  avg: 2.49, max: 3.00 },
+              { step: "POST_PURGE", avg: 0.85, max: 1.20 },
+            ],
+            options: {
+              title: "STEP별 APC_PRESSURE — 평균 / 최대",
+              xKey: "step",
+              yKeys: ["avg", "max"],
+              yLabel: "mTorr",
+            },
+          },
+        ],
         contextPanel: [
           {
             id: "demo-shape-eq-1",
@@ -211,7 +243,8 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "09:00:00 ~ 09:10:00 구간의 1분 단위 값입니다. 칼럼이 많아 좌측 영역을 넘어가면 표 액션 그룹의 **확장** 토글로 펼쳐 보세요.",
         ].join("\n"),
-        table: {
+        tables: [{
+          title: "주요 센서 16종 스냅샷",
           columns: [
             "timestamp",
             "step",
@@ -243,7 +276,76 @@ export const SCENARIOS: readonly Scenario[] = [
             { timestamp: "09:09", step: "POST_PURGE", APC_PRESSURE: 1.20, RF_FORWARD: 0,    RF_REFLECTED: 0,  TEMP_TC1: 232, TEMP_TC2: 231, GAS_FLOW_SiH4: 0,   GAS_FLOW_NH3: 0,  GAS_FLOW_Ar: 150, MFC_OPEN_RATE: 50, CHAMBER_PRESSURE: 1.24, ESC_CURRENT: 0.0, EPD_INTENSITY: 0,    BIAS_VOLTAGE: 0,    COIL_TEMP: 33 },
             { timestamp: "09:10", step: "POST_PURGE", APC_PRESSURE: 0.60, RF_FORWARD: 0,    RF_REFLECTED: 0,  TEMP_TC1: 215, TEMP_TC2: 214, GAS_FLOW_SiH4: 0,   GAS_FLOW_NH3: 0,  GAS_FLOW_Ar: 130, MFC_OPEN_RATE: 38, CHAMBER_PRESSURE: 0.63, ESC_CURRENT: 0.0, EPD_INTENSITY: 0,    BIAS_VOLTAGE: 0,    COIL_TEMP: 30 },
           ],
-        },
+        }],
+      },
+      // Turn 3 — 다중 paired 항목 검증용 (#45). 표 2 + 차트 2 = 4개를
+      // 한 메시지에 담아 좌·우 분배 / collapsible 카드 / 디폴트 펼침
+      // 정책을 시각 확인할 수 있게.
+      {
+        user: "동종설비와 비교해줘",
+        assistant: [
+          "### 동종설비 비교 — ETCH-02 vs ETCH-01 / ETCH-03",
+          "",
+          "같은 모델(EtcherX-2000)의 다른 두 설비와 MAIN_ETCH STEP 핵심 지표를 비교했습니다.",
+          "",
+          "ETCH-02 가 동종설비 평균 대비 APC_PRESSURE 피크가 약간 높은 편이지만 모두 정상 범위 내.",
+        ].join("\n"),
+        tables: [
+          {
+            title: "MAIN_ETCH 지표 — 현재 설비",
+            columns: ["metric", "value"],
+            rows: [
+              { metric: "APC_PRESSURE 최댓값", value: "3.00 mTorr" },
+              { metric: "RF_FORWARD 평균", value: "1,720 W" },
+              { metric: "STEP 지속 시간", value: "6 분 45 초" },
+              { metric: "EPD 종료 신호", value: "정상 (1,780)" },
+            ],
+          },
+          {
+            title: "MAIN_ETCH 지표 — 동종설비 평균",
+            columns: ["metric", "ETCH-01", "ETCH-03"],
+            rows: [
+              { metric: "APC_PRESSURE 최댓값", "ETCH-01": "2.85 mTorr", "ETCH-03": "2.92 mTorr" },
+              { metric: "RF_FORWARD 평균", "ETCH-01": "1,680 W", "ETCH-03": "1,710 W" },
+              { metric: "STEP 지속 시간", "ETCH-01": "6 분 50 초", "ETCH-03": "6 분 40 초" },
+              { metric: "EPD 종료 신호", "ETCH-01": "정상 (1,690)", "ETCH-03": "정상 (1,750)" },
+            ],
+          },
+        ],
+        charts: [
+          {
+            type: "line",
+            data: [
+              { t: "09:02", "ETCH-02": 1.20, "ETCH-01": 1.10, "ETCH-03": 1.18 },
+              { t: "09:03", "ETCH-02": 2.25, "ETCH-01": 2.05, "ETCH-03": 2.18 },
+              { t: "09:04", "ETCH-02": 2.72, "ETCH-01": 2.55, "ETCH-03": 2.65 },
+              { t: "09:05", "ETCH-02": 2.92, "ETCH-01": 2.78, "ETCH-03": 2.84 },
+              { t: "09:06", "ETCH-02": 3.00, "ETCH-01": 2.85, "ETCH-03": 2.92 },
+              { t: "09:07", "ETCH-02": 2.78, "ETCH-01": 2.65, "ETCH-03": 2.71 },
+              { t: "09:08", "ETCH-02": 2.30, "ETCH-01": 2.15, "ETCH-03": 2.22 },
+            ],
+            options: {
+              title: "APC_PRESSURE 비교 (mTorr)",
+              xKey: "t",
+              yKeys: ["ETCH-02", "ETCH-01", "ETCH-03"],
+              xLabel: "시각",
+              yLabel: "mTorr",
+            },
+          },
+          {
+            type: "bar",
+            data: [
+              { metric: "APC_PRESSURE 최댓값", "ETCH-02": 3.0, "ETCH-01": 2.85, "ETCH-03": 2.92 },
+              { metric: "RF_FORWARD 평균", "ETCH-02": 1.72, "ETCH-01": 1.68, "ETCH-03": 1.71 },
+              { metric: "EPD 종료 신호", "ETCH-02": 1.78, "ETCH-01": 1.69, "ETCH-03": 1.75 },
+            ],
+            options: {
+              title: "MAIN_ETCH 핵심 지표 (정규화)",
+              xKey: "metric",
+              yKeys: ["ETCH-02", "ETCH-01", "ETCH-03"],
+            },
+          },
+        ],
       },
     ],
   },
@@ -339,14 +441,15 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "EMO 직전의 *GasLeak* 가 멈춤의 직접 원인일 가능성이 높습니다.",
         ].join("\n"),
-        table: {
+        tables: [{
+          title: "알람 이력",
           columns: ["timestamp", "alarm", "severity", "note"],
           rows: [
             { timestamp: "14:23:11", alarm: "GasLeak", severity: "warning", note: "SiH4 line" },
             { timestamp: "14:25:47", alarm: "GasLeak", severity: "warning", note: "SiH4 line (recur)" },
             { timestamp: "14:26:02", alarm: "EMO", severity: "critical", note: "Emergency Off — auto interlock" },
           ],
-        },
+        }],
         recommendQuestion: [
           "GasLeak 알람의 원인 센서가 무엇인가요?",
           "EMO 발생 직전 다른 챔버 상태는?",
