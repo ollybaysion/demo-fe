@@ -120,6 +120,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
             maxHeight={bubbleHeight}
             expanded={tableExpanded}
             onToggleExpand={() => setTableExpanded((v) => !v)}
+            bubbleRef={bubbleRef}
           />
         </div>
       )}
