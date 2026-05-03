@@ -30,11 +30,19 @@ import {
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
-type StreamPayload =
-  | TokenPayload
-  | ErrorPayload
-  | MessageTable
-  | MessageChart;
+/**
+ * `done` 이벤트 페이로드 — 백엔드(/api/fdc/v1/chat) 가 응답 끝에
+ * 메타 + 부수 페이로드(표 / 차트 / 추천 후속 질문) 를 한 번에 동봉.
+ * docs/api.md §5 참고.
+ */
+type DonePayload = {
+  messageId: string;
+  finishReason: "stop" | "length" | "error";
+  table?: MessageTable;
+  chart?: MessageChart;
+  recommendQuestion?: string[];
+};
+type StreamPayload = TokenPayload | ErrorPayload | DonePayload;
 
 type DemoMeta = { scenarioId: string; turnIndex: number };
 type DemoState = DemoMeta & { ended: boolean };
@@ -157,11 +165,6 @@ export function ChatContainer() {
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
-      // 표(#34) / 차트(#37) 페이로드는 모든 토큰 스트리밍이 끝난 뒤
-      // `done` 이벤트 시점에 한 번에 적용 → 응답이 다 끝나고 자연스럽게
-      // 등장.
-      let pendingTable: MessageTable | null = null;
-      let pendingChart: MessageChart | null = null;
 
       const hasRange =
         timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
@@ -208,25 +211,29 @@ export function ChatContainer() {
                   : m,
               ),
             );
-          } else if (ev.event === "table") {
-            // 들어오는 즉시 적용하지 않고 보관 — `done` 시점에 한 번에 적용.
-            pendingTable = ev.data as MessageTable;
-          } else if (ev.event === "chart") {
-            pendingChart = ev.data as MessageChart;
           } else if (ev.event === "done") {
-            // 모든 토큰이 끝난 시점 — 표 / 차트가 있으면 이때 화면에 등장.
-            if (
-              assistantInserted &&
-              (pendingTable || pendingChart)
-            ) {
-              const table = pendingTable;
-              const chart = pendingChart;
+            // 응답 종료 — 표 / 차트 / 추천 후속 질문이 동봉되어 있으면
+            // 이때 어시스턴트 메시지에 한 번에 attach. 백엔드 페이로드
+            // 형태(docs/api.md §5)와 동일.
+            const payload = ev.data as DonePayload;
+            const hasExtras =
+              !!payload.table ||
+              !!payload.chart ||
+              (!!payload.recommendQuestion &&
+                payload.recommendQuestion.length > 0);
+            if (assistantInserted && hasExtras) {
               setMessages((prev) =>
                 prev.map((m) => {
                   if (m.id !== assistantId) return m;
                   const next: Message = { ...m };
-                  if (table) next.table = table;
-                  if (chart) next.chart = chart;
+                  if (payload.table) next.table = payload.table;
+                  if (payload.chart) next.chart = payload.chart;
+                  if (
+                    payload.recommendQuestion &&
+                    payload.recommendQuestion.length > 0
+                  ) {
+                    next.recommendQuestion = payload.recommendQuestion;
+                  }
                   return next;
                 }),
               );
@@ -382,6 +389,19 @@ export function ChatContainer() {
     [rows],
   );
 
+  // #40 — 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
+  // ChatInput 위에 chip 으로 노출. 빈 시작 화면의 #20 chips 와 같은 슬롯
+  // 공유, 시점이 달라 mutex.
+  const followUpRecommendations = useMemo<readonly string[]>(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "assistant") {
+        return m.recommendQuestion ?? [];
+      }
+    }
+    return [];
+  }, [messages]);
+
   function handleContextToggle() {
     setRightPanel((prev) => {
       const next = prev === "context" ? null : "context";
@@ -470,9 +490,23 @@ export function ChatContainer() {
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
+            {/*
+              ChatInput 위 chip 슬롯 — 시점에 따라 두 모드 mutex.
+              - 메시지 0건 + 데모 아닌 빈 시작 화면: #20 예시 질문 chips
+              - 어시스턴트 응답 후 (스트리밍 종료): #40 추천 후속 질문 chips
+            */}
             {messages.length === 0 && !isStreaming && !demoState && (
               <SuggestedQuestions onSelect={handleSubmit} />
             )}
+            {messages.length > 0 &&
+              !isStreaming &&
+              followUpRecommendations.length > 0 && (
+                <SuggestedQuestions
+                  onSelect={handleSubmit}
+                  questions={followUpRecommendations}
+                  ariaLabel="추천 후속 질문"
+                />
+              )}
             <ChatInput
               onSubmit={handleSubmit}
               disabled={isStreaming}

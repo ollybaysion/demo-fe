@@ -4,17 +4,29 @@ import { SUGGESTED_QUESTIONS } from "@/config/suggestedQuestions";
 
 type Props = {
   onSelect: (text: string) => void;
+  /**
+   * chip 으로 표시할 질문 목록. 비면 `SUGGESTED_QUESTIONS` 사용 (#20 예시
+   * 질문 — 빈 시작 화면용 default). #40 의 어시스턴트 추천 후속 질문은
+   * 이 prop 으로 전달.
+   */
+  questions?: readonly string[];
+  /** 빈 시작 화면 default 와 추천 후속을 SR 에 구분하기 위한 라벨. */
+  ariaLabel?: string;
 };
 
-export function SuggestedQuestions({ onSelect }: Props) {
-  if (SUGGESTED_QUESTIONS.length === 0) return null;
+export function SuggestedQuestions({
+  onSelect,
+  questions = SUGGESTED_QUESTIONS,
+  ariaLabel = "예시 질문",
+}: Props) {
+  if (questions.length === 0) return null;
 
   return (
     <ul
-      aria-label="예시 질문"
+      aria-label={ariaLabel}
       className="flex flex-wrap gap-xs mb-sm"
     >
-      {SUGGESTED_QUESTIONS.map((q) => (
+      {questions.map((q) => (
         <li key={q}>
           <button
             type="button"

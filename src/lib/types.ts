@@ -78,6 +78,11 @@ export type Message = {
   table?: MessageTable;
   /** Paired chart (#37) — 어시스턴트 메시지에만. */
   chart?: MessageChart;
+  /**
+   * 추천 후속 질문 (#40) — 어시스턴트 메시지에만. ChatInput 위에 chip
+   * 으로 노출. 비면 미표기. 백엔드가 동봉한 단순 문자열 배열.
+   */
+  recommendQuestion?: string[];
 };
 
 /**

@@ -34,6 +34,11 @@ export type ScenarioTurn = {
    * Paired chart (#37). 어시스턴트 메시지의 우측 gutter 에 차트로 paired.
    */
   chart?: MessageChart;
+  /**
+   * 추천 후속 질문 (#40). 어시스턴트 응답 후 ChatInput 위에 chip 으로
+   * 노출. 클릭 시 즉시 user 메시지로 전송.
+   */
+  recommendQuestion?: string[];
 };
 
 export type Scenario = {
@@ -190,6 +195,11 @@ export const SCENARIOS: readonly Scenario[] = [
           start: "2026-05-02T09:00",
           end: "2026-05-02T09:10",
         },
+        recommendQuestion: [
+          "동일 챔버의 다른 센서도 확인해줘",
+          "최근 1시간 추세는?",
+          "동종설비와 비교해줘",
+        ],
       },
     ],
   },
@@ -242,6 +252,11 @@ export const SCENARIOS: readonly Scenario[] = [
           start: "2026-05-02T14:00",
           end: "2026-05-02T14:30",
         },
+        recommendQuestion: [
+          "수정 후 정상 발생 여부 확인해줘",
+          "다른 STEP 의 트리거 조건도 점검해줘",
+          "비슷한 케이스가 더 있는지 알려줘",
+        ],
       },
     ],
   },
@@ -288,6 +303,11 @@ export const SCENARIOS: readonly Scenario[] = [
             { timestamp: "14:26:02", alarm: "EMO", severity: "critical", note: "Emergency Off — auto interlock" },
           ],
         },
+        recommendQuestion: [
+          "GasLeak 알람의 원인 센서가 무엇인가요?",
+          "EMO 발생 직전 다른 챔버 상태는?",
+          "재발 방지를 위한 점검 항목 알려줘",
+        ],
       },
       {
         user: "GasLeak 알람의 원인 센서가 무엇인가요?",
@@ -303,6 +323,11 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "> **권장:** MFC 자체 결함 또는 SiH4 라인 누설 가능성이 있어 [정비 점검 가이드](https://example.com/sih4-line-runbook)를 따라 점검 권장합니다.",
         ].join("\n"),
+        recommendQuestion: [
+          "다른 라인의 MFC 상태는?",
+          "최근 정비 이력 조회해줘",
+          "유사 케이스 권장 조치 정리해줘",
+        ],
       },
     ],
   },
@@ -322,6 +347,11 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "더 자세한 안내는 [공식 문서](https://example.com/docs)를 참고하세요. 더 알아볼 항목 있으신가요?",
         ].join("\n"),
+        recommendQuestion: [
+          "발생 시간은 어떤 단위로 입력하나요?",
+          "여러 설비를 동시에 분석할 수 있나요?",
+          "분석 결과를 운영자에게 어떻게 전달하나요?",
+        ],
       },
       {
         user: "발생 시간은 어떤 단위로 입력하나요?",
@@ -347,6 +377,11 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "기본값은 *오늘 00:00 ~ 23:59* 입니다.",
         ].join("\n"),
+        recommendQuestion: [
+          "설정값을 저장할 수 있나요?",
+          "기본값을 변경할 수 있나요?",
+          "시간대(timezone) 처리는 어떻게 되나요?",
+        ],
       },
     ],
   },
