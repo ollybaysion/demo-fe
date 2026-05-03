@@ -1557,6 +1557,10 @@ function buildCompareMessage(
     `- **baseline** 매칭 run: \`${base.matchedRun?.id ?? "-"}\` (${base.matchedRun?.startTime ?? "-"} · ${base.matchedRun?.durationMin ?? "-"}분)`,
     "",
     `> ${headline}`,
+    "",
+    "---",
+    "",
+    "*이 비교 결과(요약·표·차트)는 다음 질의의 history 컨텍스트에 자동 포함됩니다 — 이어지는 질문에서 별도 설명 없이 바로 참조하실 수 있어요.*",
   ].join("\n");
 
   const statsTable: import("@/lib/types").MessageTableEntry = {
