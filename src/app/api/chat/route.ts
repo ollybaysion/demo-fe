@@ -215,7 +215,18 @@ export async function POST(request: Request): Promise<Response> {
         );
         controller.close();
       } catch (err) {
-        const message = err instanceof Error ? err.message : "stream error";
+        // (#85) production 에서는 stack / 내부 경로 / DB 메시지 등이 SSE
+        // payload 로 누출되지 않도록 generic 메시지만 전송. 상세는 server
+        // log 로만 남김 (dev 한정).
+        if (process.env.NODE_ENV !== "production") {
+          console.error("[/api/chat] SSE stream error:", err);
+        }
+        const message =
+          process.env.NODE_ENV !== "production"
+            ? err instanceof Error
+              ? err.message
+              : "stream error"
+            : "stream error";
         controller.enqueue(encodeSseEvent("error", { message }));
         controller.close();
       }
