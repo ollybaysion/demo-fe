@@ -74,15 +74,9 @@ export function MessageDataTable({
     <div className="flex flex-col items-end min-w-0">
       {/* 표 액션 — 표 상단에 둠. 하단에 두면 [펼치기] 클릭 시 표가 길어지면서
           버튼이 같이 아래로 끌려 내려가 다음 클릭 위치가 흔들림.
-          상단 고정 위치로 펼침/접힘 동작이 안정. 디자인은 메시지 본문 아래
-          [복사] / [👍] / [👎] 와 동일 패턴. group hover/focus 시 100% opacity. */}
-      <div
-        className={[
-          "flex gap-xxs mb-xxs",
-          "opacity-60 group-hover:opacity-100 group-focus-within:opacity-100",
-          "transition-opacity",
-        ].join(" ")}
-      >
+          메시지 액션과 달리 항상 100% opacity 로 노출 — 표 자체가 정보
+          밀도 높은 컴포넌트라 액션도 눈에 띄게 두는 편이 자연스러움. */}
+      <div className="flex gap-xxs mb-xxs">
         {showToggle && (
           <TableActionButton
             onClick={onToggleExpand}
