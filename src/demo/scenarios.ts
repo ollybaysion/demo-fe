@@ -143,23 +143,31 @@ export const SCENARIOS: readonly Scenario[] = [
             referenceLines: [
               // 수평선: 임계값 (점선)
               { axis: "y", value: 3.0, label: "Max 3.0", dashed: true },
-              // 수직선: STEP 경계 (점선, 회색 — 보조 정보로 부각도 낮춤)
-              {
-                axis: "x",
-                value: "09:02:00",
-                label: "MAIN_ETCH",
-                color: "#6c6a64",
-                dashed: true,
-              },
-              {
-                axis: "x",
-                value: "09:09:00",
-                label: "POST_PURGE",
-                color: "#6c6a64",
-                dashed: true,
-              },
               // 수직선: 피크 시각 (실선, amber default 으로 강조)
               { axis: "x", value: "09:06:00", label: "Peak" },
+            ],
+            // STEP 구간 — 경계 수직선 대신 영역에 라벨. MAIN_ETCH 만 옅은
+            // 음영으로 구분, 양옆은 음영 없이 라벨만.
+            referenceAreas: [
+              {
+                axis: "x",
+                from: "09:00:00",
+                to: "09:01:45",
+                label: "PRE_HEAT",
+              },
+              {
+                axis: "x",
+                from: "09:02:00",
+                to: "09:08:45",
+                label: "MAIN_ETCH",
+                fill: "rgba(20,20,19,0.04)",
+              },
+              {
+                axis: "x",
+                from: "09:09:00",
+                to: "09:10:00",
+                label: "POST_PURGE",
+              },
             ],
           },
         },

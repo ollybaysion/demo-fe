@@ -9,6 +9,7 @@ import {
   Label,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -17,6 +18,7 @@ import {
 } from "recharts";
 import type {
   MessageChart as MessageChartPayload,
+  MessageChartReferenceArea,
   MessageChartReferenceLine,
 } from "@/lib/types";
 
@@ -57,6 +59,7 @@ export function MessageChart({ chart }: { chart: MessageChartPayload }) {
   const xLabel = options?.xLabel;
   const yLabel = options?.yLabel;
   const referenceLines = options?.referenceLines ?? [];
+  const referenceAreas = options?.referenceAreas ?? [];
 
   return (
     <div className="w-full max-w-full border border-brand-ink bg-brand-canvas">
@@ -75,6 +78,7 @@ export function MessageChart({ chart }: { chart: MessageChartPayload }) {
             xLabel,
             yLabel,
             referenceLines,
+            referenceAreas,
           )}
         </ResponsiveContainer>
       </div>
@@ -90,6 +94,7 @@ function renderChart(
   xLabel?: string,
   yLabel?: string,
   referenceLines: MessageChartReferenceLine[] = [],
+  referenceAreas: MessageChartReferenceArea[] = [],
 ) {
   // 축 / 그리드 / 툴팁은 세 차트 타입이 공유 — 시리즈 컴포넌트만 분기.
   const axisStroke = "#6c6a64"; // brand-muted
@@ -137,6 +142,41 @@ function renderChart(
     />
   );
 
+  // 수평/수직 reference 구간(band). 라벨은 구간 상단 안쪽 가운데. 채우기는
+  // 옵션이라 fill 미지정 시 라벨만 표기. 데이터 line/bar 보다 뒤에 그리지
+  // 않도록 시리즈보다 먼저 JSX 에 둠 (수직 line 들과 같이 z-order 위쪽 X).
+  const refAreas = referenceAreas.map((ra, i) => {
+    const labelEl = ra.label
+      ? {
+          value: ra.label,
+          fontSize: 13,
+          fontWeight: 500,
+          fill: "#3d3d3a", // brand-body — 시리즈 색과 충돌 안 나는 중립
+          position: "insideTop" as const,
+        }
+      : undefined;
+    const fillProp = ra.fill
+      ? { fill: ra.fill }
+      : { fill: "transparent", fillOpacity: 0 };
+    return ra.axis === "x" ? (
+      <ReferenceArea
+        key={`refarea-${i}`}
+        x1={ra.from}
+        x2={ra.to}
+        {...fillProp}
+        label={labelEl}
+      />
+    ) : (
+      <ReferenceArea
+        key={`refarea-${i}`}
+        y1={ra.from as number}
+        y2={ra.to as number}
+        {...fillProp}
+        label={labelEl}
+      />
+    );
+  });
+
   // 수평(y) / 수직(x) reference 선들. 임계값 / 평균 / 이벤트 시점 등.
   // 라벨은 항상 plot 영역 안쪽(`insideTopRight`)에 두어 위/우측 가장자리를
   // 벗어나지 않게 — 차트 폭이 좁을 때 라벨이 잘리지 않도록.
@@ -179,6 +219,7 @@ function renderChart(
         {xAxis}
         {yAxis}
         {tooltip}
+        {refAreas}
         {refLines}
         {yKeys.map((k, i) => (
           <Bar
@@ -198,6 +239,7 @@ function renderChart(
         {xAxis}
         {yAxis}
         {tooltip}
+        {refAreas}
         {refLines}
         {yKeys.map((k, i) => {
           const c = SERIES_COLORS[i % SERIES_COLORS.length];
@@ -223,6 +265,7 @@ function renderChart(
       {xAxis}
       {yAxis}
       {tooltip}
+      {refAreas}
       {refLines}
       {yKeys.map((k, i) => (
         <Line

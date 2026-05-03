@@ -22,7 +22,7 @@ export type MessageTable = {
 /**
  * 차트에 그릴 reference 선 (수평 또는 수직).
  * - `axis: "y"` + `value` (숫자) — 가로(수평) 선. 임계값 / 평균 / 한계치 등.
- * - `axis: "x"` + `value` (숫자/문자열) — 세로(수직) 선. 이벤트 시점 / STEP 경계 등.
+ * - `axis: "x"` + `value` (숫자/문자열) — 세로(수직) 선. 이벤트 시점 등.
  */
 export type MessageChartReferenceLine = {
   axis: "x" | "y";
@@ -32,6 +32,21 @@ export type MessageChartReferenceLine = {
   color?: string;
   /** true 면 점선. 임계값 표기에 권장. */
   dashed?: boolean;
+};
+
+/**
+ * 차트에 그릴 reference 구간 (band).
+ * - `axis: "x"` + `from` / `to` — 가로(시간) 구간. 예: STEP 영역에 라벨.
+ * - `axis: "y"` + `from` / `to` — 세로(값) 구간. 예: 정상 범위 음영.
+ * 라벨은 구간 상단 안쪽에 표시.
+ */
+export type MessageChartReferenceArea = {
+  axis: "x" | "y";
+  from: number | string;
+  to: number | string;
+  label?: string;
+  /** band 채우기 색 (rgba/hex). 비면 채우기 없이 라벨만 표시. */
+  fill?: string;
 };
 
 export type MessageChart = {
@@ -49,6 +64,8 @@ export type MessageChart = {
     yLabel?: string;
     /** 수평 / 수직 reference 선. 비면 미표기. */
     referenceLines?: MessageChartReferenceLine[];
+    /** Reference 구간 (band) — STEP 라벨 등. 비면 미표기. */
+    referenceAreas?: MessageChartReferenceArea[];
   };
 };
 
