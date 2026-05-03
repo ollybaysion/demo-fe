@@ -36,8 +36,8 @@ export function HelpButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="도움말 / 운영 정책"
-        className="fixed left-lg z-30 inline-flex items-center justify-center w-11 h-11 rounded-full bg-brand-primary text-brand-on-primary shadow-md hover:bg-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
-        style={{ bottom: "calc(24px + env(safe-area-inset-bottom))" }}
+        className="fixed bottom-lg right-lg z-30 inline-flex items-center justify-center w-11 h-11 rounded-full bg-brand-primary text-brand-on-primary shadow-md hover:bg-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <QuestionIcon />
       </button>
