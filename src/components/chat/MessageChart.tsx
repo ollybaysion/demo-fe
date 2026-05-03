@@ -45,12 +45,27 @@ const CHART_HEIGHT = 240;
 export function MessageChart({
   chart,
   defaultExpanded = true,
+  foldCmd,
 }: {
   chart: MessageChartPayload;
   /** 디폴트 펼침 여부 (#45). 미지정 시 true. */
   defaultExpanded?: boolean;
+  /**
+   * 메시지 단위 일괄 fold/unfold 명령 (#70). tick 이 증가할 때마다 본문
+   * expanded 를 !folded 로 sync. 첫 렌더(tick=0) 는 무시 — defaultExpanded
+   * 보존. 사용자가 헤더 chevron 으로 개별 토글한 뒤에도 다음 명령에서
+   * 다시 sync 됨.
+   */
+  foldCmd?: { folded: boolean; tick: number };
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  // 렌더 중 prev-state 비교로 foldCmd 동기화 — useEffect 의 cascading
+  // 렌더를 피하는 React 19 권장 패턴.
+  const [prevFoldTick, setPrevFoldTick] = useState(foldCmd?.tick ?? 0);
+  if (foldCmd && foldCmd.tick !== prevFoldTick) {
+    setPrevFoldTick(foldCmd.tick);
+    if (foldCmd.tick > 0) setExpanded(!foldCmd.folded);
+  }
   const { type, data, options } = chart;
   if (data.length === 0) return null;
 

@@ -35,6 +35,19 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
   // 하기 위해 필요.
   const bubbleRef = useRef<HTMLDivElement>(null);
 
+  // 메시지 단위 paired panel 토글 (#70). 두 종류:
+  //   1) paneCollapsed — 패널 자체를 hide/show (DOM 에서 제거 / 복원).
+  //      "패널 비활성화 / 활성화".
+  //   2) paneFoldCmd — 모든 자식 패널의 본문을 일괄 fold/unfold (헤더만
+  //      남김 / 다시 펼침). "패널 접기 / 펼치기". tick 으로 단발성 명령
+  //      을 자식 패널에 전달, 자식은 effect 로 sync 후 자체 토글 자유.
+  // 세션 메모리(컴포넌트 state) — 새로고침 시 default(노출/펼침) 로 reset.
+  const [paneCollapsed, setPaneCollapsed] = useState(false);
+  const [paneFoldCmd, setPaneFoldCmd] = useState<{
+    folded: boolean;
+    tick: number;
+  }>({ folded: false, tick: 0 });
+
   // tables / charts / event timelines 를 좌·우 컬럼에 분배 (#45 P4 + #49).
   // 백엔드의 `side?` 힌트가 있으면 그쪽으로, 없으면 적은 쪽 우선
   // (동률이면 type fallback: 표 → 좌, 차트 → 우, 타임라인 → 좌).
@@ -84,6 +97,9 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
   const isUser = message.role === "user";
   const hasLeft = distributed.left.length > 0;
   const hasRight = distributed.right.length > 0;
+  const hasPaired = hasLeft || hasRight;
+  const showLeft = hasLeft && !paneCollapsed;
+  const showRight = hasRight && !paneCollapsed;
 
   return (
     <li
@@ -124,10 +140,30 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
             message={message}
             isUser={isUser}
             onRegenerate={isUser ? undefined : onRegenerate}
+            paneToggle={
+              hasPaired
+                ? {
+                    collapsed: paneCollapsed,
+                    onToggle: () => setPaneCollapsed((c) => !c),
+                  }
+                : undefined
+            }
+            paneFoldToggle={
+              hasPaired && !paneCollapsed
+                ? {
+                    folded: paneFoldCmd.folded,
+                    onToggle: () =>
+                      setPaneFoldCmd((prev) => ({
+                        folded: !prev.folded,
+                        tick: prev.tick + 1,
+                      })),
+                  }
+                : undefined
+            }
           />
         )}
       </div>
-      {hasLeft && (
+      {showLeft && (
         <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex flex-col gap-md">
           {distributed.left.map((entry, idx) => {
             const key = `left-${idx}`;
@@ -139,6 +175,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   table={entry.payload}
                   defaultExpanded={defaultExpanded}
                   bubbleRef={bubbleRef}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -148,6 +185,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   key={key}
                   chart={entry.payload}
                   defaultExpanded={defaultExpanded}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -157,12 +195,13 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                 timeline={entry.payload}
                 defaultExpanded={defaultExpanded}
                 bubbleRef={bubbleRef}
+                foldCmd={paneFoldCmd}
               />
             );
           })}
         </div>
       )}
-      {hasRight && (
+      {showRight && (
         <div className="xl:col-start-3 xl:row-start-1 min-w-0 flex flex-col gap-md">
           {distributed.right.map((entry, idx) => {
             const key = `right-${idx}`;
@@ -174,6 +213,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   table={entry.payload}
                   defaultExpanded={defaultExpanded}
                   bubbleRef={bubbleRef}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -183,6 +223,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   key={key}
                   chart={entry.payload}
                   defaultExpanded={defaultExpanded}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -192,6 +233,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                 timeline={entry.payload}
                 defaultExpanded={defaultExpanded}
                 bubbleRef={bubbleRef}
+                foldCmd={paneFoldCmd}
               />
             );
           })}
@@ -211,10 +253,23 @@ function ActionGroup({
   // 재생성 버튼은 v1 에서 숨김. prop 통로는 유지.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onRegenerate,
+  paneToggle,
+  paneFoldToggle,
 }: {
   message: Message;
   isUser: boolean;
   onRegenerate?: () => void;
+  /**
+   * 메시지에 paired 표/차트/타임라인이 있을 때만 전달. 클릭 시 좌·우 패널
+   * 자체를 hide / show — "패널 비활성화 / 활성화". (#70)
+   */
+  paneToggle?: { collapsed: boolean; onToggle: () => void };
+  /**
+   * 메시지의 모든 paired 패널 본문을 일괄 fold / unfold (헤더만 남김 /
+   * 다시 펼침). "패널 접기 / 펼치기". paneToggle 로 패널이 hide 된 상태
+   * 에선 의미 없으므로 미전달. (#70)
+   */
+  paneFoldToggle?: { folded: boolean; onToggle: () => void };
 }) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
   const [justCopied, setJustCopied] = useState(false);
@@ -282,6 +337,28 @@ function ActionGroup({
           >
             <ThumbsDownIcon filled={feedback === "down"} />
           </ActionButton>
+          {paneFoldToggle && (
+            <ActionButton
+              onClick={paneFoldToggle.onToggle}
+              aria-label={paneFoldToggle.folded ? "패널 펼치기" : "패널 접기"}
+              aria-pressed={paneFoldToggle.folded}
+              active={paneFoldToggle.folded}
+            >
+              <PanelFoldIcon folded={paneFoldToggle.folded} />
+              <span>{paneFoldToggle.folded ? "패널 펼치기" : "패널 접기"}</span>
+            </ActionButton>
+          )}
+          {paneToggle && (
+            <ActionButton
+              onClick={paneToggle.onToggle}
+              aria-label={paneToggle.collapsed ? "패널 활성화" : "패널 비활성화"}
+              aria-pressed={paneToggle.collapsed}
+              active={paneToggle.collapsed}
+            >
+              <PanelToggleIcon collapsed={paneToggle.collapsed} />
+              <span>{paneToggle.collapsed ? "패널 활성화" : "패널 비활성화"}</span>
+            </ActionButton>
+          )}
         </>
       )}
     </div>
@@ -321,6 +398,76 @@ function ActionButton({
 // ────────────────────────────────────────────────────────────────────
 // Icons
 // ────────────────────────────────────────────────────────────────────
+
+/**
+ * Paired panel fold/unfold 아이콘 (#70). 위·아래 chevron 으로 본문이
+ * 접혀 있는지 / 펼쳐져 있는지 표현. 패널 자체 hide 와 의미 구분.
+ */
+function PanelFoldIcon({ folded }: { folded: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {folded ? (
+        // 접혀 있음 → 누르면 펼침 (아래로 펼쳐지는 chevron)
+        <>
+          <polyline points="6 9 12 15 18 9" />
+        </>
+      ) : (
+        // 펼쳐 있음 → 누르면 접기 (위로 접히는 chevron)
+        <>
+          <polyline points="6 15 12 9 18 15" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/**
+ * Paired panel collapse 토글 아이콘 (#70). 양쪽 안쪽 화살표(접기) /
+ * 양쪽 바깥쪽 화살표(펼치기) 형태로 좌·우 패널 가시성 의미를 직관 표현.
+ */
+function PanelToggleIcon({ collapsed }: { collapsed: boolean }) {
+  // collapsed=false 면 "지금 펼침 → 누르면 접기" — 안쪽으로 모이는 화살표.
+  // collapsed=true 면 "지금 접힘 → 누르면 펼치기" — 바깥쪽으로 펴지는 화살표.
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {collapsed ? (
+        <>
+          <polyline points="3 9 3 3 9 3" />
+          <polyline points="21 9 21 3 15 3" />
+          <polyline points="3 15 3 21 9 21" />
+          <polyline points="21 15 21 21 15 21" />
+        </>
+      ) : (
+        <>
+          <polyline points="9 3 3 3 3 9" />
+          <polyline points="15 3 21 3 21 9" />
+          <polyline points="9 21 3 21 3 15" />
+          <polyline points="15 21 21 21 21 15" />
+        </>
+      )}
+    </svg>
+  );
+}
 
 function CopyIcon() {
   return (

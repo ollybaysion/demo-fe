@@ -27,6 +27,11 @@ type Props = {
    * 비면 overlay 가 viewport 정중앙에 띄워짐 (fallback).
    */
   bubbleRef?: React.RefObject<HTMLDivElement | null>;
+  /**
+   * 메시지 단위 일괄 fold/unfold 명령 (#70). tick 증가 시 collapseExpanded
+   * 를 !folded 로 sync. 첫 렌더(tick=0) 무시 — defaultExpanded 보존.
+   */
+  foldCmd?: { folded: boolean; tick: number };
 };
 
 const TABLE_BODY_CAP_PX = 280; // ≈ 10 rows
@@ -35,6 +40,7 @@ export function MessageDataTable({
   table,
   defaultExpanded = true,
   bubbleRef,
+  foldCmd,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowsY, setOverflowsY] = useState(false);
@@ -49,6 +55,14 @@ export function MessageDataTable({
   const [maximized, setMaximized] = useState(false);
   // overlay 의 viewport top 좌표만 트래킹 — 높이는 33.33vh 고정 (CSS).
   const [overlayTop, setOverlayTop] = useState<number | null>(null);
+
+  // #70 — 메시지 단위 fold/unfold 명령 sync. tick=0 (초기) 은 무시.
+  // 렌더 중 prev-state 비교 — useEffect cascade 회피 (React 19 권장).
+  const [prevFoldTick, setPrevFoldTick] = useState(foldCmd?.tick ?? 0);
+  if (foldCmd && foldCmd.tick !== prevFoldTick) {
+    setPrevFoldTick(foldCmd.tick);
+    if (foldCmd.tick > 0) setCollapseExpanded(!foldCmd.folded);
+  }
 
   useEffect(() => {
     const el = scrollRef.current;
