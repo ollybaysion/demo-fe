@@ -68,7 +68,14 @@ const components: Components = {
   ),
   li: ({ children }) => <li>{children}</li>,
   a: ({ href, children }) => {
-    const isExternal = !!href && /^https?:\/\//i.test(href);
+    // (#89) URL scheme whitelist — rehype-sanitize 가 javascript:/data:/
+    // vbscript: 등을 거의 차단하지만 sanitizer 우회 / 설정 누락 대비
+    // 명시적 layer. 화이트리스트 외 링크는 anchor 자체를 제거하고
+    // 텍스트만 노출.
+    if (!isSafeHref(href)) {
+      return <span className="text-brand-muted">{children}</span>;
+    }
+    const isExternal = /^https?:\/\//i.test(href);
     return (
       <a
         href={href}
@@ -124,6 +131,38 @@ const components: Components = {
     return <InlineCode>{children}</InlineCode>;
   },
 };
+
+/**
+ * 마크다운 링크의 href 가 안전한 scheme 인지 검사 (#89).
+ *
+ * - 절대 URL: `https:` / `http:` / `mailto:` 만 허용
+ * - 상대 경로 (`/foo`, `./foo`, `#anchor`) 는 허용
+ * - 위 외 (`javascript:`, `data:`, `vbscript:`, `file:`, ...) 는 거부
+ *
+ * leading whitespace / mixed case / 제어문자 우회 시도를 방어하기 위해
+ * trim + lowercase 비교.
+ */
+function isSafeHref(href: string | undefined): href is string {
+  if (typeof href !== "string") return false;
+  const trimmed = href.trim();
+  if (trimmed.length === 0) return false;
+  // 상대/내부 링크 — scheme 없음.
+  if (
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("./") ||
+    trimmed.startsWith("../")
+  ) {
+    return true;
+  }
+  // 절대 URL — 허용 scheme 만.
+  const lower = trimmed.toLowerCase();
+  return (
+    lower.startsWith("https://") ||
+    lower.startsWith("http://") ||
+    lower.startsWith("mailto:")
+  );
+}
 
 // ────────────────────────────────────────────────────────────────────
 // Inline code
