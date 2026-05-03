@@ -314,7 +314,7 @@ function TableMarkup({
   rows: Record<string, unknown>[];
 }) {
   return (
-    <table className="text-body-sm font-mono border-collapse">
+    <table className="text-body-sm font-mono border-collapse w-full">
       {/* sticky 헤더 — 세로 스크롤 시 thead 가 상단에 고정. */}
       <thead>
         <tr>
