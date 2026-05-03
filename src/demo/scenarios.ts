@@ -201,6 +201,50 @@ export const SCENARIOS: readonly Scenario[] = [
           "동종설비와 비교해줘",
         ],
       },
+      // Turn 2 — wide-table edge case (#42 검증용). 16개 칼럼의 센서
+      // 스냅샷 표를 반환해 좌측 gutter 폭을 초과하는 경우의 동작을
+      // 시각 확인할 수 있게.
+      {
+        user: "다른 주요 센서들도 모두 표로 같이 보여줘",
+        assistant: [
+          "### 챔버 A 주요 센서 16개 스냅샷",
+          "",
+          "09:00:00 ~ 09:10:00 구간의 1분 단위 값입니다. 칼럼이 많아 좌측 영역을 넘어가면 표 액션 그룹의 **확장** 토글로 펼쳐 보세요.",
+        ].join("\n"),
+        table: {
+          columns: [
+            "timestamp",
+            "step",
+            "APC_PRESSURE",
+            "RF_FORWARD",
+            "RF_REFLECTED",
+            "TEMP_TC1",
+            "TEMP_TC2",
+            "GAS_FLOW_SiH4",
+            "GAS_FLOW_NH3",
+            "GAS_FLOW_Ar",
+            "MFC_OPEN_RATE",
+            "CHAMBER_PRESSURE",
+            "ESC_CURRENT",
+            "EPD_INTENSITY",
+            "BIAS_VOLTAGE",
+            "COIL_TEMP",
+          ],
+          rows: [
+            { timestamp: "09:00", step: "PRE_HEAT",   APC_PRESSURE: 0.30, RF_FORWARD: 0,    RF_REFLECTED: 0,  TEMP_TC1: 180, TEMP_TC2: 175, GAS_FLOW_SiH4: 0,   GAS_FLOW_NH3: 0,  GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 30, CHAMBER_PRESSURE: 0.32, ESC_CURRENT: 0.0, EPD_INTENSITY: 0,    BIAS_VOLTAGE: 0,    COIL_TEMP: 25 },
+            { timestamp: "09:01", step: "PRE_HEAT",   APC_PRESSURE: 0.55, RF_FORWARD: 0,    RF_REFLECTED: 0,  TEMP_TC1: 220, TEMP_TC2: 218, GAS_FLOW_SiH4: 0,   GAS_FLOW_NH3: 0,  GAS_FLOW_Ar: 120, MFC_OPEN_RATE: 35, CHAMBER_PRESSURE: 0.58, ESC_CURRENT: 0.0, EPD_INTENSITY: 0,    BIAS_VOLTAGE: 0,    COIL_TEMP: 27 },
+            { timestamp: "09:02", step: "MAIN_ETCH", APC_PRESSURE: 1.20, RF_FORWARD: 1500, RF_REFLECTED: 22, TEMP_TC1: 235, TEMP_TC2: 232, GAS_FLOW_SiH4: 200, GAS_FLOW_NH3: 50, GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 62, CHAMBER_PRESSURE: 1.25, ESC_CURRENT: 1.8, EPD_INTENSITY: 1200, BIAS_VOLTAGE: -180, COIL_TEMP: 32 },
+            { timestamp: "09:03", step: "MAIN_ETCH", APC_PRESSURE: 2.25, RF_FORWARD: 1620, RF_REFLECTED: 18, TEMP_TC1: 240, TEMP_TC2: 238, GAS_FLOW_SiH4: 200, GAS_FLOW_NH3: 50, GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 70, CHAMBER_PRESSURE: 2.28, ESC_CURRENT: 1.9, EPD_INTENSITY: 1450, BIAS_VOLTAGE: -185, COIL_TEMP: 35 },
+            { timestamp: "09:04", step: "MAIN_ETCH", APC_PRESSURE: 2.72, RF_FORWARD: 1720, RF_REFLECTED: 15, TEMP_TC1: 244, TEMP_TC2: 242, GAS_FLOW_SiH4: 200, GAS_FLOW_NH3: 50, GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 76, CHAMBER_PRESSURE: 2.75, ESC_CURRENT: 2.0, EPD_INTENSITY: 1620, BIAS_VOLTAGE: -190, COIL_TEMP: 37 },
+            { timestamp: "09:05", step: "MAIN_ETCH", APC_PRESSURE: 2.92, RF_FORWARD: 1810, RF_REFLECTED: 14, TEMP_TC1: 246, TEMP_TC2: 244, GAS_FLOW_SiH4: 200, GAS_FLOW_NH3: 50, GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 80, CHAMBER_PRESSURE: 2.95, ESC_CURRENT: 2.1, EPD_INTENSITY: 1740, BIAS_VOLTAGE: -192, COIL_TEMP: 38 },
+            { timestamp: "09:06", step: "MAIN_ETCH", APC_PRESSURE: 3.00, RF_FORWARD: 1820, RF_REFLECTED: 14, TEMP_TC1: 248, TEMP_TC2: 246, GAS_FLOW_SiH4: 200, GAS_FLOW_NH3: 50, GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 82, CHAMBER_PRESSURE: 3.02, ESC_CURRENT: 2.1, EPD_INTENSITY: 1780, BIAS_VOLTAGE: -193, COIL_TEMP: 38 },
+            { timestamp: "09:07", step: "MAIN_ETCH", APC_PRESSURE: 2.78, RF_FORWARD: 1780, RF_REFLECTED: 16, TEMP_TC1: 245, TEMP_TC2: 243, GAS_FLOW_SiH4: 200, GAS_FLOW_NH3: 50, GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 78, CHAMBER_PRESSURE: 2.81, ESC_CURRENT: 2.0, EPD_INTENSITY: 1660, BIAS_VOLTAGE: -188, COIL_TEMP: 37 },
+            { timestamp: "09:08", step: "MAIN_ETCH", APC_PRESSURE: 2.30, RF_FORWARD: 1640, RF_REFLECTED: 19, TEMP_TC1: 240, TEMP_TC2: 239, GAS_FLOW_SiH4: 200, GAS_FLOW_NH3: 50, GAS_FLOW_Ar: 100, MFC_OPEN_RATE: 71, CHAMBER_PRESSURE: 2.33, ESC_CURRENT: 1.9, EPD_INTENSITY: 1480, BIAS_VOLTAGE: -185, COIL_TEMP: 36 },
+            { timestamp: "09:09", step: "POST_PURGE", APC_PRESSURE: 1.20, RF_FORWARD: 0,    RF_REFLECTED: 0,  TEMP_TC1: 232, TEMP_TC2: 231, GAS_FLOW_SiH4: 0,   GAS_FLOW_NH3: 0,  GAS_FLOW_Ar: 150, MFC_OPEN_RATE: 50, CHAMBER_PRESSURE: 1.24, ESC_CURRENT: 0.0, EPD_INTENSITY: 0,    BIAS_VOLTAGE: 0,    COIL_TEMP: 33 },
+            { timestamp: "09:10", step: "POST_PURGE", APC_PRESSURE: 0.60, RF_FORWARD: 0,    RF_REFLECTED: 0,  TEMP_TC1: 215, TEMP_TC2: 214, GAS_FLOW_SiH4: 0,   GAS_FLOW_NH3: 0,  GAS_FLOW_Ar: 130, MFC_OPEN_RATE: 38, CHAMBER_PRESSURE: 0.63, ESC_CURRENT: 0.0, EPD_INTENSITY: 0,    BIAS_VOLTAGE: 0,    COIL_TEMP: 30 },
+          ],
+        },
+      },
     ],
   },
   {

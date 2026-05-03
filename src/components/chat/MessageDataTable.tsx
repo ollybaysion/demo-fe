@@ -10,9 +10,9 @@ import type { MessageTable } from "@/lib/types";
  * - 너비: content-sized + 부모 폭을 max — 칼럼 합계가 부모를 넘으면 가로 스크롤
  * - 높이: 부모(`ChatMessage`)에서 측정한 풍선 높이를 `maxHeight` 로 받아
  *   기본은 풍선 높이로 cap 하고 내부 세로 스크롤. 헤더는 sticky.
- *   사용자는 표 아래 [펼치기] 액션으로 풀 펼침, [CSV 복사] 로 표 전체를
- *   클립보드에 CSV 형식으로 export 가능. 액션 디자인은 메시지 본문
- *   아래의 [복사] / [👍] / [👎] 와 동일한 패턴
+ *   사용자는 표 액션의 [펼치기] 로 풀 펼침, [CSV 복사] 로 CSV export.
+ *   가로가 부모를 초과하는 경우(#42) [확장] 으로 화면 거의 풀 폭의
+ *   fixed overlay 로 펼쳐 볼 수 있음 — `EquipmentDetailPanel` 패턴.
  * - read-only — 정렬 / 필터 / 편집 없음 (spec out-of-scope)
  *
  * 백엔드(/api/fdc/v1/chat) 페이로드의 `table` 필드를 그대로 받음.
@@ -34,21 +34,36 @@ export function MessageDataTable({
   onToggleExpand,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [overflows, setOverflows] = useState(false);
+  const [overflowsY, setOverflowsY] = useState(false);
+  const [overflowsX, setOverflowsX] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
+  // [확장] overlay — 가로 폭이 부모를 초과할 때 화면 거의 풀 폭으로
+  // 표를 띄워 보는 모드 (#42). 메시지마다 독립 상태.
+  const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const check = () => {
       // 1px 정도의 오차는 무시 (서브픽셀 round 으로 깜빡임 방지).
-      setOverflows(el.scrollHeight - el.clientHeight > 1);
+      setOverflowsY(el.scrollHeight - el.clientHeight > 1);
+      setOverflowsX(el.scrollWidth - el.clientWidth > 1);
     };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
   }, [maxHeight, expanded, table]);
+
+  // ESC 키로 overlay 닫기.
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMaximized(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [maximized]);
 
   const columns =
     table.columns ??
@@ -58,7 +73,9 @@ export function MessageDataTable({
 
   const effectiveMaxHeight =
     !expanded && maxHeight != null ? maxHeight : undefined;
-  const showToggle = !!onToggleExpand && (overflows || !!expanded);
+  const showExpandToggle =
+    !!onToggleExpand && (overflowsY || !!expanded);
+  const showMaximizeToggle = overflowsX || maximized;
 
   const handleCopyCsv = async () => {
     try {
@@ -71,79 +88,152 @@ export function MessageDataTable({
   };
 
   return (
-    <div className="flex flex-col items-end min-w-0">
-      {/* 표 액션 — 표 상단에 둠. 하단에 두면 [펼치기] 클릭 시 표가 길어지면서
-          버튼이 같이 아래로 끌려 내려가 다음 클릭 위치가 흔들림.
-          메시지 액션과 달리 항상 100% opacity 로 노출 — 표 자체가 정보
-          밀도 높은 컴포넌트라 액션도 눈에 띄게 두는 편이 자연스러움. */}
-      <div className="flex gap-xxs mb-xxs">
-        {showToggle && (
+    <>
+      <div className="flex flex-col items-end min-w-0">
+        {/* 표 액션 — 표 상단에 둠. 메시지 액션과 달리 항상 100% opacity. */}
+        <div className="flex gap-xxs mb-xxs">
+          {showExpandToggle && (
+            <TableActionButton
+              onClick={onToggleExpand}
+              aria-label={expanded ? "표 접기" : "표 펼치기"}
+              aria-expanded={!!expanded}
+            >
+              {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+              <span>{expanded ? "접기" : "펼치기"}</span>
+            </TableActionButton>
+          )}
+          {showMaximizeToggle && (
+            <TableActionButton
+              onClick={() => setMaximized((v) => !v)}
+              aria-label={maximized ? "표 확장 닫기" : "표 확장"}
+              aria-expanded={maximized}
+            >
+              {maximized ? <MinimizeIcon /> : <MaximizeIcon />}
+              <span>{maximized ? "축소" : "확장"}</span>
+            </TableActionButton>
+          )}
           <TableActionButton
-            onClick={onToggleExpand}
-            aria-label={expanded ? "표 접기" : "표 펼치기"}
-            aria-expanded={!!expanded}
+            onClick={handleCopyCsv}
+            aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
           >
-            {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-            <span>{expanded ? "접기" : "펼치기"}</span>
+            {justCopied ? <CheckIcon /> : <CopyIcon />}
+            <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
           </TableActionButton>
-        )}
-        <TableActionButton
-          onClick={handleCopyCsv}
-          aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
-        >
-          {justCopied ? <CheckIcon /> : <CopyIcon />}
-          <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
-        </TableActionButton>
-      </div>
-      {/* 디자인: 각진 사각형 + 얇은 검정 테두리. 헤더는 약간 회색 음영. */}
-      <div className="w-fit max-w-full border border-brand-ink bg-brand-canvas">
-        <div
-          ref={scrollRef}
-          className="overflow-auto"
-          style={
-            effectiveMaxHeight != null
-              ? { maxHeight: effectiveMaxHeight }
-              : undefined
-          }
-        >
-          <table className="text-body-sm font-mono border-collapse">
-            {/* sticky 헤더 — 표 내부 세로 스크롤 시 thead 가 상단에 고정.
-                `<thead>` 자체에 sticky 는 브라우저별 편차가 있어 `<th>` 마다
-                sticky / bg / border 를 직접 부여. */}
-            <thead>
-              <tr>
-                {columns.map((c) => (
-                  <th
-                    key={c}
-                    scope="col"
-                    className="sticky top-0 z-10 bg-brand-surface-soft border-b border-brand-ink text-left text-caption text-brand-muted px-sm py-xxs whitespace-nowrap"
-                  >
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((row, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-brand-ink last:border-b-0"
-                >
-                  {columns.map((c) => (
-                    <td
-                      key={c}
-                      className="px-sm py-xxs text-brand-ink whitespace-nowrap align-top"
-                    >
-                      {formatCell(row[c])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        </div>
+        {/* 디자인: 각진 사각형 + 얇은 검정 테두리. 헤더는 약간 회색 음영. */}
+        <div className="w-fit max-w-full border border-brand-ink bg-brand-canvas">
+          <div
+            ref={scrollRef}
+            className="overflow-auto"
+            style={
+              effectiveMaxHeight != null
+                ? { maxHeight: effectiveMaxHeight }
+                : undefined
+            }
+          >
+            <TableMarkup columns={columns} rows={table.rows} />
+          </div>
         </div>
       </div>
+
+      {maximized && (
+        <ExpandedTableOverlay
+          columns={columns}
+          rows={table.rows}
+          onClose={() => setMaximized(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Expanded overlay (#42) — fixed full-width 패널. EquipmentDetailPanel
+// 과 같은 톤(z-30, 얇은 테두리, 그림자) 으로.
+// ────────────────────────────────────────────────────────────────────
+
+function ExpandedTableOverlay({
+  columns,
+  rows,
+  onClose,
+}: {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  onClose: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label="표 전체 보기"
+      aria-modal="false"
+      className="fixed top-[5vh] bottom-[5vh] left-[2.5vw] right-[2.5vw] z-30 bg-brand-canvas border border-brand-ink shadow-md flex flex-col"
+    >
+      <header className="px-md py-sm border-b border-brand-ink flex items-center justify-between gap-sm shrink-0">
+        <h3 className="font-sans text-title-sm text-brand-ink">
+          표 전체 보기 ({rows.length} 행 × {columns.length} 칼럼)
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="확장 닫기"
+          title="닫기 (Esc)"
+          className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+        >
+          <XIcon />
+        </button>
+      </header>
+      <div className="flex-1 overflow-auto">
+        <TableMarkup columns={columns} rows={rows} />
+      </div>
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Shared table markup
+// ────────────────────────────────────────────────────────────────────
+
+function TableMarkup({
+  columns,
+  rows,
+}: {
+  columns: string[];
+  rows: Record<string, unknown>[];
+}) {
+  return (
+    <table className="text-body-sm font-mono border-collapse">
+      {/* sticky 헤더 — 세로 스크롤 시 thead 가 상단에 고정. */}
+      <thead>
+        <tr>
+          {columns.map((c) => (
+            <th
+              key={c}
+              scope="col"
+              className="sticky top-0 z-10 bg-brand-surface-soft border-b border-brand-ink text-left text-caption text-brand-muted px-sm py-xxs whitespace-nowrap"
+            >
+              {c}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr
+            key={i}
+            className="border-b border-brand-ink last:border-b-0"
+          >
+            {columns.map((c) => (
+              <td
+                key={c}
+                className="px-sm py-xxs text-brand-ink whitespace-nowrap align-top"
+              >
+                {formatCell(row[c])}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -244,6 +334,48 @@ function ChevronUpIcon() {
   );
 }
 
+function MaximizeIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function MinimizeIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="4 14 10 14 10 20" />
+      <polyline points="20 10 14 10 14 4" />
+      <line x1="14" y1="10" x2="21" y2="3" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
 function CopyIcon() {
   return (
     <svg
@@ -277,6 +409,25 @@ function CheckIcon() {
       aria-hidden
     >
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   );
 }
