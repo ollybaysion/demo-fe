@@ -9,12 +9,16 @@ import {
   Label,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { MessageChart as MessageChartPayload } from "@/lib/types";
+import type {
+  MessageChart as MessageChartPayload,
+  MessageChartReferenceLine,
+} from "@/lib/types";
 
 /**
  * 어시스턴트 메시지의 우측 gutter 에 paired 되는 차트 (#37).
@@ -52,6 +56,7 @@ export function MessageChart({ chart }: { chart: MessageChartPayload }) {
   const title = options?.title;
   const xLabel = options?.xLabel;
   const yLabel = options?.yLabel;
+  const referenceLines = options?.referenceLines ?? [];
 
   return (
     <div className="w-full max-w-full border border-brand-ink bg-brand-canvas">
@@ -62,7 +67,15 @@ export function MessageChart({ chart }: { chart: MessageChartPayload }) {
       )}
       <div className="px-sm py-sm">
         <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-          {renderChart(type, data, xKey, yKeys, xLabel, yLabel)}
+          {renderChart(
+            type,
+            data,
+            xKey,
+            yKeys,
+            xLabel,
+            yLabel,
+            referenceLines,
+          )}
         </ResponsiveContainer>
       </div>
     </div>
@@ -76,6 +89,7 @@ function renderChart(
   yKeys: string[],
   xLabel?: string,
   yLabel?: string,
+  referenceLines: MessageChartReferenceLine[] = [],
 ) {
   // 축 / 그리드 / 툴팁은 세 차트 타입이 공유 — 시리즈 컴포넌트만 분기.
   const axisStroke = "#6c6a64"; // brand-muted
@@ -123,6 +137,37 @@ function renderChart(
     />
   );
 
+  // 수평(y) / 수직(x) reference 선들. 임계값 / 평균 / 이벤트 시점 등.
+  const refLines = referenceLines.map((rl, i) => {
+    const stroke = rl.color ?? "#e8a55a"; // brand-accent-amber default
+    const strokeDasharray = rl.dashed ? "4 4" : undefined;
+    const labelEl = rl.label
+      ? {
+          value: rl.label,
+          fontSize: 11,
+          fill: stroke,
+          position: rl.axis === "x" ? ("top" as const) : ("right" as const),
+        }
+      : undefined;
+    return rl.axis === "x" ? (
+      <ReferenceLine
+        key={`ref-${i}`}
+        x={rl.value}
+        stroke={stroke}
+        strokeDasharray={strokeDasharray}
+        label={labelEl}
+      />
+    ) : (
+      <ReferenceLine
+        key={`ref-${i}`}
+        y={rl.value as number}
+        stroke={stroke}
+        strokeDasharray={strokeDasharray}
+        label={labelEl}
+      />
+    );
+  });
+
   if (type === "bar") {
     return (
       <BarChart {...commonProps}>
@@ -130,6 +175,7 @@ function renderChart(
         {xAxis}
         {yAxis}
         {tooltip}
+        {refLines}
         {yKeys.map((k, i) => (
           <Bar
             key={k}
@@ -148,6 +194,7 @@ function renderChart(
         {xAxis}
         {yAxis}
         {tooltip}
+        {refLines}
         {yKeys.map((k, i) => {
           const c = SERIES_COLORS[i % SERIES_COLORS.length];
           return (
@@ -172,6 +219,7 @@ function renderChart(
       {xAxis}
       {yAxis}
       {tooltip}
+      {refLines}
       {yKeys.map((k, i) => (
         <Line
           key={k}

@@ -19,6 +19,21 @@ export type MessageTable = {
  *   { content, chart?: { type, data, options? } }
  * v1 지원 타입: line / bar / area.
  */
+/**
+ * 차트에 그릴 reference 선 (수평 또는 수직).
+ * - `axis: "y"` + `value` (숫자) — 가로(수평) 선. 임계값 / 평균 / 한계치 등.
+ * - `axis: "x"` + `value` (숫자/문자열) — 세로(수직) 선. 이벤트 시점 / STEP 경계 등.
+ */
+export type MessageChartReferenceLine = {
+  axis: "x" | "y";
+  value: number | string;
+  label?: string;
+  /** hex 색. 비면 default warning(주황 amber). */
+  color?: string;
+  /** true 면 점선. 임계값 표기에 권장. */
+  dashed?: boolean;
+};
+
 export type MessageChart = {
   type: "line" | "bar" | "area";
   data: Record<string, unknown>[];
@@ -32,6 +47,8 @@ export type MessageChart = {
     /** 축 라벨. 비면 미표기. */
     xLabel?: string;
     yLabel?: string;
+    /** 수평 / 수직 reference 선. 비면 미표기. */
+    referenceLines?: MessageChartReferenceLine[];
   };
 };
 

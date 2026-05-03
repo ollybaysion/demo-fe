@@ -140,6 +140,12 @@ export const SCENARIOS: readonly Scenario[] = [
             yKeys: ["APC_PRESSURE (mTorr)"],
             xLabel: "시각",
             yLabel: "mTorr",
+            referenceLines: [
+              // 수평선: 임계값 (점선)
+              { axis: "y", value: 3.0, label: "Max 3.0", dashed: true },
+              // 수직선: 피크 시각 (실선)
+              { axis: "x", value: "09:06:00", label: "Peak" },
+            ],
           },
         },
         contextPanel: [
