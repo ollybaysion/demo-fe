@@ -337,6 +337,22 @@ export function useContextRows() {
     // with one empty row so the UI has something to render.
     setRows(next.length > 0 ? next : defaultRows());
   }, []);
+  /**
+   * 기존 행 유지 + 새 행 추가. 빈 default row 만 있는 경우엔 그것을
+   * 새 행으로 대체 (UI 가 placeholder 만 있던 상태).
+   */
+  const appendRows = useCallback((added: ContextRow[]) => {
+    if (added.length === 0) return;
+    setRows((prev) => {
+      const isOnlyDefault =
+        prev.length === 1 &&
+        prev[0].equipment.trim().length === 0 &&
+        prev[0].chambers.length === 1 &&
+        prev[0].chambers[0].name.trim().length === 0 &&
+        prev[0].chambers[0].sensors.length === 0;
+      return isOnlyDefault ? added : [...prev, ...added];
+    });
+  }, []);
   const replaceTimeRange = useCallback((next: TimeRange) => {
     setTimeRange(next);
   }, []);
@@ -361,6 +377,7 @@ export function useContextRows() {
     setSensorName,
     deleteSensor,
     replaceRows,
+    appendRows,
     replaceTimeRange,
     reset,
   };
