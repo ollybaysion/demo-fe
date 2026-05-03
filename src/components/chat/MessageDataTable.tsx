@@ -46,13 +46,9 @@ export function MessageDataTable({
   // [확장] overlay — 가로 폭이 부모를 초과할 때 풍선과 같은 높이로 폭만
   // 풀로 펼쳐 표를 보는 모드 (#42). 메시지마다 독립 상태.
   const [maximized, setMaximized] = useState(false);
-  // overlay 위치/높이 — 풍선 위에 anchor 하되, 풍선이 너무 작은 경우엔
-  // 최소 60vh 보장(읽기 가능한 높이). viewport 안에 들어가도록 마진 cap.
-  // scroll/resize 시 갱신.
-  const [overlayRect, setOverlayRect] = useState<{
-    top: number;
-    height: number;
-  } | null>(null);
+  // overlay 의 viewport top 좌표만 트래킹 — 높이는 33.33vh 고정 (CSS).
+  // 풍선 위치를 따라 anchor 하되 viewport 안에 들어가도록 clamp.
+  const [overlayTop, setOverlayTop] = useState<number | null>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -78,8 +74,8 @@ export function MessageDataTable({
     return () => window.removeEventListener("keydown", onKey);
   }, [maximized]);
 
-  // overlay 가 켜져 있을 때 풍선 위치 + viewport 크기 기준으로 overlay
-  // 위치/높이를 계산. scroll / resize 시 capture 단계로 갱신해 내부
+  // overlay 가 켜져 있을 때 풍선 위치 기준으로 overlay top 좌표를 계산.
+  // 높이는 1/3 화면 고정. scroll / resize 시 capture 단계로 갱신해 내부
   // 스크롤 컨테이너의 이벤트도 잡음.
   useEffect(() => {
     if (!maximized || !bubbleRef) return;
@@ -88,15 +84,12 @@ export function MessageDataTable({
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const vh = window.innerHeight;
-      // 최소 60vh, 풍선 더 크면 풍선만큼.
-      const desired = Math.max(rect.height, vh * 0.6);
-      // viewport 안에 들어가도록 cap (위/아래 16px 마진).
-      const cappedHeight = Math.min(desired, vh - 32);
-      // top: 풍선 top 부터 시작, viewport 위쪽 16px 미만이면 16으로 끌어올림.
+      const overlayHeight = vh / 3; // 33.33vh
+      // 풍선 top 부터 시작, viewport 위쪽 16px 미만이면 16으로 끌어올림.
       const desiredTop = Math.max(rect.top, 16);
-      // 그래도 viewport 아래로 넘치면 위로 밀어넣음.
-      const adjustedTop = Math.min(desiredTop, vh - cappedHeight - 16);
-      setOverlayRect({ top: adjustedTop, height: cappedHeight });
+      // viewport 아래로 넘치면 위로 밀어넣음.
+      const adjustedTop = Math.min(desiredTop, vh - overlayHeight - 16);
+      setOverlayTop(adjustedTop);
     };
     update();
     window.addEventListener("scroll", update, {
@@ -186,7 +179,7 @@ export function MessageDataTable({
           columns={columns}
           rows={table.rows}
           onClose={() => setMaximized(false)}
-          rect={overlayRect}
+          top={overlayTop}
         />
       )}
     </>
@@ -202,29 +195,30 @@ function ExpandedTableOverlay({
   columns,
   rows,
   onClose,
-  rect,
+  top,
 }: {
   columns: string[];
   rows: Record<string, unknown>[];
   onClose: () => void;
-  /** 풍선의 viewport 좌표 — overlay 의 top/height 를 여기 맞춤. 비면 fallback. */
-  rect: { top: number; height: number } | null;
+  /** overlay 의 viewport top 좌표. 비면 fallback. */
+  top: number | null;
 }) {
-  // 풍선과 같은 세로 위치/높이로 띄움. 가로는 좌우 2.5vw 만 남기고 풀.
-  // rect 가 아직 측정 안 됐으면 임시로 viewport 가운데 띄움 (잠깐 깜빡일 수 있음).
-  const overlayStyle: React.CSSProperties = rect
-    ? { top: rect.top, height: rect.height }
-    : { top: "10vh", height: "70vh" };
+  // 디자인: 맨 바깥 윤곽선만 옅은 회색 (brand-hairline). 너비 70%
+  // (좌우 15% 마진), 높이 1/3 화면 고정.
+  const overlayStyle: React.CSSProperties = {
+    top: top ?? "33vh",
+    height: "33.333vh",
+  };
 
   return (
     <div
       role="dialog"
       aria-label="표 확장 보기"
       aria-modal="false"
-      className="fixed left-[2.5vw] right-[2.5vw] z-30 bg-brand-canvas border border-brand-ink shadow-md flex flex-col"
+      className="fixed left-[15%] right-[15%] z-30 bg-brand-canvas border border-brand-hairline shadow-md flex flex-col"
       style={overlayStyle}
     >
-      <header className="px-md py-xs border-b border-brand-ink flex items-center justify-between gap-sm shrink-0">
+      <header className="px-md py-xs flex items-center justify-between gap-sm shrink-0">
         <span className="font-sans text-caption text-brand-muted">
           표 확장 보기 ({rows.length} 행 × {columns.length} 칼럼)
         </span>
