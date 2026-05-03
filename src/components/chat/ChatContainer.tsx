@@ -148,8 +148,8 @@ export function ChatContainer() {
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
-      // 표 페이로드(#34) 가 토큰보다 먼저 도착할 수 있어 어시스턴트
-      // 메시지 삽입까지 잠깐 들고 있는다.
+      // 표 페이로드(#34) 는 모든 토큰 스트리밍이 끝난 뒤 `done` 이벤트
+      // 시점에 한 번에 적용 → 응답이 다 끝나고 자연스럽게 표가 등장.
       let pendingTable: MessageTable | null = null;
 
       const hasRange =
@@ -198,19 +198,18 @@ export function ChatContainer() {
               ),
             );
           } else if (ev.event === "table") {
-            const table = ev.data as MessageTable;
-            // 어시스턴트 메시지가 이미 화면에 있으면 그 자리에 매달고,
-            // 그렇지 않으면(=토큰보다 먼저 도착) 잠시 보류.
-            if (assistantInserted) {
+            // 들어오는 즉시 적용하지 않고 보관 — `done` 시점에 한 번에 적용.
+            pendingTable = ev.data as MessageTable;
+          } else if (ev.event === "done") {
+            // 모든 토큰이 끝난 시점 — 표가 있으면 이때 화면에 등장.
+            if (pendingTable && assistantInserted) {
+              const table = pendingTable;
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId ? { ...m, table } : m,
                 ),
               );
-            } else {
-              pendingTable = table;
             }
-          } else if (ev.event === "done") {
             break;
           } else if (ev.event === "error") {
             const msg =
@@ -218,15 +217,6 @@ export function ChatContainer() {
             appendErrorMessage(setMessages, msg);
             break;
           }
-        }
-        // 토큰이 한 글자도 오기 전에 done 이 와도(이론상) pendingTable
-        // 이 남아있을 수 있어 마지막에 한 번 flush.
-        if (pendingTable) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? { ...m, table: pendingTable! } : m,
-            ),
-          );
         }
       } catch (err) {
         const reason =
@@ -430,15 +420,16 @@ export function ChatContainer() {
         <ChatHeader onNewConversation={handleNewConversation} />
 
         <main className="flex-1 overflow-y-auto">
-          {/* 메시지 목록은 xl+ 에서 좌·우 gutter 가 생기도록 wider 컨테이너
-              로 확장 (#34 paired 표 / 향후 #37 paired 차트 자리). 빈 시작
-              화면은 기존 narrow 폭 그대로. */}
+          {/* 메시지 목록은 xl+ 에서 좌측 5vw 만 남기고 풀 폭 사용 (#34
+              paired 표 자리). 풍선은 그 안에서 768px 컬럼으로 우측에
+              자리잡고, 좌측 gutter 가 표를 위한 넓은 영역. 빈 시작 화면
+              과 xl 미만 viewport 는 기존 narrow 폭 그대로. */}
           <div
             className={[
-              "mx-auto px-lg py-xl",
+              "mx-auto py-xl",
               messages.length === 0
-                ? "max-w-chat-narrow"
-                : "max-w-chat-narrow xl:max-w-marketing",
+                ? "max-w-chat-narrow px-lg"
+                : "max-w-chat-narrow px-lg xl:max-w-none xl:pl-[5vw]",
             ].join(" ")}
           >
             {messages.length === 0 ? (

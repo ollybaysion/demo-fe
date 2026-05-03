@@ -18,11 +18,13 @@ export function MessageDataTable({ table }: { table: MessageTable }) {
 
   if (table.rows.length === 0 || columns.length === 0) return null;
 
+  // 디자인: 각진 사각형 + 얇은 검정 테두리. 헤더는 약간 회색 음영.
+  // 표가 컨테이너 폭을 넘어가는 경우의 처리는 별도 이슈(추후) 참고.
   return (
-    <div className="rounded-md border border-brand-hairline bg-brand-canvas overflow-hidden">
+    <div className="border border-brand-ink bg-brand-canvas overflow-hidden">
       <div className="overflow-x-auto">
         <table className="text-body-sm font-mono w-full border-collapse">
-          <thead className="bg-brand-surface-soft border-b border-brand-hairline">
+          <thead className="bg-brand-surface-soft border-b border-brand-ink">
             <tr>
               {columns.map((c) => (
                 <th
@@ -39,7 +41,7 @@ export function MessageDataTable({ table }: { table: MessageTable }) {
             {table.rows.map((row, i) => (
               <tr
                 key={i}
-                className="border-b border-brand-hairline-soft last:border-b-0"
+                className="border-b border-brand-ink last:border-b-0"
               >
                 {columns.map((c) => (
                   <td

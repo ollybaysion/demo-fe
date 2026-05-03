@@ -56,9 +56,10 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
     <li
       className={[
         "group grid gap-xs",
-        // xl+ : 좌측 gutter | 풍선 (max 768) | 우측 gutter (#37 차트 자리, 현재 비움).
-        // 그 이하 viewport 에서는 단일 컬럼 스택 — 풍선 아래 표가 인라인 fallback.
-        "xl:grid-cols-[1fr_minmax(0,768px)_1fr] xl:gap-md xl:items-start",
+        // xl+ : 좌측 gutter (1fr, 표가 들어가는 자리) | 풍선 (max 768).
+        // 우측 gutter 는 두지 않음 — 좌측이 "5% 빼고 다 쓰는" 정책 (#34).
+        // xl 미만 viewport 에서는 단일 컬럼 스택 → 풍선 아래 표 인라인.
+        "xl:grid-cols-[minmax(0,1fr)_minmax(0,768px)] xl:gap-md xl:items-start",
       ].join(" ")}
     >
       <div

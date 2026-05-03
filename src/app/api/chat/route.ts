@@ -134,15 +134,15 @@ export async function POST(request: Request): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        // 표 페이로드는 토큰 시작 전에 한 번 흘려보냄. UI 가 텍스트가
-        // 채워지는 동안에도 좌측 gutter 에 표를 띄울 수 있도록.
-        // 백엔드(/api/fdc/v1/chat) 도 같은 패턴 권장.
-        if (responseTable) {
-          controller.enqueue(encodeSseEvent("table", responseTable));
-        }
         for (const ch of characters) {
           controller.enqueue(encodeSseEvent("token", { content: ch }));
           await sleep(TOKEN_INTERVAL_MS);
+        }
+        // 표 페이로드는 모든 토큰이 끝난 직후 한 번 emit. 클라이언트는
+        // `done` 시점에 적용 → 응답이 모두 끝나고 자연스럽게 표가 등장.
+        // 백엔드(/api/fdc/v1/chat) 도 같은 패턴 권장.
+        if (responseTable) {
+          controller.enqueue(encodeSseEvent("table", responseTable));
         }
         controller.enqueue(
           encodeSseEvent("done", { messageId, finishReason: "stop" }),
