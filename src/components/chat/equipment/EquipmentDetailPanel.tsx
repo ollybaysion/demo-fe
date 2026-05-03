@@ -26,10 +26,8 @@ import {
   type EquipmentDetail,
   type SensorSeries,
   type SensorStats,
-  getCompareData,
-  getEquipmentDetail,
-  getPeers,
 } from "@/demo/equipment";
+import { useCompareData, useEquipmentDetail } from "./useEquipment";
 
 /**
  * 컨텍스트 패널에서 한 단계 더 들어가는 70vw 슬라이드 패널.
@@ -82,10 +80,7 @@ export function EquipmentDetailPanel({
     return equipmentNames[0] ?? "";
   }, [equipmentNames, selectedName]);
 
-  const detail = effectiveSelected
-    ? getEquipmentDetail(effectiveSelected)
-    : undefined;
-  const peers = effectiveSelected ? getPeers(effectiveSelected) : [];
+  const { detail, peers } = useEquipmentDetail(effectiveSelected);
 
   const [peerName, setPeerName] = useState<string>("");
   const peerActual = peers.find((p) => p.id === peerName) ?? peers[0];
@@ -473,10 +468,7 @@ function CompareView({
   );
   const seriesRef = useRef<HTMLDivElement>(null);
 
-  const data = useMemo<CompareData | null>(() => {
-    if (!currentId || !peerId) return null;
-    return getCompareData(currentId, peerId, recipe, windowDays);
-  }, [currentId, peerId, recipe, windowDays]);
+  const data = useCompareData(currentId, peerId, recipe, windowDays);
 
   function handleCrossLink(side: "current" | "baseline", time: number) {
     setHighlight({ side, time });

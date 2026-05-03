@@ -306,6 +306,27 @@ function setupTimeFor(equipmentId: string): string {
   return `2026-04-${pad2(day)}T${pad2(hh)}:${pad2(mm)}`;
 }
 
+export type SetupEvent = {
+  /** ISO datetime. */
+  time: string;
+  type: "setup" | "info_change" | "maintenance" | "other";
+  label?: string;
+};
+
+/**
+ * 설비별 셋업 / 설비 변경 이벤트 목록 (post-setup 매칭 anchor).
+ * 현재는 가장 최근 1건만 — 백엔드 도입 후 실제 이력으로 교체.
+ */
+export function getSetupEvents(equipmentId: string): SetupEvent[] {
+  return [
+    {
+      time: setupTimeFor(equipmentId),
+      type: "setup",
+      label: "최근 셋업/설비 변경",
+    },
+  ];
+}
+
 function matchedRunFor(
   equipmentId: string,
   recipe: string,
