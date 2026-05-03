@@ -56,10 +56,11 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
     <li
       className={[
         "group grid gap-xs",
-        // xl+ : 좌측 gutter (1fr, 표가 들어가는 자리) | 풍선 (max 768).
-        // 우측 gutter 는 두지 않음 — 좌측이 "5% 빼고 다 쓰는" 정책 (#34).
-        // xl 미만 viewport 에서는 단일 컬럼 스택 → 풍선 아래 표 인라인.
-        "xl:grid-cols-[minmax(0,1fr)_minmax(0,768px)] xl:gap-md xl:items-start",
+        // xl+ : 좌측 gutter (1fr) | 풍선 (max 768) | 우측 gutter (1fr,
+        //   향후 #37 차트 자리). 풍선은 항상 중앙에 자리잡아 표 유무로
+        //   위치가 흔들리지 않음. xl 미만 viewport 에서는 단일 컬럼 스택
+        //   → 풍선 아래 표 인라인.
+        "xl:grid-cols-[minmax(0,1fr)_minmax(0,768px)_minmax(0,1fr)] xl:gap-md xl:items-start",
       ].join(" ")}
     >
       <div
@@ -93,7 +94,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
         )}
       </div>
       {hasTable && message.table && (
-        <div className="xl:col-start-1 xl:row-start-1 min-w-0">
+        <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex justify-end">
           <MessageDataTable table={message.table} />
         </div>
       )}

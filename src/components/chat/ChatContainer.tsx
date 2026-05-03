@@ -420,16 +420,16 @@ export function ChatContainer() {
         <ChatHeader onNewConversation={handleNewConversation} />
 
         <main className="flex-1 overflow-y-auto">
-          {/* 메시지 목록은 xl+ 에서 좌측 5vw 만 남기고 풀 폭 사용 (#34
-              paired 표 자리). 풍선은 그 안에서 768px 컬럼으로 우측에
-              자리잡고, 좌측 gutter 가 표를 위한 넓은 영역. 빈 시작 화면
-              과 xl 미만 viewport 는 기존 narrow 폭 그대로. */}
+          {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
+              풍선 자체는 항상 중앙(`[1fr | 768 | 1fr]`)에 두어 표 유무에
+              따라 움직이지 않음. 풍선이 오른쪽으로 슬라이드되는 더 적극
+              적인 레이아웃은 별도 이슈에서 검토. */}
           <div
             className={[
               "mx-auto py-xl",
               messages.length === 0
                 ? "max-w-chat-narrow px-lg"
-                : "max-w-chat-narrow px-lg xl:max-w-none xl:pl-[5vw]",
+                : "max-w-chat-narrow px-lg xl:max-w-none xl:px-[5vw]",
             ].join(" ")}
           >
             {messages.length === 0 ? (

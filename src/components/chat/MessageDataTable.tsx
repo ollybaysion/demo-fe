@@ -19,11 +19,12 @@ export function MessageDataTable({ table }: { table: MessageTable }) {
   if (table.rows.length === 0 || columns.length === 0) return null;
 
   // 디자인: 각진 사각형 + 얇은 검정 테두리. 헤더는 약간 회색 음영.
-  // 표가 컨테이너 폭을 넘어가는 경우의 처리는 별도 이슈(추후) 참고.
+  // 너비: 고정 X — 칼럼 합계만큼만 차지(`w-fit`)하고, 부모(좌측 gutter)
+  //   폭을 max 로 cap. 부모 폭을 넘으면 가로 스크롤 (별도 이슈 참고).
   return (
-    <div className="border border-brand-ink bg-brand-canvas overflow-hidden">
+    <div className="w-fit max-w-full border border-brand-ink bg-brand-canvas">
       <div className="overflow-x-auto">
-        <table className="text-body-sm font-mono w-full border-collapse">
+        <table className="text-body-sm font-mono border-collapse">
           <thead className="bg-brand-surface-soft border-b border-brand-ink">
             <tr>
               {columns.map((c) => (
