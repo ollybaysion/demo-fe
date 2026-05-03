@@ -445,9 +445,15 @@ function CompareView({
     side: "current" | "baseline";
     time: number;
   } | null>(null);
-  // sensor chart 배경 음영 — current 의 range 이벤트를 깔거나 / 안 깔거나.
-  // baseline 까지 깔면 어지러워 spec 권고대로 단일 사이드 토글.
-  const [shadeSide, setShadeSide] = useState<"current" | "none">("current");
+  // sensor chart 배경 음영 — 한 사이드의 챔버 이벤트만. 두 설비 동시
+  // 음영은 어지럽고 시점이 달라 의미가 흐려져 단일 사이드 셀렉트.
+  const [shadeSide, setShadeSide] = useState<"current" | "baseline" | "none">(
+    "current",
+  );
+  // 비교에 노출할 센서 — multi-toggle. 기본 모두 활성.
+  const [enabledSensors, setEnabledSensors] = useState<Set<string> | null>(
+    null,
+  );
   const seriesRef = useRef<HTMLDivElement>(null);
 
   const data = useMemo<CompareData | null>(() => {
@@ -471,6 +477,24 @@ function CompareView({
     return <Empty>같은 모델의 동종설비가 없어 비교할 수 없습니다.</Empty>;
   }
   if (!data) return null;
+
+  // 센서 풀: 모든 센서. 기본 enabledSensors 가 null 이면 모두 활성으로 간주.
+  const allSensorNames = data.current.sensorStats.map((s) => s.sensor);
+  const isSensorOn = (name: string) =>
+    enabledSensors === null || enabledSensors.has(name);
+  const toggleSensor = (name: string) =>
+    setEnabledSensors((prev) => {
+      const base = prev ?? new Set(allSensorNames);
+      const next = new Set(base);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
+  const visibleStats = (side: "current" | "baseline") =>
+    (side === "current" ? data.current.sensorStats : data.baseline.sensorStats)
+      .filter((s) => isSensorOn(s.sensor));
+  const visibleSeries = data.series.filter((s) => isSensorOn(s.sensor));
 
   return (
     <section className="flex flex-col gap-md">
@@ -514,18 +538,52 @@ function CompareView({
         <SideMeta side={data.baseline} title="동종설비 (baseline)" />
       </div>
 
+      {/* 비교할 센서 선택 — multi chip */}
+      <Card>
+        <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
+          비교할 센서
+        </h4>
+        <div className="flex flex-wrap items-center gap-xs">
+          {allSensorNames.map((name) => {
+            const on = isSensorOn(name);
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => toggleSensor(name)}
+                aria-pressed={on}
+                className={[
+                  "inline-flex items-center gap-xxs px-sm py-xxs rounded-pill border text-caption transition-colors",
+                  on
+                    ? "border-brand-primary text-brand-on-primary bg-brand-primary"
+                    : "border-brand-hairline text-brand-muted bg-brand-canvas hover:bg-brand-ink-translucent-04",
+                ].join(" ")}
+              >
+                {name}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
       {/* 통계 비교 표 */}
       <Card>
         <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
           센서 통계 비교
         </h4>
         {data.current.matchedRun && data.baseline.matchedRun ? (
-          <CompareStatsTable
-            currentId={data.current.equipmentId}
-            baselineId={data.baseline.equipmentId}
-            current={data.current.sensorStats}
-            baseline={data.baseline.sensorStats}
-          />
+          visibleStats("current").length > 0 ? (
+            <CompareStatsTable
+              currentId={data.current.equipmentId}
+              baselineId={data.baseline.equipmentId}
+              current={visibleStats("current")}
+              baseline={visibleStats("baseline")}
+            />
+          ) : (
+            <p className="text-body-sm text-brand-muted">
+              비교할 센서를 1개 이상 선택해주세요.
+            </p>
+          )
         ) : (
           <p className="text-body-sm text-brand-muted">
             한쪽 이상에 매칭 run 이 없어 비교할 수 없습니다. 윈도우를
@@ -536,7 +594,7 @@ function CompareView({
 
       {/* 센서 시계열 겹침 차트 (#79 Phase 2) — 매칭 run 양쪽 모두에 데이터
           있을 때만 노출. x축은 공정 시작 시점 기준 경과 분(t=0). */}
-      {data.series.length > 0 && (
+      {data.series.length > 0 && visibleSeries.length > 0 && (
         <Card>
           <div ref={seriesRef} className="flex items-baseline justify-between gap-md mb-sm flex-wrap">
             <h4 className="font-sans text-title-sm text-brand-ink">
@@ -546,24 +604,33 @@ function CompareView({
               <span>이벤트 음영</span>
               <select
                 value={shadeSide}
-                onChange={(e) => setShadeSide(e.target.value as "current" | "none")}
+                onChange={(e) =>
+                  setShadeSide(e.target.value as "current" | "baseline" | "none")
+                }
                 className="bg-brand-canvas text-brand-ink rounded-sm border border-brand-hairline px-xs py-0 text-caption focus:outline-none focus:border-brand-primary"
               >
                 <option value="current">현재 ({data.current.equipmentId})</option>
+                <option value="baseline">baseline ({data.baseline.equipmentId})</option>
                 <option value="none">표시 안 함</option>
               </select>
             </label>
           </div>
           <p className="text-caption text-brand-muted mb-md">
             x = 공정 시작 시점 기준 경과 분 (t=0). 두 설비의 매칭 run 을
-            같은 시점에 정렬해 추세 차이를 한눈에 확인.
+            같은 시점에 정렬해 추세 차이를 한눈에 확인. 배경 음영은
+            셀렉트한 한 설비의 챔버 이벤트 구간(setup / cleaning 등) 만
+            노출 — 두 설비를 동시에 깔면 시점이 달라 의미가 흐려짐.
           </p>
           <CompareSeriesGrid
-            series={data.series}
+            series={visibleSeries}
             currentId={data.current.equipmentId}
             baselineId={data.baseline.equipmentId}
             shadeEvents={
-              shadeSide === "current" ? data.chamberEvents.current : []
+              shadeSide === "current"
+                ? data.chamberEvents.current
+                : shadeSide === "baseline"
+                  ? data.chamberEvents.baseline
+                  : []
             }
             highlightTime={highlight?.time ?? null}
             highlightSide={highlight?.side ?? null}
