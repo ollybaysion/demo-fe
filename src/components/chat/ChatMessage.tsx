@@ -7,7 +7,8 @@ import type {
   MessageTableEntry,
 } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
-import { PairedItemCard } from "./PairedItemCard";
+import { MessageChart } from "./MessageChart";
+import { MessageDataTable } from "./MessageDataTable";
 
 /**
  * 메시지 단위 액션 (#30).
@@ -124,28 +125,42 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
       </div>
       {hasLeft && (
         <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex flex-col gap-md">
-          {distributed.left.map((entry, idx) => (
-            <PairedItemCard
-              key={`left-${idx}`}
-              kind={entry.kind}
-              payload={entry.payload}
-              defaultExpanded={idx === 0}
-              bubbleRef={bubbleRef}
-            />
-          ))}
+          {distributed.left.map((entry, idx) =>
+            entry.kind === "table" ? (
+              <MessageDataTable
+                key={`left-${idx}`}
+                table={entry.payload}
+                defaultExpanded={idx === 0}
+                bubbleRef={bubbleRef}
+              />
+            ) : (
+              <MessageChart
+                key={`left-${idx}`}
+                chart={entry.payload}
+                defaultExpanded={idx === 0}
+              />
+            ),
+          )}
         </div>
       )}
       {hasRight && (
         <div className="xl:col-start-3 xl:row-start-1 min-w-0 flex flex-col gap-md">
-          {distributed.right.map((entry, idx) => (
-            <PairedItemCard
-              key={`right-${idx}`}
-              kind={entry.kind}
-              payload={entry.payload}
-              defaultExpanded={idx === 0}
-              bubbleRef={bubbleRef}
-            />
-          ))}
+          {distributed.right.map((entry, idx) =>
+            entry.kind === "table" ? (
+              <MessageDataTable
+                key={`right-${idx}`}
+                table={entry.payload}
+                defaultExpanded={idx === 0}
+                bubbleRef={bubbleRef}
+              />
+            ) : (
+              <MessageChart
+                key={`right-${idx}`}
+                chart={entry.payload}
+                defaultExpanded={idx === 0}
+              />
+            ),
+          )}
         </div>
       )}
     </li>
