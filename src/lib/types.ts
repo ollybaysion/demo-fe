@@ -12,6 +12,29 @@ export type MessageTable = {
   columns?: string[];
 };
 
+/**
+ * 어시스턴트 응답에 paired 되는 차트 데이터 (#37).
+ *
+ * 백엔드(/api/fdc/v1/chat) 페이로드 구조와 호환:
+ *   { content, chart?: { type, data, options? } }
+ * v1 지원 타입: line / bar / area.
+ */
+export type MessageChart = {
+  type: "line" | "bar" | "area";
+  data: Record<string, unknown>[];
+  options?: {
+    /** 차트 상단 제목. 비면 미표기. */
+    title?: string;
+    /** x 축으로 쓸 키. 비면 첫 row 의 첫 키. */
+    xKey?: string;
+    /** y 축 시리즈 키 배열. 비면 xKey 제외 모든 키. */
+    yKeys?: string[];
+    /** 축 라벨. 비면 미표기. */
+    xLabel?: string;
+    yLabel?: string;
+  };
+};
+
 export type Message = {
   id: string;
   role: MessageRole;
@@ -19,6 +42,8 @@ export type Message = {
   createdAt: number;
   /** Paired data table (#34) — 어시스턴트 메시지에만. */
   table?: MessageTable;
+  /** Paired chart (#37) — 어시스턴트 메시지에만. */
+  chart?: MessageChart;
 };
 
 /**
