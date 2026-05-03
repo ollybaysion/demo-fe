@@ -145,6 +145,19 @@ export type Message = {
    * 으로 노출. 비면 미표기. 백엔드가 동봉한 단순 문자열 배열.
    */
   recommendQuestion?: string[];
+  /**
+   * 에러 상세 (#32) — `role: "error"` 메시지에만. 사용자 친화 본문은
+   * `content`, 원인 분류 / HTTP 상태 / 원본 메시지 등 기술적 디테일은
+   * 여기에. UI 에서 [원인 보기] 토글로 접어 노출.
+   */
+  errorDetail?: {
+    /** 분류 키 — "network" | "timeout" | "http-4xx" | "http-5xx" | "stream" | "unknown". */
+    kind: string;
+    /** HTTP status 또는 0 (네트워크 단절). */
+    status?: number;
+    /** 원본 에러 메시지(영문 stack trace 등). */
+    raw?: string;
+  };
 };
 
 /**
