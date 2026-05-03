@@ -55,6 +55,17 @@ type DonePayload = {
   charts?: MessageChartEntry[];
   eventTimelines?: MessageEventTimelineEntry[];
   recommendQuestion?: string[];
+  /**
+   * 백엔드가 사용자 메시지에서 추출한 컨텍스트. 비-데모 모드에서 우측
+   * 컨텍스트 패널을 자동 갱신. 데모 모드는 turn.contextPanel 우선이라
+   * 무시됨.
+   */
+  extractedContext?: {
+    rows?: ContextRow[];
+    /** default "replace". */
+    rowsMode?: "replace" | "append";
+    timeRange?: { start?: string; end?: string };
+  };
 };
 type StreamPayload = TokenPayload | ErrorPayload | DonePayload;
 
@@ -109,6 +120,7 @@ export function ChatContainer() {
     setSensorName,
     deleteSensor,
     replaceRows,
+    appendRows,
     replaceTimeRange,
     reset: resetContext,
   } = useContextRows();
@@ -259,6 +271,24 @@ export function ChatContainer() {
                 }),
               );
             }
+            // 비-데모 모드에서만 extractedContext 적용. 데모는
+            // turn.contextPanel 흐름이 우선이라 스킵.
+            if (!demoMeta && payload.extractedContext) {
+              const ec = payload.extractedContext;
+              if (ec.rows && ec.rows.length > 0) {
+                if (ec.rowsMode === "append") {
+                  appendRows(ec.rows);
+                } else {
+                  replaceRows(ec.rows);
+                }
+              }
+              if (ec.timeRange) {
+                replaceTimeRange({
+                  start: ec.timeRange.start ?? "",
+                  end: ec.timeRange.end ?? "",
+                });
+              }
+            }
             break;
           } else if (ev.event === "error") {
             const raw =
@@ -277,7 +307,7 @@ export function ChatContainer() {
         setIsStreaming(false);
       }
     },
-    [],
+    [appendRows, replaceRows, replaceTimeRange],
   );
 
   const handleScenarioStart = useCallback(
