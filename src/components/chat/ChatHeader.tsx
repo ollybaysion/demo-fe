@@ -1,21 +1,21 @@
 type Props = {
-  onReset?: () => void;
+  onNewConversation?: () => void;
 };
 
-export function ChatHeader({ onReset }: Props) {
+export function ChatHeader({ onNewConversation }: Props) {
   return (
     <header className="h-16 border-b border-brand-hairline bg-brand-canvas">
       <div className="mx-auto flex h-full max-w-chat-narrow items-center justify-between px-lg">
         <h1 className="font-sans text-title-lg text-brand-ink">FDC Agent</h1>
-        {onReset && (
+        {onNewConversation && (
           <button
             type="button"
-            onClick={onReset}
-            aria-label="대화 초기화"
-            title="대화 초기화"
+            onClick={onNewConversation}
+            aria-label="새 대화 시작"
+            title="새 대화"
             className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
-            <ResetIcon />
+            <NewChatIcon />
           </button>
         )}
       </div>
@@ -23,7 +23,8 @@ export function ChatHeader({ onReset }: Props) {
   );
 }
 
-function ResetIcon() {
+function NewChatIcon() {
+  // pencil-on-square — "새로 쓰기" 메타포 (ChatGPT 헤더 패턴)
   return (
     <svg
       width="18"
@@ -36,8 +37,8 @@ function ResetIcon() {
       strokeLinejoin="round"
       aria-hidden
     >
-      <polyline points="1 4 1 10 7 10" />
-      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
     </svg>
   );
 }
