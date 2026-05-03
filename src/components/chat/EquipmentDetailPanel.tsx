@@ -14,6 +14,10 @@ import {
   COL_NAMES,
   COMPARE_RECIPES,
   COMPARE_WINDOWS,
+  type AlarmEvent,
+  type AlarmSeverity,
+  type ChamberEvent,
+  type ChamberEventType,
   type CompareData,
   type CompareSide,
   type CompareWindowDays,
@@ -530,6 +534,32 @@ function CompareView({
           />
         </Card>
       )}
+
+      {/* 챔버 이벤트 lane (#79 Phase 2) — 같은 시간축 위에 두 설비의
+          이벤트(setup / recipe_change / cleaning / maintenance) 표시. */}
+      {(data.chamberEvents.current.length > 0 ||
+        data.chamberEvents.baseline.length > 0) && (
+        <Card>
+          <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
+            챔버 이벤트 비교
+          </h4>
+          <CompareChamberEvents
+            data={data}
+          />
+        </Card>
+      )}
+
+      {/* 설비 알람 lane (#79 Phase 2) — severity 색 + popover + 카운트
+          매트릭스. */}
+      {(data.alarms.current.length > 0 ||
+        data.alarms.baseline.length > 0) && (
+        <Card>
+          <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
+            설비 알람 비교
+          </h4>
+          <CompareAlarms data={data} />
+        </Card>
+      )}
     </section>
   );
 }
@@ -792,6 +822,449 @@ function LegendDot({ color, dashed }: { color: string; dashed?: boolean }) {
         verticalAlign: "middle",
       }}
     />
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CompareChamberEvents (#79 Phase 2)
+// ────────────────────────────────────────────────────────────────────
+
+const CHAMBER_EVENT_COLORS: Record<ChamberEventType, string> = {
+  setup: "var(--color-brand-accent-teal)",
+  recipe_change: "var(--color-brand-primary)",
+  cleaning: "var(--color-brand-accent-amber)",
+  maintenance: "var(--color-brand-warning)",
+  other: "var(--color-brand-muted)",
+};
+
+const CHAMBER_EVENT_LABELS: Record<ChamberEventType, string> = {
+  setup: "Setup",
+  recipe_change: "Recipe 변경",
+  cleaning: "Cleaning",
+  maintenance: "PM",
+  other: "기타",
+};
+
+function CompareChamberEvents({ data }: { data: CompareData }) {
+  const allTypeSet = new Set<ChamberEventType>();
+  for (const e of data.chamberEvents.current) allTypeSet.add(e.type);
+  for (const e of data.chamberEvents.baseline) allTypeSet.add(e.type);
+  const allTypes: ChamberEventType[] = Array.from(allTypeSet);
+
+  const [enabled, setEnabled] = useState<Set<ChamberEventType>>(
+    () => new Set(allTypes),
+  );
+  // allTypes 가 바뀌면 enabled 동기화 (렌더 중 prev-state 비교)
+  const [prevTypesKey, setPrevTypesKey] = useState(() => allTypes.join("|"));
+  const typesKey = allTypes.join("|");
+  if (typesKey !== prevTypesKey) {
+    setPrevTypesKey(typesKey);
+    setEnabled(new Set(allTypes));
+  }
+
+  const toggle = (t: ChamberEventType) =>
+    setEnabled((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+
+  const xMax = Math.max(
+    data.current.matchedRun?.durationMin ?? 0,
+    data.baseline.matchedRun?.durationMin ?? 0,
+    ...data.chamberEvents.current.map((e) => e.end ?? e.start),
+    ...data.chamberEvents.baseline.map((e) => e.end ?? e.start),
+    10,
+  );
+
+  return (
+    <div className="flex flex-col gap-sm">
+      {/* 타입 필터 chip */}
+      <div className="flex flex-wrap items-center gap-xs">
+        {allTypes.map((t) => {
+          const on = enabled.has(t);
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => toggle(t)}
+              className={[
+                "inline-flex items-center gap-xxs px-sm py-xxs rounded-pill border text-caption transition-colors",
+                on
+                  ? "border-brand-hairline text-brand-ink bg-brand-canvas"
+                  : "border-brand-hairline-soft text-brand-muted bg-brand-surface-soft",
+              ].join(" ")}
+              aria-pressed={on}
+            >
+              <span
+                aria-hidden
+                style={{
+                  display: "inline-block",
+                  width: 8,
+                  height: 8,
+                  borderRadius: 9999,
+                  background: on ? CHAMBER_EVENT_COLORS[t] : "var(--color-brand-muted-soft)",
+                }}
+              />
+              {CHAMBER_EVENT_LABELS[t]}
+            </button>
+          );
+        })}
+      </div>
+
+      <EventLane
+        label={`현재 (${data.current.equipmentId})`}
+        events={data.chamberEvents.current.filter((e) => enabled.has(e.type))}
+        xMax={xMax}
+      />
+      <EventLane
+        label={`baseline (${data.baseline.equipmentId})`}
+        events={data.chamberEvents.baseline.filter((e) => enabled.has(e.type))}
+        xMax={xMax}
+      />
+    </div>
+  );
+}
+
+function EventLane({
+  label,
+  events,
+  xMax,
+}: {
+  label: string;
+  events: ChamberEvent[];
+  xMax: number;
+}) {
+  return (
+    <div className="flex items-center gap-sm">
+      <span className="w-32 shrink-0 text-caption text-brand-muted truncate">
+        {label}
+      </span>
+      <div className="flex-1 relative h-7 rounded-sm bg-brand-surface-soft border border-brand-hairline-soft overflow-hidden">
+        {events.map((e, i) => {
+          const left = (e.start / xMax) * 100;
+          const width = e.end !== undefined
+            ? Math.max(((e.end - e.start) / xMax) * 100, 0.6)
+            : 0.6;
+          const isPoint = e.end === undefined;
+          const color = CHAMBER_EVENT_COLORS[e.type];
+          return (
+            <div
+              key={i}
+              title={`${CHAMBER_EVENT_LABELS[e.type]} · ${e.label} · ${e.start}${e.end !== undefined ? `~${e.end}` : ""} 분`}
+              className="absolute top-0 bottom-0"
+              style={{
+                left: `${left}%`,
+                width: `${width}%`,
+                background: isPoint ? "transparent" : color,
+                opacity: isPoint ? 1 : 0.85,
+                borderLeft: isPoint ? `2px solid ${color}` : undefined,
+              }}
+            >
+              {!isPoint && (
+                <span
+                  className="absolute inset-0 flex items-center justify-start px-xxs whitespace-nowrap overflow-hidden text-caption"
+                  style={{ color: "var(--color-brand-on-primary)" }}
+                >
+                  {e.label}
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {/* x축 라벨 — 좌/우 끝 */}
+        <span className="absolute left-1 bottom-0 text-[10px] text-brand-muted-soft pointer-events-none">
+          0
+        </span>
+        <span className="absolute right-1 bottom-0 text-[10px] text-brand-muted-soft pointer-events-none">
+          {xMax}분
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CompareAlarms (#79 Phase 2)
+// ────────────────────────────────────────────────────────────────────
+
+const ALARM_SEVERITY_COLOR: Record<AlarmSeverity, string> = {
+  info: "var(--color-brand-muted)",
+  warning: "var(--color-brand-warning)",
+  critical: "var(--color-brand-error)",
+};
+
+function CompareAlarms({ data }: { data: CompareData }) {
+  const xMax = Math.max(
+    data.current.matchedRun?.durationMin ?? 0,
+    data.baseline.matchedRun?.durationMin ?? 0,
+    ...data.alarms.current.map((a) => a.time),
+    ...data.alarms.baseline.map((a) => a.time),
+    10,
+  );
+
+  const [popover, setPopover] = useState<{
+    side: "current" | "baseline";
+    index: number;
+  } | null>(null);
+
+  const close = () => setPopover(null);
+
+  return (
+    <div className="flex flex-col gap-md">
+      <div className="flex flex-col gap-sm">
+        <AlarmLane
+          label={`현재 (${data.current.equipmentId})`}
+          alarms={data.alarms.current}
+          xMax={xMax}
+          activeIndex={popover?.side === "current" ? popover.index : null}
+          onActivate={(i) => setPopover({ side: "current", index: i })}
+        />
+        <AlarmLane
+          label={`baseline (${data.baseline.equipmentId})`}
+          alarms={data.alarms.baseline}
+          xMax={xMax}
+          activeIndex={popover?.side === "baseline" ? popover.index : null}
+          onActivate={(i) => setPopover({ side: "baseline", index: i })}
+        />
+      </div>
+
+      {/* severity 범례 */}
+      <div className="flex items-center gap-md text-caption text-brand-muted">
+        <SeverityDot s="info" /> info
+        <SeverityDot s="warning" /> warning
+        <SeverityDot s="critical" /> critical
+      </div>
+
+      {/* popover — 활성 알람 상세 */}
+      {popover && (
+        <AlarmDetail
+          alarm={
+            popover.side === "current"
+              ? data.alarms.current[popover.index]
+              : data.alarms.baseline[popover.index]
+          }
+          equipmentId={
+            popover.side === "current"
+              ? data.current.equipmentId
+              : data.baseline.equipmentId
+          }
+          onClose={close}
+        />
+      )}
+
+      {/* 카운트 매트릭스 */}
+      <AlarmMatrix data={data} />
+    </div>
+  );
+}
+
+function AlarmLane({
+  label,
+  alarms,
+  xMax,
+  activeIndex,
+  onActivate,
+}: {
+  label: string;
+  alarms: AlarmEvent[];
+  xMax: number;
+  activeIndex: number | null;
+  onActivate: (i: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-sm">
+      <span className="w-32 shrink-0 text-caption text-brand-muted truncate">
+        {label}
+      </span>
+      <div className="flex-1 relative h-7 rounded-sm bg-brand-surface-soft border border-brand-hairline-soft">
+        {alarms.map((a, i) => {
+          const left = (a.time / xMax) * 100;
+          const color = ALARM_SEVERITY_COLOR[a.severity];
+          const active = activeIndex === i;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onActivate(i)}
+              title={`${a.code} · ${a.label} · ${a.time}분`}
+              className={[
+                "absolute top-0 bottom-0 w-3 -ml-1.5 inline-flex items-center justify-center",
+                "rounded-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30",
+                active ? "bg-brand-ink-translucent-04" : "",
+              ].join(" ")}
+              style={{ left: `${left}%` }}
+              aria-label={`알람 ${a.code} (${a.severity}) · ${a.time}분`}
+            >
+              <span
+                aria-hidden
+                style={{
+                  display: "inline-block",
+                  width: 0,
+                  height: 0,
+                  borderLeft: "5px solid transparent",
+                  borderRight: "5px solid transparent",
+                  borderBottom: `9px solid ${color}`,
+                }}
+              />
+            </button>
+          );
+        })}
+        <span className="absolute left-1 bottom-0 text-[10px] text-brand-muted-soft pointer-events-none">
+          0
+        </span>
+        <span className="absolute right-1 bottom-0 text-[10px] text-brand-muted-soft pointer-events-none">
+          {xMax}분
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SeverityDot({ s }: { s: AlarmSeverity }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: 9999,
+        background: ALARM_SEVERITY_COLOR[s],
+        marginRight: 4,
+      }}
+    />
+  );
+}
+
+function AlarmDetail({
+  alarm,
+  equipmentId,
+  onClose,
+}: {
+  alarm: AlarmEvent;
+  equipmentId: string;
+  onClose: () => void;
+}) {
+  const rc = alarm.rootCause;
+  return (
+    <div className="rounded-md border border-brand-hairline bg-brand-canvas p-md flex flex-col gap-xxs">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-xs">
+          <SeverityDot s={alarm.severity} />
+          <span className="font-sans text-body-sm text-brand-ink font-medium">
+            {alarm.code}
+          </span>
+          <span className="text-caption text-brand-muted">
+            ({alarm.severity})
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="알람 상세 닫기"
+          className="text-caption text-brand-muted hover:text-brand-ink"
+        >
+          닫기
+        </button>
+      </div>
+      <div className="text-body-sm text-brand-ink">{alarm.label}</div>
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-md gap-y-xxs text-caption font-mono">
+        <dt className="text-brand-muted">설비</dt>
+        <dd className="text-brand-ink">{equipmentId}</dd>
+        <dt className="text-brand-muted">시각</dt>
+        <dd className="text-brand-ink">경과 {alarm.time}분</dd>
+        {rc?.chamber && (
+          <>
+            <dt className="text-brand-muted">챔버</dt>
+            <dd className="text-brand-ink">{rc.chamber}</dd>
+          </>
+        )}
+        {rc?.sensor && (
+          <>
+            <dt className="text-brand-muted">원인 센서</dt>
+            <dd className="text-brand-ink">{rc.sensor}</dd>
+          </>
+        )}
+        {rc?.condition && (
+          <>
+            <dt className="text-brand-muted">조건</dt>
+            <dd className="text-brand-ink">{rc.condition}</dd>
+          </>
+        )}
+        {rc?.value !== undefined && (
+          <>
+            <dt className="text-brand-muted">트리거 값</dt>
+            <dd className="text-brand-ink">{rc.value}</dd>
+          </>
+        )}
+      </dl>
+    </div>
+  );
+}
+
+function AlarmMatrix({ data }: { data: CompareData }) {
+  const codeSet = new Set<string>();
+  for (const a of data.alarms.current) codeSet.add(a.code);
+  for (const a of data.alarms.baseline) codeSet.add(a.code);
+  const matrix = Array.from(codeSet).map((code) => {
+    const cur = data.alarms.current.filter((a) => a.code === code);
+    const base = data.alarms.baseline.filter((a) => a.code === code);
+    const firstCur = cur[0]?.time;
+    const firstBase = base[0]?.time;
+    let diffLabel = "같음";
+    if (cur.length > 0 && base.length === 0) diffLabel = "현재만";
+    else if (cur.length === 0 && base.length > 0) diffLabel = "baseline만";
+    else if (cur.length !== base.length)
+      diffLabel = `${cur.length > base.length ? "현재" : "baseline"} 더 많음`;
+    return { code, curN: cur.length, baseN: base.length, firstCur, firstBase, diffLabel };
+  });
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-body-sm font-mono w-full">
+        <thead>
+          <tr className="border-b border-brand-hairline text-caption text-brand-muted text-left">
+            <th className="py-xxs px-md font-medium">알람 코드</th>
+            <th className="py-xxs px-md font-medium">현재 횟수</th>
+            <th className="py-xxs px-md font-medium">baseline 횟수</th>
+            <th className="py-xxs px-md font-medium">차이</th>
+            <th className="py-xxs px-md font-medium">첫 발생 (현재 → baseline)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {matrix.map((row) => {
+            const onlyOne = row.diffLabel === "현재만" || row.diffLabel === "baseline만";
+            return (
+              <tr
+                key={row.code}
+                className="border-b border-brand-hairline-soft last:border-b-0"
+              >
+                <td className="py-xs px-md text-brand-ink">{row.code}</td>
+                <td className="py-xs px-md text-brand-ink">{row.curN}</td>
+                <td className="py-xs px-md text-brand-ink">{row.baseN}</td>
+                <td
+                  className={[
+                    "py-xs px-md whitespace-nowrap",
+                    onlyOne
+                      ? "bg-brand-error-soft text-brand-error font-medium"
+                      : "text-brand-muted",
+                  ].join(" ")}
+                >
+                  {row.diffLabel}
+                </td>
+                <td className="py-xs px-md text-brand-ink whitespace-nowrap">
+                  {row.firstCur !== undefined ? `${row.firstCur}분` : "—"}
+                  {" → "}
+                  {row.firstBase !== undefined ? `${row.firstBase}분` : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

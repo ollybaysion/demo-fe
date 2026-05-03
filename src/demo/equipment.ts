@@ -201,6 +201,43 @@ export type SensorSeries = {
   data: SensorSeriesPoint[];
 };
 
+/**
+ * 챔버 이벤트 (#79 Phase 2). point = end 없음, range = end 있음.
+ * type 별로 lane 색 / 필터 매칭.
+ */
+export type ChamberEventType =
+  | "recipe_change"
+  | "cleaning"
+  | "setup"
+  | "maintenance"
+  | "other";
+
+export type ChamberEvent = {
+  start: number;
+  end?: number;
+  type: ChamberEventType;
+  label: string;
+};
+
+/**
+ * 설비 알람 (#79 Phase 2). 대부분 point. severity 별 색.
+ */
+export type AlarmSeverity = "info" | "warning" | "critical";
+
+export type AlarmEvent = {
+  time: number;
+  end?: number;
+  code: string;
+  label: string;
+  severity: AlarmSeverity;
+  rootCause?: {
+    sensor?: string;
+    chamber?: string;
+    condition?: string;
+    value?: number;
+  };
+};
+
 export type CompareData = {
   recipe: string;
   windowDays: CompareWindowDays;
@@ -208,6 +245,10 @@ export type CompareData = {
   baseline: CompareSide;
   /** 센서별 시계열 (#79 Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 배열. */
   series: SensorSeries[];
+  /** 챔버 이벤트 (#79 Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 객체. */
+  chamberEvents: { current: ChamberEvent[]; baseline: ChamberEvent[] };
+  /** 설비 알람 (#79 Phase 2). 매칭 run 이 한쪽이라도 없으면 빈 객체. */
+  alarms: { current: AlarmEvent[]; baseline: AlarmEvent[] };
 };
 
 export const COMPARE_RECIPES = ["RECIPE_X", "RECIPE_Y", "RECIPE_Z"] as const;
@@ -329,6 +370,100 @@ function seriesFor(
 }
 
 /**
+ * 챔버 이벤트 mock (#79 Phase 2). 같은 run duration 안에서 setup →
+ * recipe_change → cleaning → maintenance 일부를 deterministic 으로 배치.
+ * 양쪽 설비별로 시점/지속이 약간 다르게.
+ */
+function chamberEventsFor(
+  equipmentId: string,
+  recipe: string,
+  durationMin: number,
+): ChamberEvent[] {
+  const seed = hash(equipmentId + recipe);
+  const dur = Math.max(durationMin, 20);
+  const out: ChamberEvent[] = [];
+  // setup (range, run 시작 직후 짧게)
+  out.push({
+    start: 0,
+    end: 2 + (seed % 3),
+    type: "setup",
+    label: "Setup 안정화",
+  });
+  // recipe_change (point) — 중반쯤
+  const recipeT = Math.floor(dur * 0.30) + (seed % 4);
+  out.push({
+    start: recipeT,
+    type: "recipe_change",
+    label: `${recipe} → step ${1 + ((seed >> 1) % 3)}`,
+  });
+  // cleaning (range) — 후반
+  const clStart = Math.floor(dur * 0.55) + ((seed >> 2) % 4);
+  out.push({
+    start: clStart,
+    end: clStart + 4 + ((seed >> 3) % 3),
+    type: "cleaning",
+    label: "Inter-step purge",
+  });
+  // maintenance — 일부 설비만 (한쪽만 발생 시나리오 검증)
+  if ((seed % 5) < 2) {
+    const mT = Math.floor(dur * 0.75) + ((seed >> 4) % 3);
+    out.push({
+      start: mT,
+      type: "maintenance",
+      label: "Quick PM check",
+    });
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * 알람 mock (#79 Phase 2). 코드 풀에서 deterministic 하게 골라 시점·
+ * severity·root cause 부여. 양쪽 설비에 공통 / 단독 알람 섞임.
+ */
+const ALARM_POOL: ReadonlyArray<{
+  code: string;
+  label: string;
+  severity: AlarmSeverity;
+  sensor: string;
+}> = [
+  { code: "RF_HIGH", label: "RF_FORWARD 임계 초과", severity: "critical", sensor: "RF_FORWARD" },
+  { code: "GAS_LEAK_A", label: "Chamber A GasLeak", severity: "critical", sensor: "GAS_FLOW_SiH4" },
+  { code: "TEMP_RISE", label: "TEMP 상승 트렌드", severity: "warning", sensor: "TEMP_TC1" },
+  { code: "APC_DRIFT", label: "APC 압력 드리프트", severity: "warning", sensor: "APC_PRESSURE" },
+  { code: "RF_REFL", label: "RF_REFLECTED 비정상", severity: "warning", sensor: "RF_FORWARD" },
+  { code: "MFC_VAR", label: "MFC 응답 변동", severity: "info", sensor: "GAS_FLOW_SiH4" },
+];
+
+function alarmsFor(
+  equipmentId: string,
+  recipe: string,
+  durationMin: number,
+): AlarmEvent[] {
+  const seed = hash(equipmentId + recipe + "alarm");
+  const dur = Math.max(durationMin, 10);
+  const count = 2 + (seed % 4); // 2 ~ 5 개
+  const out: AlarmEvent[] = [];
+  for (let i = 0; i < count; i++) {
+    const def = ALARM_POOL[(seed + i * 17) % ALARM_POOL.length];
+    const t = Math.floor((dur * (i + 1)) / (count + 1)) + ((seed >> i) % 3) - 1;
+    const time = Math.max(0, Math.min(dur - 1, t));
+    out.push({
+      time,
+      code: def.code,
+      label: def.label,
+      severity: def.severity,
+      rootCause: {
+        sensor: def.sensor,
+        chamber: ((seed >> (i + 1)) & 1) === 0 ? "A" : "B",
+        condition: `${def.sensor} > threshold for 10s`,
+        value: round(50 + ((seed + i * 7) % 100)),
+      },
+    });
+  }
+  return out.sort((a, b) => a.time - b.time);
+}
+
+/**
  * 1:1 비교 mock. (#79 Phase 1 + Phase 2 — post-setup 모드)
  */
 export function getCompareData(
@@ -362,5 +497,19 @@ export function getCompareData(
       currentRun && baselineRun
         ? seriesFor(currentId, baselineId, recipe, dur)
         : [],
+    chamberEvents:
+      currentRun && baselineRun
+        ? {
+            current: chamberEventsFor(currentId, recipe, dur),
+            baseline: chamberEventsFor(baselineId, recipe, dur),
+          }
+        : { current: [], baseline: [] },
+    alarms:
+      currentRun && baselineRun
+        ? {
+            current: alarmsFor(currentId, recipe, dur),
+            baseline: alarmsFor(baselineId, recipe, dur),
+          }
+        : { current: [], baseline: [] },
   };
 }
