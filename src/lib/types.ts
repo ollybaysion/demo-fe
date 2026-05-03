@@ -85,6 +85,41 @@ export type MessageChartEntry = MessageChart & {
   side?: PairedSide;
 };
 
+/**
+ * 어시스턴트 응답에 paired 되는 이벤트 타임라인 (#49).
+ *
+ * Gantt 식 시간 구간 표시 — 각 이벤트는 시작/종료가 있고, 트랙별로
+ * 한 row 에 그려짐. 2단계 계층 (process/step) 으로 시각 구분.
+ *
+ * 백엔드(/api/fdc/v1/chat) 페이로드 구조와 호환:
+ *   { content, eventTimelines?: MessageEventTimeline[] }
+ */
+export type EventTimelineLevel = "process" | "step";
+
+export type EventTimelineItem = {
+  /** 트랙 라벨 — 같은 track 의 events 는 한 row 에 그려짐. 예: "공정", "챔버 A". */
+  track: string;
+  /** 2단계 계층. process tracks 가 위, step tracks 가 아래에 정렬. */
+  level: EventTimelineLevel;
+  /** ISO 또는 비교 가능한 string/number. 비교는 lexicographical / numeric. */
+  start: string | number;
+  end: string | number;
+  label: string;
+  /** hex 색 override. 미지정 시 FE 가 level 기준 기본 색 적용. */
+  color?: string;
+};
+
+export type MessageEventTimeline = {
+  title?: string;
+  /** 시간축 범위. 미지정 시 events 의 min(start) ~ max(end) 자동. */
+  range?: { start: string | number; end: string | number };
+  events: EventTimelineItem[];
+};
+
+export type MessageEventTimelineEntry = MessageEventTimeline & {
+  side?: PairedSide;
+};
+
 export type Message = {
   id: string;
   role: MessageRole;
@@ -94,6 +129,8 @@ export type Message = {
   tables?: MessageTableEntry[];
   /** Paired charts (#37, #45) — 어시스턴트 메시지에만. */
   charts?: MessageChartEntry[];
+  /** Paired event timelines (#49) — 어시스턴트 메시지에만. */
+  eventTimelines?: MessageEventTimelineEntry[];
   /**
    * @deprecated #45 이후 `tables` 사용. 기존 localStorage 호환용.
    * 렌더 시 `tables ?? [table]` 로 coalesce.
