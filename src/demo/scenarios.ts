@@ -12,7 +12,7 @@
  * 한 번씩 등장하도록 분포시켜 둠.
  */
 
-import type { ContextRow } from "@/lib/types";
+import type { ContextRow, MessageTable } from "@/lib/types";
 
 export type ScenarioTurn = {
   user: string;
@@ -25,6 +25,11 @@ export type ScenarioTurn = {
   contextPanel?: ContextRow[];
   /** 이 턴 user 메시지 전송 시 발생 시간을 함께 갱신. */
   timeRange?: { start: string; end: string };
+  /**
+   * Paired data table (#34). 백엔드 페이로드 구조를 그대로 모킹 —
+   * 어시스턴트 메시지의 좌측 gutter 에 표로 paired 되어 보임.
+   */
+  table?: MessageTable;
 };
 
 export type Scenario = {
@@ -70,6 +75,55 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "> STEP 종료 시점 기준으로 데이터가 발생하기 때문에 09:10에 센서값 3으로 데이터가 발생했습니다.",
         ].join("\n"),
+        // 좌측 paired 표: 15초 간격 APC_PRESSURE 트렌드 41행 (09:00~09:10).
+        // STEP 종료 시점인 09:06:00 부근에서 최댓값 3.00 으로 피크. 풍선보다
+        // 표가 길어 행 overflow 동작을 확인할 수 있음.
+        table: {
+          columns: ["timestamp", "step", "APC_PRESSURE (mTorr)"],
+          rows: [
+            { timestamp: "09:00:00", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.30 },
+            { timestamp: "09:00:15", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.35 },
+            { timestamp: "09:00:30", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.42 },
+            { timestamp: "09:00:45", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.51 },
+            { timestamp: "09:01:00", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.55 },
+            { timestamp: "09:01:15", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.58 },
+            { timestamp: "09:01:30", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.60 },
+            { timestamp: "09:01:45", step: "PRE_HEAT", "APC_PRESSURE (mTorr)": 0.65 },
+            { timestamp: "09:02:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.20 },
+            { timestamp: "09:02:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.55 },
+            { timestamp: "09:02:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.78 },
+            { timestamp: "09:02:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.05 },
+            { timestamp: "09:03:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.25 },
+            { timestamp: "09:03:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.40 },
+            { timestamp: "09:03:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.55 },
+            { timestamp: "09:03:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.65 },
+            { timestamp: "09:04:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.72 },
+            { timestamp: "09:04:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.80 },
+            { timestamp: "09:04:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.85 },
+            { timestamp: "09:04:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.90 },
+            { timestamp: "09:05:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.92 },
+            { timestamp: "09:05:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.95 },
+            { timestamp: "09:05:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.98 },
+            { timestamp: "09:05:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.99 },
+            { timestamp: "09:06:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 3.00 },
+            { timestamp: "09:06:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.98 },
+            { timestamp: "09:06:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.92 },
+            { timestamp: "09:06:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.85 },
+            { timestamp: "09:07:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.78 },
+            { timestamp: "09:07:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.65 },
+            { timestamp: "09:07:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.55 },
+            { timestamp: "09:07:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.45 },
+            { timestamp: "09:08:00", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.30 },
+            { timestamp: "09:08:15", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 2.10 },
+            { timestamp: "09:08:30", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.85 },
+            { timestamp: "09:08:45", step: "MAIN_ETCH", "APC_PRESSURE (mTorr)": 1.55 },
+            { timestamp: "09:09:00", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 1.20 },
+            { timestamp: "09:09:15", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.95 },
+            { timestamp: "09:09:30", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.80 },
+            { timestamp: "09:09:45", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.70 },
+            { timestamp: "09:10:00", step: "POST_PURGE", "APC_PRESSURE (mTorr)": 0.60 },
+          ],
+        },
         contextPanel: [
           {
             id: "demo-shape-eq-1",
@@ -179,6 +233,14 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "EMO 직전의 *GasLeak* 가 멈춤의 직접 원인일 가능성이 높습니다.",
         ].join("\n"),
+        table: {
+          columns: ["timestamp", "alarm", "severity", "note"],
+          rows: [
+            { timestamp: "14:23:11", alarm: "GasLeak", severity: "warning", note: "SiH4 line" },
+            { timestamp: "14:25:47", alarm: "GasLeak", severity: "warning", note: "SiH4 line (recur)" },
+            { timestamp: "14:26:02", alarm: "EMO", severity: "critical", note: "Emergency Off — auto interlock" },
+          ],
+        },
       },
       {
         user: "GasLeak 알람의 원인 센서가 무엇인가요?",

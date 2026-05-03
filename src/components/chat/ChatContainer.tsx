@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import { parseSseStream } from "@/lib/sse";
-import type { ContextRow, Message } from "@/lib/types";
+import type { ContextRow, Message, MessageTable } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
@@ -25,6 +25,7 @@ import {
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
+type StreamPayload = TokenPayload | ErrorPayload | MessageTable;
 
 type DemoMeta = { scenarioId: string; turnIndex: number };
 type DemoState = DemoMeta & { ended: boolean };
@@ -147,6 +148,9 @@ export function ChatContainer() {
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
+      // 표 페이로드(#34) 는 모든 토큰 스트리밍이 끝난 뒤 `done` 이벤트
+      // 시점에 한 번에 적용 → 응답이 다 끝나고 자연스럽게 표가 등장.
+      let pendingTable: MessageTable | null = null;
 
       const hasRange =
         timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
@@ -183,9 +187,7 @@ export function ChatContainer() {
         ]);
         assistantInserted = true;
 
-        for await (const ev of parseSseStream<TokenPayload | ErrorPayload>(
-          res.body,
-        )) {
+        for await (const ev of parseSseStream<StreamPayload>(res.body)) {
           if (ev.event === "token") {
             const piece = (ev.data as TokenPayload).content;
             setMessages((prev) =>
@@ -195,7 +197,19 @@ export function ChatContainer() {
                   : m,
               ),
             );
+          } else if (ev.event === "table") {
+            // 들어오는 즉시 적용하지 않고 보관 — `done` 시점에 한 번에 적용.
+            pendingTable = ev.data as MessageTable;
           } else if (ev.event === "done") {
+            // 모든 토큰이 끝난 시점 — 표가 있으면 이때 화면에 등장.
+            if (pendingTable && assistantInserted) {
+              const table = pendingTable;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, table } : m,
+                ),
+              );
+            }
             break;
           } else if (ev.event === "error") {
             const msg =
@@ -406,7 +420,18 @@ export function ChatContainer() {
         <ChatHeader onNewConversation={handleNewConversation} />
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-chat-narrow px-lg py-xl">
+          {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
+              풍선 자체는 항상 중앙(`[1fr | 768 | 1fr]`)에 두어 표 유무에
+              따라 움직이지 않음. 풍선이 오른쪽으로 슬라이드되는 더 적극
+              적인 레이아웃은 별도 이슈에서 검토. */}
+          <div
+            className={[
+              "mx-auto py-xl",
+              messages.length === 0
+                ? "max-w-chat-narrow px-lg"
+                : "max-w-chat-narrow px-lg xl:max-w-none xl:px-[5vw]",
+            ].join(" ")}
+          >
             {messages.length === 0 ? (
               <ChatEmptyState onScenarioStart={handleScenarioStart} />
             ) : (
