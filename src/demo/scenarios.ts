@@ -312,6 +312,13 @@ export const SCENARIOS: readonly Scenario[] = [
             { timestamp: "09:10", step: "POST_PURGE", APC_PRESSURE: 0.60, RF_FORWARD: 0,    RF_REFLECTED: 0,  TEMP_TC1: 215, TEMP_TC2: 214, GAS_FLOW_SiH4: 0,   GAS_FLOW_NH3: 0,  GAS_FLOW_Ar: 130, MFC_OPEN_RATE: 38, CHAMBER_PRESSURE: 0.63, ESC_CURRENT: 0.0, EPD_INTENSITY: 0,    BIAS_VOLTAGE: 0,    COIL_TEMP: 30 },
           ],
         }],
+        recommendQuestion: [
+          // 첫 chip 은 turn 3 의 user 와 동일 — ghost text / chip 클릭 흐름이
+          // 동일하게 turn 3 로 자연스럽게 이어지도록 정렬 (#52)
+          "동종설비와 비교해줘",
+          "이상치 칼럼만 강조해줘",
+          "주요 센서별 상관관계 보여줘",
+        ],
       },
       // Turn 3 — 다중 paired 항목 검증용 (#45). 표 2 + 차트 2 = 4개를
       // 한 메시지에 담아 좌·우 분배 / collapsible 카드 / 디폴트 펼침
