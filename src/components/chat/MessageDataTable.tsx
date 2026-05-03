@@ -126,29 +126,71 @@ export function MessageDataTable({
     }
   };
 
+  const toggleCollapse = () => setCollapseExpanded((v) => !v);
+
   return (
     <>
       <div className="w-fit max-w-full border border-brand-ink bg-brand-canvas">
-        {/* 제목 행 — 표 테두리 안 맨 위, 헤더 위. 컬럼 전체 폭. 토글은
-            우측. 클릭하면 본문이 슬라이드 다운/업. */}
-        <button
-          type="button"
-          onClick={() => setCollapseExpanded((v) => !v)}
-          aria-expanded={collapseExpanded}
-          className="w-full flex items-center justify-between gap-sm px-md py-xs bg-brand-surface-soft hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-        >
-          <span className="flex items-baseline gap-sm min-w-0 text-left">
+        {/* 제목 행 — 표 테두리 안 맨 위, 헤더 위. 컬럼 전체 폭.
+            구성: [제목 클릭 영역] [액션 버튼들 (펼친 상태에서만)] [chevron]
+            제목 / chevron 영역은 collapse 토글, 액션 버튼은 자기 동작. */}
+        <div className="w-full flex items-center bg-brand-surface-soft">
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            aria-expanded={collapseExpanded}
+            className="flex-1 min-w-0 flex items-baseline gap-sm text-left px-md py-xs hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
             <span className="font-sans text-body-sm text-brand-ink truncate">
               {title}
             </span>
             <span className="font-sans text-caption text-brand-muted truncate">
               {table.rows.length}행 × {columns.length}칼럼
             </span>
-          </span>
-          <Chevron expanded={collapseExpanded} />
-        </button>
+          </button>
+          {collapseExpanded && (
+            <div className="flex gap-xxs px-xs shrink-0">
+              {showHeightToggle && (
+                <TableActionButton
+                  onClick={() => setHeightExpanded((v) => !v)}
+                  aria-label={heightExpanded ? "표 접기" : "표 풀 펼침"}
+                  aria-expanded={heightExpanded}
+                >
+                  {heightExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                  <span>{heightExpanded ? "접기" : "펼치기"}</span>
+                </TableActionButton>
+              )}
+              {showMaximizeToggle && (
+                <TableActionButton
+                  onClick={() => setMaximized((v) => !v)}
+                  aria-label={maximized ? "표 확장 닫기" : "표 확장"}
+                  aria-expanded={maximized}
+                >
+                  {maximized ? <MinimizeIcon /> : <MaximizeIcon />}
+                  <span>{maximized ? "축소" : "확장"}</span>
+                </TableActionButton>
+              )}
+              <TableActionButton
+                onClick={handleCopyCsv}
+                aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
+              >
+                {justCopied ? <CheckIcon /> : <CopyIcon />}
+                <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
+              </TableActionButton>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            aria-label={collapseExpanded ? "표 접기" : "표 펼치기"}
+            aria-expanded={collapseExpanded}
+            className="shrink-0 px-md py-xs hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <Chevron expanded={collapseExpanded} />
+          </button>
+        </div>
 
-        {/* 본문 — 슬라이드 다운/업 (grid-template-rows transition) */}
+        {/* 본문 — 표 영역만. 액션은 제목 행으로 이동됐으므로 여기엔 표만. */}
         <div
           className={[
             "grid transition-[grid-template-rows] duration-200 ease-out",
@@ -157,37 +199,6 @@ export function MessageDataTable({
         >
           <div className="overflow-hidden">
             <div className="border-t border-brand-ink">
-              {/* 액션 행 */}
-              <div className="flex justify-end gap-xxs px-xs py-xxs border-b border-brand-hairline-soft">
-                {showHeightToggle && (
-                  <TableActionButton
-                    onClick={() => setHeightExpanded((v) => !v)}
-                    aria-label={heightExpanded ? "표 접기" : "표 풀 펼침"}
-                    aria-expanded={heightExpanded}
-                  >
-                    {heightExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-                    <span>{heightExpanded ? "접기" : "펼치기"}</span>
-                  </TableActionButton>
-                )}
-                {showMaximizeToggle && (
-                  <TableActionButton
-                    onClick={() => setMaximized((v) => !v)}
-                    aria-label={maximized ? "표 확장 닫기" : "표 확장"}
-                    aria-expanded={maximized}
-                  >
-                    {maximized ? <MinimizeIcon /> : <MaximizeIcon />}
-                    <span>{maximized ? "축소" : "확장"}</span>
-                  </TableActionButton>
-                )}
-                <TableActionButton
-                  onClick={handleCopyCsv}
-                  aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
-                >
-                  {justCopied ? <CheckIcon /> : <CopyIcon />}
-                  <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
-                </TableActionButton>
-              </div>
-              {/* 표 영역 */}
               <div
                 ref={scrollRef}
                 className="overflow-auto"

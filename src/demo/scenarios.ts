@@ -134,16 +134,26 @@ export const SCENARIOS: readonly Scenario[] = [
           "",
           "> STEP 종료 시점 기준으로 데이터가 발생하기 때문에 09:10에 센서값 3으로 데이터가 발생했습니다.",
         ].join("\n"),
-        // 좌측 paired 표(#34) + 우측 paired 차트(#37) 가 같은 시계열을
-        // 공유. STEP 종료 시점인 09:06:00 부근에서 최댓값 3.00 으로 피크.
+        // 다중 paired 항목 (#45) — 표 2 + 차트 2. 같은 데이터를 다른
+        // 관점(시계열 / STEP별 통계)으로 두 번씩.
         tables: [
           {
             title: "APC_PRESSURE 시계열",
             columns: ["timestamp", "step", "APC_PRESSURE (mTorr)"],
             rows: APC_PRESSURE_TREND.slice(),
           },
+          {
+            title: "STEP별 APC_PRESSURE 통계",
+            columns: ["step", "duration", "min", "avg", "max"],
+            rows: [
+              { step: "PRE_HEAT",   duration: "2 분", min: 0.30, avg: 0.49, max: 0.65 },
+              { step: "MAIN_ETCH",  duration: "7 분", min: 1.20, avg: 2.49, max: 3.00 },
+              { step: "POST_PURGE", duration: "2 분", min: 0.60, avg: 0.85, max: 1.20 },
+            ],
+          },
         ],
-        charts: [{
+        charts: [
+          {
           type: "line",
           data: APC_PRESSURE_TREND.slice(),
           options: {
@@ -182,7 +192,22 @@ export const SCENARIOS: readonly Scenario[] = [
               },
             ],
           },
-        }],
+        },
+          {
+            type: "bar",
+            data: [
+              { step: "PRE_HEAT",   avg: 0.49, max: 0.65 },
+              { step: "MAIN_ETCH",  avg: 2.49, max: 3.00 },
+              { step: "POST_PURGE", avg: 0.85, max: 1.20 },
+            ],
+            options: {
+              title: "STEP별 APC_PRESSURE — 평균 / 최대",
+              xKey: "step",
+              yKeys: ["avg", "max"],
+              yLabel: "mTorr",
+            },
+          },
+        ],
         contextPanel: [
           {
             id: "demo-shape-eq-1",
