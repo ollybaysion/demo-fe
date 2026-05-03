@@ -46,7 +46,7 @@ type ErrorPayload = { message: string };
 /**
  * `done` 이벤트 페이로드 — 백엔드(/api/fdc/v1/chat) 가 응답 끝에
  * 메타 + 부수 페이로드(표 / 차트 / 추천 후속 질문) 를 한 번에 동봉.
- * docs/api.md §5 참고.
+ * API.md §1 (POST /api/fdc/v1/chat) 참고.
  */
 type DonePayload = {
   messageId: string;
@@ -200,7 +200,7 @@ export function ChatContainer() {
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
       try {
-        const res = await fetch("/api/chat", {
+        const res = await fetch("/api/fdc/v1/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -123,7 +123,7 @@ export async function POST(request: Request): Promise<Response> {
   // 요청 단위 logger + requestId. 응답 헤더에도 첨부해 클라이언트
   // 가 같은 ID 로 서버 로그를 추적할 수 있게.
   const requestId = newRequestId();
-  const log = makeRequestLogger(requestId, "POST /api/chat");
+  const log = makeRequestLogger(requestId, "POST /api/fdc/v1/chat");
   const startedAt = Date.now();
 
   let body: ChatRequestBody;
