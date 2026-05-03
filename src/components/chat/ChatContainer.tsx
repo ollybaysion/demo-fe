@@ -2,6 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
+import {
+  type ChatError,
+  chatErrorMessage,
+  classifyFetchError,
+  classifyHttpStatus,
+} from "@/lib/chatErrors";
+
+/**
+ * 요청 timeout (#32). 일반 응답이 30초 안에 안 끝나면 AbortController 로 자르고
+ * timeout 분류로 사용자 안내. 데모/mock 은 짧아 영향 없음.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
 import { parseSseStream } from "@/lib/sse";
 import type {
   ContextRow,
@@ -171,6 +183,10 @@ export function ChatContainer() {
       const hasRange =
         timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
 
+      // 응답 지연 시 AbortController 로 자르고 timeout 으로 분류 (#32).
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -181,14 +197,12 @@ export function ChatContainer() {
             timeRange: hasRange ? timeRangeSnapshot : undefined,
             demo: demoMeta,
           }),
+          signal: controller.signal,
         });
 
         if (!res.ok || !res.body) {
-          const reason =
-            res.status === 0
-              ? "네트워크 연결을 확인해주세요."
-              : `요청 실패 (${res.status}). 잠시 후 다시 시도해주세요.`;
-          appendErrorMessage(setMessages, reason);
+          const e = classifyHttpStatus(res.status);
+          appendErrorMessage(setMessages, chatErrorMessage(e), e);
           return;
         }
 
@@ -247,18 +261,19 @@ export function ChatContainer() {
             }
             break;
           } else if (ev.event === "error") {
-            const msg =
+            const raw =
               (ev.data as ErrorPayload).message ?? "응답 생성 중 오류";
-            appendErrorMessage(setMessages, msg);
+            const e: ChatError = { kind: "stream", raw };
+            appendErrorMessage(setMessages, chatErrorMessage(e), e);
             break;
           }
         }
       } catch (err) {
-        const reason =
-          err instanceof Error ? err.message : "응답을 받지 못했습니다.";
-        appendErrorMessage(setMessages, reason);
+        const e = classifyFetchError(err);
+        appendErrorMessage(setMessages, chatErrorMessage(e), e);
         void assistantInserted;
       } finally {
+        clearTimeout(timeoutId);
         setIsStreaming(false);
       }
     },
@@ -608,6 +623,7 @@ export function ChatContainer() {
 function appendErrorMessage(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
   content: string,
+  detail?: ChatError,
 ) {
   setMessages((prev) => [
     ...prev,
@@ -616,6 +632,13 @@ function appendErrorMessage(
       role: "error",
       content,
       createdAt: Date.now(),
+      ...(detail && {
+        errorDetail: {
+          kind: detail.kind,
+          status: detail.status,
+          raw: detail.raw,
+        },
+      }),
     },
   ]);
 }

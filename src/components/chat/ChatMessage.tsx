@@ -77,18 +77,33 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
           role="alert"
           className="max-w-[85%] rounded-lg px-md py-sm bg-brand-error-soft text-brand-error font-sans text-chat-message-body"
         >
-          {message.content}
-          {onRegenerate && (
-            <>
-              {" "}
-              <button
-                type="button"
-                onClick={onRegenerate}
-                className="font-sans text-chat-message-body text-brand-primary underline underline-offset-2 hover:text-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs"
-              >
-                다시 시도
-              </button>
-            </>
+          <div>
+            {message.content}
+            {onRegenerate && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={onRegenerate}
+                  className="font-sans text-chat-message-body text-brand-primary underline underline-offset-2 hover:text-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs"
+                >
+                  다시 시도
+                </button>
+              </>
+            )}
+          </div>
+          {message.errorDetail && (
+            <details className="mt-xs">
+              <summary className="text-caption text-brand-error/70 cursor-pointer hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-error/30 rounded-xs">
+                원인 보기
+              </summary>
+              <div className="mt-xxs text-caption text-brand-error/80 font-mono whitespace-pre-wrap break-words">
+                kind: {message.errorDetail.kind}
+                {typeof message.errorDetail.status === "number" &&
+                  `\nstatus: ${message.errorDetail.status}`}
+                {message.errorDetail.raw && `\nraw: ${message.errorDetail.raw}`}
+              </div>
+            </details>
           )}
         </div>
       </li>
