@@ -27,8 +27,25 @@ function emptyRow(): ContextRow {
   return { id: newId("eq"), equipment: "", chambers: [emptyChamber()] };
 }
 
+/**
+ * 첫 로드(또는 reset) 시점에 채워두는 데모용 행. mock equipment.ts
+ * 와 매칭되도록 ETCH-01 / 챔버 A / APC_PRESSURE 로 시작 — 사용자가
+ * 별도 입력 없이도 컨텍스트/요약/상세 패널을 즉시 시연할 수 있게.
+ */
 function defaultRows(): ContextRow[] {
-  return [emptyRow()];
+  return [
+    {
+      id: newId("eq"),
+      equipment: "ETCH-01",
+      chambers: [
+        {
+          id: newId("ch"),
+          name: "A",
+          sensors: [{ id: newId("sn"), name: "APC_PRESSURE" }],
+        },
+      ],
+    },
+  ];
 }
 
 function todayRange(): TimeRange {
