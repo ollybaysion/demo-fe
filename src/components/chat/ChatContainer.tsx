@@ -575,6 +575,10 @@ export function ChatContainer() {
         open={rightPanel === "context" && detailOpen}
         equipmentNames={equipmentNames}
         onClose={() => setDetailOpen(false)}
+        onImportToChat={(msg) => {
+          setMessages((prev) => [...prev, msg]);
+          setDetailOpen(false);
+        }}
       />
 
       <SummaryPanel

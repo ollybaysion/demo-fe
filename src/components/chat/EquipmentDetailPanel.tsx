@@ -46,6 +46,11 @@ type Props = {
   /** ContextRow.equipment 값 (기본 선택은 첫 행). */
   equipmentNames: string[];
   onClose: () => void;
+  /**
+   * 비교 결과를 어시스턴트 메시지로 채팅에 인라인 삽입 (#79 Phase 3).
+   * 메시지에는 통계 비교 표 + 시계열 차트가 paired entry 로 동봉.
+   */
+  onImportToChat?: (message: import("@/lib/types").Message) => void;
 };
 
 type Category = "equipment" | "chamber" | "sensor" | "compare";
@@ -61,6 +66,7 @@ export function EquipmentDetailPanel({
   open,
   equipmentNames,
   onClose,
+  onImportToChat,
 }: Props) {
   const [selectedName, setSelectedName] = useState<string>(
     equipmentNames[0] ?? "",
@@ -140,6 +146,7 @@ export function EquipmentDetailPanel({
             peerOptions={peers.map((p) => p.id)}
             peerId={peerActual?.id ?? ""}
             onPeerChange={setPeerName}
+            onImportToChat={onImportToChat}
           />
         ) : (
           <>
@@ -428,6 +435,7 @@ function CompareView({
   peerOptions,
   peerId,
   onPeerChange,
+  onImportToChat,
 }: {
   currentId: string;
   currentOptions: string[];
@@ -435,6 +443,7 @@ function CompareView({
   peerOptions: string[];
   peerId: string;
   onPeerChange: (v: string) => void;
+  onImportToChat?: (message: import("@/lib/types").Message) => void;
 }) {
   const [recipe, setRecipe] = useState<string>(COMPARE_RECIPES[0]);
   const [windowDays, setWindowDays] = useState<CompareWindowDays>(7);
@@ -496,24 +505,50 @@ function CompareView({
       .filter((s) => isSensorOn(s.sensor));
   const visibleSeries = data.series.filter((s) => isSensorOn(s.sensor));
 
+  function handleImportToChat() {
+    if (!onImportToChat || !data) return;
+    const msg = buildCompareMessage(data, isSensorOn);
+    onImportToChat(msg);
+  }
+  const importDisabled =
+    !onImportToChat ||
+    !data.current.matchedRun ||
+    !data.baseline.matchedRun ||
+    visibleStats("current").length === 0;
+
   return (
     <section className="flex flex-col gap-md">
-      {/* 공정 컨텍스트 + 설비 셀렉트 */}
+      {/* 공정 컨텍스트 + 설비 셀렉트 + [채팅 인입] */}
       <header className="flex flex-col gap-sm">
-        <div className="flex flex-wrap items-center gap-md">
-          <ComparePicker
-            label="현재 설비"
-            value={currentId}
-            options={currentOptions}
-            onChange={onCurrentChange}
-          />
-          <span className="text-body-sm text-brand-muted">vs</span>
-          <ComparePicker
-            label="동종설비 (baseline)"
-            value={peerId}
-            options={peerOptions}
-            onChange={onPeerChange}
-          />
+        <div className="flex flex-wrap items-center justify-between gap-md">
+          <div className="flex flex-wrap items-center gap-md">
+            <ComparePicker
+              label="현재 설비"
+              value={currentId}
+              options={currentOptions}
+              onChange={onCurrentChange}
+            />
+            <span className="text-body-sm text-brand-muted">vs</span>
+            <ComparePicker
+              label="동종설비 (baseline)"
+              value={peerId}
+              options={peerOptions}
+              onChange={onPeerChange}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleImportToChat}
+            disabled={importDisabled}
+            title={
+              importDisabled
+                ? "양쪽 매칭 run 이 있고 센서가 1개 이상 선택되어야 합니다."
+                : "비교 결과를 채팅에 어시스턴트 메시지로 인라인 삽입"
+            }
+            className="shrink-0 inline-flex items-center gap-xxs px-md py-xs rounded-md border border-brand-primary text-button text-brand-primary hover:bg-brand-primary hover:text-brand-on-primary disabled:border-brand-hairline disabled:text-brand-muted-soft disabled:hover:bg-transparent disabled:hover:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            이 차이를 채팅에 가져오기 →
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-md">
           <ComparePicker
@@ -1475,6 +1510,112 @@ function AlarmMatrix({ data }: { data: CompareData }) {
       </table>
     </div>
   );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// buildCompareMessage (#79 Phase 3 — 채팅 인입)
+// ────────────────────────────────────────────────────────────────────
+
+/**
+ * 비교 결과를 어시스턴트 메시지로 변환. 메시지에는:
+ *   - content: 마크다운 요약 (메타 + 핵심 차이 한두 줄)
+ *   - tables: paired 통계 비교 표
+ *   - charts: paired 시계열 차트 (센서별 1개)
+ *
+ * 다음 사용자 질의가 있으면 history 에 이 메시지가 컨텍스트로 들어가
+ * 백엔드가 비교 결과를 참고해 답할 수 있음.
+ */
+function buildCompareMessage(
+  data: import("@/demo/equipment").CompareData,
+  isSensorOn: (name: string) => boolean,
+): import("@/lib/types").Message {
+  const cur = data.current;
+  const base = data.baseline;
+  const visibleStats = cur.sensorStats.filter((s) => isSensorOn(s.sensor));
+  const baseByName = new Map(base.sensorStats.map((b) => [b.sensor, b]));
+
+  const sigDiffs = visibleStats
+    .map((s) => {
+      const b = baseByName.get(s.sensor);
+      if (!b || b.mean === 0) return null;
+      const pct = ((s.mean - b.mean) / b.mean) * 100;
+      return Math.abs(pct) >= 5 ? { sensor: s.sensor, pct } : null;
+    })
+    .filter((x): x is { sensor: string; pct: number } => x !== null)
+    .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+  const headline =
+    sigDiffs.length > 0
+      ? `**${sigDiffs[0].sensor}** 평균이 baseline 대비 \`${sigDiffs[0].pct > 0 ? "+" : ""}${sigDiffs[0].pct.toFixed(1)}%\``
+      : "평균 차이 5% 이상인 센서가 없음 (정상 범위 내)";
+
+  const content = [
+    `### ${cur.equipmentId} vs ${base.equipmentId} 비교`,
+    "",
+    `- **레시피**: \`${data.recipe}\` · **윈도우**: 셋업 후 ${data.windowDays}일 · **매칭 모드**: post-setup`,
+    `- **현재** 매칭 run: \`${cur.matchedRun?.id ?? "-"}\` (${cur.matchedRun?.startTime ?? "-"} · ${cur.matchedRun?.durationMin ?? "-"}분)`,
+    `- **baseline** 매칭 run: \`${base.matchedRun?.id ?? "-"}\` (${base.matchedRun?.startTime ?? "-"} · ${base.matchedRun?.durationMin ?? "-"}분)`,
+    "",
+    `> ${headline}`,
+    "",
+    "---",
+    "",
+    "*이 비교 결과(요약·표·차트)는 다음 질의의 history 컨텍스트에 자동 포함됩니다 — 이어지는 질문에서 별도 설명 없이 바로 참조하실 수 있어요.*",
+  ].join("\n");
+
+  const statsTable: import("@/lib/types").MessageTableEntry = {
+    title: `센서 통계 비교 — ${cur.equipmentId} vs ${base.equipmentId}`,
+    columns: [
+      "센서",
+      `현재 (${cur.equipmentId})`,
+      `baseline (${base.equipmentId})`,
+      "평균 차이 (%)",
+      "이상 횟수 (현재/baseline)",
+    ],
+    rows: visibleStats.map((s) => {
+      const b = baseByName.get(s.sensor);
+      const diffPct =
+        b && b.mean !== 0 ? ((s.mean - b.mean) / b.mean) * 100 : null;
+      return {
+        센서: s.sensor,
+        [`현재 (${cur.equipmentId})`]: `${s.mean} ±${s.stddev}`,
+        [`baseline (${base.equipmentId})`]: b ? `${b.mean} ±${b.stddev}` : "—",
+        "평균 차이 (%)":
+          diffPct === null
+            ? "—"
+            : `${diffPct > 0 ? "+" : ""}${diffPct.toFixed(1)}%`,
+        "이상 횟수 (현재/baseline)": `${s.anomalies} / ${b?.anomalies ?? "—"}`,
+      };
+    }),
+    side: "left",
+  };
+
+  const charts: import("@/lib/types").MessageChartEntry[] = data.series
+    .filter((s) => isSensorOn(s.sensor))
+    .map((s) => ({
+      type: "line",
+      data: s.data.map((p) => ({
+        t: p.t,
+        [cur.equipmentId]: p[cur.equipmentId] as number,
+        [base.equipmentId]: p[base.equipmentId] as number,
+      })),
+      options: {
+        title: s.sensor,
+        xKey: "t",
+        yKeys: [cur.equipmentId, base.equipmentId],
+        xLabel: "경과 분",
+      },
+      side: "right",
+    }));
+
+  return {
+    id: `compare_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    role: "assistant",
+    content,
+    createdAt: Date.now(),
+    tables: [statsTable],
+    charts,
+  };
 }
 
 function Empty({ children }: { children: ReactNode }) {
