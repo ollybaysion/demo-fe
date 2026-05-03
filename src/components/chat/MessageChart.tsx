@@ -152,7 +152,8 @@ function renderChart(
           fontSize: 13,
           fontWeight: 500,
           fill: "#3d3d3a", // brand-body — 시리즈 색과 충돌 안 나는 중립
-          position: "insideTop" as const,
+          // 하단 안쪽에 두어 reference line 라벨(상단)과 겹침 방지.
+          position: "insideBottom" as const,
         }
       : undefined;
     const fillProp = ra.fill
