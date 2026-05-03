@@ -2,6 +2,7 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import {
+  COL_NAMES,
   type EquipmentDetail,
   getEquipmentDetail,
   getPeers,
@@ -10,11 +11,12 @@ import {
 /**
  * 컨텍스트 패널(#16)에서 한 단계 더 들어가는 70vw 슬라이드 패널 (#27).
  *
+ * 카테고리 세그먼트(설비/챔버/센서) 중 한 가지만 표시. 양쪽 블록
+ * (현재 설비 / 동종설비 비교)이 같은 카테고리를 공유해 1:1 비교가
+ * 자연스럽게.
+ *
  * Phase 1: mock 데이터 (`@/demo/equipment`).
  * Phase 2: 백엔드 API (`/api/equipment/:id`, `.../peers`)로 교체.
- *
- * 위치: 우측 ContextPanel(320px)의 왼쪽에 fixed 으로 자리. translate-x로
- * 슬라이드 인. ContextPanel은 그대로 두고 그 안쪽으로 70vw 확장.
  */
 type Props = {
   open: boolean;
@@ -23,15 +25,26 @@ type Props = {
   onClose: () => void;
 };
 
+type Category = "equipment" | "chamber" | "sensor";
+
+const CATEGORY_OPTIONS: ReadonlyArray<{ id: Category; label: string }> = [
+  { id: "equipment", label: "설비 정보" },
+  { id: "chamber", label: "챔버 정보" },
+  { id: "sensor", label: "센서 정보" },
+];
+
 export function EquipmentDetailPanel({
   open,
   equipmentNames,
   onClose,
 }: Props) {
-  // 상단: 현재 설비 선택 — 기본값은 #16 첫 행
   const [selectedName, setSelectedName] = useState<string>(
     equipmentNames[0] ?? "",
   );
+  const [category, setCategory] = useState<Category>("equipment");
+  // 양쪽 블록(현재/동종)이 공유하는 칼럼 호버 상태. 한쪽 테이블의
+  // 칼럼에 마우스를 올리면 반대편 같은 칼럼도 함께 강조됨.
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
 
   // equipmentNames가 바뀌면(reset 등) selection도 따라가게
   const effectiveSelected = useMemo(() => {
@@ -52,7 +65,6 @@ export function EquipmentDetailPanel({
       aria-label="설비 상세 정보 확장 패널"
       aria-hidden={!open}
       className={[
-        // ContextPanel은 right: 0 ~ 320px 차지. 본 패널은 그 왼쪽 fixed.
         "fixed top-0 bottom-0 z-30",
         "bg-brand-canvas border-l border-brand-hairline shadow-md",
         "flex-col",
@@ -86,24 +98,38 @@ export function EquipmentDetailPanel({
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-lg py-lg flex flex-col gap-xl">
-        {/* 상단 — 현재 설비 상세 */}
+      {/* 카테고리 세그먼트 — 양쪽 블록이 같은 카테고리를 공유 */}
+      <div className="px-lg pt-md">
+        <CategorySegment value={category} onChange={setCategory} />
+      </div>
+
+      <div
+        className="flex-1 overflow-y-auto px-lg py-lg flex flex-col gap-xl"
+        // 패널 영역에서 포인터가 빠져나가면 호버 강조 해제. 셀-셀 이동
+        // 사이의 깜빡임을 막기 위해 컨테이너에서만 leave 처리.
+        onMouseLeave={() => setHoveredCol(null)}
+      >
         <DetailBlock
           label="현재 설비"
           options={equipmentNames}
           value={effectiveSelected}
           onChange={setSelectedName}
           detail={detail}
+          category={category}
+          hoveredCol={hoveredCol}
+          onHoverCol={setHoveredCol}
           emptyHint="조회할 설비가 없습니다. 컨텍스트 패널에서 설비를 입력해주세요."
         />
 
-        {/* 하단 — 동종설비 비교 */}
         <DetailBlock
           label="동종설비 비교"
           options={peers.map((p) => p.id)}
           value={peerActual?.id ?? ""}
           onChange={setPeerName}
           detail={peerActual}
+          category={category}
+          hoveredCol={hoveredCol}
+          onHoverCol={setHoveredCol}
           emptyHint={
             !detail
               ? "현재 설비가 선택되지 않았습니다."
@@ -118,7 +144,48 @@ export function EquipmentDetailPanel({
 }
 
 // ────────────────────────────────────────────────────────────────────
-// DetailBlock — dropdown + 3 read-only tables
+// Category segment (tabs)
+// ────────────────────────────────────────────────────────────────────
+
+function CategorySegment({
+  value,
+  onChange,
+}: {
+  value: Category;
+  onChange: (v: Category) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="상세 정보 카테고리"
+      className="inline-flex rounded-md border border-brand-hairline bg-brand-surface-card p-[2px]"
+    >
+      {CATEGORY_OPTIONS.map((opt) => {
+        const active = opt.id === value;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.id)}
+            className={[
+              "px-md py-xs text-body-sm rounded-sm transition-colors",
+              active
+                ? "bg-brand-canvas text-brand-ink shadow-sm"
+                : "text-brand-muted hover:text-brand-ink",
+            ].join(" ")}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// DetailBlock — equipment dropdown + chosen-category view
 // ────────────────────────────────────────────────────────────────────
 
 function DetailBlock({
@@ -127,6 +194,9 @@ function DetailBlock({
   value,
   onChange,
   detail,
+  category,
+  hoveredCol,
+  onHoverCol,
   emptyHint,
 }: {
   label: string;
@@ -134,6 +204,9 @@ function DetailBlock({
   value: string;
   onChange: (v: string) => void;
   detail: EquipmentDetail | undefined;
+  category: Category;
+  hoveredCol: number | null;
+  onHoverCol: (col: number | null) => void;
   emptyHint?: string;
 }) {
   return (
@@ -158,49 +231,12 @@ function DetailBlock({
       </header>
 
       {detail ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
-          <Card title="설비 정보">
-            <KeyValueGrid
-              entries={[
-                ["설비명", detail.name],
-                ["모델", detail.model],
-                ["제조사", detail.vendor],
-                ["설치일", detail.installedAt],
-                ["상태", detail.status],
-              ]}
-            />
-          </Card>
-          <Card title="챔버 정보">
-            {detail.chambers.length === 0 ? (
-              <Empty>등록된 챔버 없음</Empty>
-            ) : (
-              <Table
-                columns={["챔버", "모델", "용량", "상태"]}
-                rows={detail.chambers.map((c) => [
-                  c.name,
-                  c.model,
-                  c.capacity,
-                  c.status,
-                ])}
-              />
-            )}
-          </Card>
-          <Card title="센서 정보">
-            {detail.sensors.length === 0 ? (
-              <Empty>등록된 센서 없음</Empty>
-            ) : (
-              <Table
-                columns={["센서명", "타입", "범위", "단위"]}
-                rows={detail.sensors.map((s) => [
-                  s.name,
-                  s.type,
-                  s.range,
-                  s.unit,
-                ])}
-              />
-            )}
-          </Card>
-        </div>
+        <CategoryView
+          detail={detail}
+          category={category}
+          hoveredCol={hoveredCol}
+          onHoverCol={onHoverCol}
+        />
       ) : (
         <Empty>{emptyHint ?? "정보 없음"}</Empty>
       )}
@@ -208,68 +244,122 @@ function DetailBlock({
   );
 }
 
-function Card({
-  title,
-  children,
+function CategoryView({
+  detail,
+  category,
+  hoveredCol,
+  onHoverCol,
 }: {
-  title: string;
-  children: ReactNode;
+  detail: EquipmentDetail;
+  category: Category;
+  hoveredCol: number | null;
+  onHoverCol: (col: number | null) => void;
 }) {
+  // 모든 카테고리가 동일한 와이드 테이블 레이아웃 — 칼럼은 항상 가로
+  // 헤더로 나열. 설비는 1행, 챔버/센서는 항목당 1행.
+  if (category === "equipment") {
+    return (
+      <Card>
+        <WideTable
+          columns={[...COL_NAMES]}
+          rows={[{ key: detail.id, cells: detail.values }]}
+          hoveredCol={hoveredCol}
+          onHoverCol={onHoverCol}
+        />
+      </Card>
+    );
+  }
+
+  if (category === "chamber") {
+    if (detail.chambers.length === 0) {
+      return <Empty>등록된 챔버 없음</Empty>;
+    }
+    return (
+      <Card>
+        <WideTable
+          columns={[...COL_NAMES]}
+          rows={detail.chambers.map((c) => ({ key: c.id, cells: c.values }))}
+          hoveredCol={hoveredCol}
+          onHoverCol={onHoverCol}
+        />
+      </Card>
+    );
+  }
+
+  // sensor
+  if (detail.sensors.length === 0) {
+    return <Empty>등록된 센서 없음</Empty>;
+  }
+  return (
+    <Card>
+      <WideTable
+        columns={[...COL_NAMES]}
+        rows={detail.sensors.map((s) => ({ key: s.id, cells: s.values }))}
+        hoveredCol={hoveredCol}
+        onHoverCol={onHoverCol}
+      />
+    </Card>
+  );
+}
+
+function Card({ children }: { children: ReactNode }) {
   return (
     <article className="rounded-md border border-brand-hairline bg-brand-canvas">
-      <header className="px-md py-sm border-b border-brand-hairline-soft">
-        <h4 className="font-sans text-caption text-brand-muted">{title}</h4>
-      </header>
       <div className="p-md">{children}</div>
     </article>
   );
 }
 
-function KeyValueGrid({ entries }: { entries: Array<[string, string]> }) {
-  return (
-    <dl className="grid grid-cols-[max-content_1fr] gap-x-md gap-y-xs">
-      {entries.map(([k, v]) => (
-        <div key={k} className="contents">
-          <dt className="text-caption text-brand-muted">{k}</dt>
-          <dd className="text-body-sm text-brand-ink">{v}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function Table({
+function WideTable({
   columns,
   rows,
+  hoveredCol,
+  onHoverCol,
 }: {
   columns: string[];
-  rows: string[][];
+  rows: Array<{ key: string; cells: string[] }>;
+  hoveredCol: number | null;
+  onHoverCol: (col: number | null) => void;
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-body-sm">
+      {/* font-mono: JetBrains Mono — 칼럼 헤더/값의 글자폭을 균일하게 */}
+      <table className="text-body-sm font-mono">
         <thead>
           <tr className="border-b border-brand-hairline">
-            {columns.map((c) => (
-              <th
-                key={c}
-                className="text-left font-sans text-caption text-brand-muted py-xxs px-xs"
-              >
-                {c}
-              </th>
-            ))}
+            {columns.map((c, j) => {
+              const active = hoveredCol === j;
+              return (
+                <th
+                  key={c}
+                  onMouseEnter={() => onHoverCol(j)}
+                  className={[
+                    "text-left text-caption py-xxs px-md whitespace-nowrap transition-colors",
+                    active
+                      ? "bg-brand-primary/10 text-brand-ink"
+                      : "text-brand-muted",
+                  ].join(" ")}
+                >
+                  {c}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
+          {rows.map((row) => (
             <tr
-              key={i}
+              key={row.key}
               className="border-b border-brand-hairline-soft last:border-b-0"
             >
-              {row.map((cell, j) => (
+              {row.cells.map((cell, j) => (
                 <td
                   key={j}
-                  className="text-brand-ink py-xs px-xs align-top"
+                  onMouseEnter={() => onHoverCol(j)}
+                  className={[
+                    "text-brand-ink py-xs px-md whitespace-nowrap align-top transition-colors",
+                    hoveredCol === j ? "bg-brand-primary/10" : "",
+                  ].join(" ")}
                 >
                   {cell}
                 </td>
