@@ -46,9 +46,10 @@ export function MessageDataTable({
   // [확장] overlay — 가로 폭이 부모를 초과할 때 풍선과 같은 높이로 폭만
   // 풀로 펼쳐 표를 보는 모드 (#42). 메시지마다 독립 상태.
   const [maximized, setMaximized] = useState(false);
-  // 풍선 위치를 viewport 좌표계로 추적 — overlay 가 풍선 위에 정확히
-  // 겹치도록. 스크롤/리사이즈 시에도 따라 움직임.
-  const [bubbleRect, setBubbleRect] = useState<{
+  // overlay 위치/높이 — 풍선 위에 anchor 하되, 풍선이 너무 작은 경우엔
+  // 최소 60vh 보장(읽기 가능한 높이). viewport 안에 들어가도록 마진 cap.
+  // scroll/resize 시 갱신.
+  const [overlayRect, setOverlayRect] = useState<{
     top: number;
     height: number;
   } | null>(null);
@@ -77,16 +78,25 @@ export function MessageDataTable({
     return () => window.removeEventListener("keydown", onKey);
   }, [maximized]);
 
-  // overlay 가 켜져 있을 때 풍선 위치를 viewport 좌표로 트래킹. scroll /
-  // resize 모두 반응. capture 단계로 등록해 chat 스크롤 컨테이너의 내부
-  // 스크롤 이벤트도 잡음.
+  // overlay 가 켜져 있을 때 풍선 위치 + viewport 크기 기준으로 overlay
+  // 위치/높이를 계산. scroll / resize 시 capture 단계로 갱신해 내부
+  // 스크롤 컨테이너의 이벤트도 잡음.
   useEffect(() => {
     if (!maximized || !bubbleRef) return;
     const update = () => {
       const el = bubbleRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      setBubbleRect({ top: rect.top, height: rect.height });
+      const vh = window.innerHeight;
+      // 최소 60vh, 풍선 더 크면 풍선만큼.
+      const desired = Math.max(rect.height, vh * 0.6);
+      // viewport 안에 들어가도록 cap (위/아래 16px 마진).
+      const cappedHeight = Math.min(desired, vh - 32);
+      // top: 풍선 top 부터 시작, viewport 위쪽 16px 미만이면 16으로 끌어올림.
+      const desiredTop = Math.max(rect.top, 16);
+      // 그래도 viewport 아래로 넘치면 위로 밀어넣음.
+      const adjustedTop = Math.min(desiredTop, vh - cappedHeight - 16);
+      setOverlayRect({ top: adjustedTop, height: cappedHeight });
     };
     update();
     window.addEventListener("scroll", update, {
@@ -176,7 +186,7 @@ export function MessageDataTable({
           columns={columns}
           rows={table.rows}
           onClose={() => setMaximized(false)}
-          rect={bubbleRect}
+          rect={overlayRect}
         />
       )}
     </>
