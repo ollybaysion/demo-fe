@@ -364,7 +364,10 @@ export function ChatContainer() {
     setLeftPanel((p) => !p);
   }
 
-  const handleRetry = useCallback(() => {
+  // #30 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지
+  // 잘라낸 뒤 같은 컨텍스트로 다시 API 호출. 데모 시나리오 진행 중엔
+  // 호출되지 않도록 onRegenerate prop 자체를 빼서 버튼이 안 보이게 한다.
+  const handleRegenerate = useCallback(() => {
     setMessages((prev) => {
       const lastUserIndex = findLastIndex(prev, (m) => m.role === "user");
       if (lastUserIndex === -1) return prev;
@@ -410,7 +413,7 @@ export function ChatContainer() {
               <MessageList
                 messages={messages}
                 isStreaming={isStreaming}
-                onRetry={handleRetry}
+                onRegenerate={demoState ? undefined : handleRegenerate}
               />
             )}
           </div>
