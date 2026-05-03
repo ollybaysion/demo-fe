@@ -261,9 +261,11 @@ export const SCENARIOS: readonly Scenario[] = [
           end: "2026-05-02T09:10",
         },
         recommendQuestion: [
-          "동일 챔버의 다른 센서도 확인해줘",
-          "최근 1시간 추세는?",
+          // 첫 chip 은 turn 2 의 user 와 동일 — ghost text / chip 클릭 흐름이
+          // 동일하게 turn 2 로 자연스럽게 이어지도록 정렬 (#52)
+          "다른 주요 센서들도 모두 표로 같이 보여줘",
           "동종설비와 비교해줘",
+          "최근 1시간 추세는?",
         ],
       },
       // Turn 2 — wide-table edge case (#42 검증용). 16개 칼럼의 센서
@@ -432,10 +434,35 @@ export const SCENARIOS: readonly Scenario[] = [
           end: "2026-05-02T14:30",
         },
         recommendQuestion: [
+          // 첫 chip 은 turn 2 의 user 와 동일 — ghost text / chip 클릭 흐름이
+          // 동일하게 turn 2 로 자연스럽게 이어지도록 정렬 (#52)
           "수정 후 정상 발생 여부 확인해줘",
           "다른 STEP 의 트리거 조건도 점검해줘",
           "비슷한 케이스가 더 있는지 알려줘",
         ],
+      },
+      // Turn 2 (#52) — 첫 chip 흐름 이어가기. 트리거 수정 후 5분 단위로
+      // 데이터가 다시 발생하는 검증 표.
+      {
+        user: "수정 후 정상 발생 여부 확인해줘",
+        assistant: [
+          "### 트리거 수정 후 데이터 재발생 확인",
+          "",
+          "`STEP_END` 트리거 적용 이후 14:00~14:30 구간에서 BAKE STEP 종료 시점마다 정상 수집되었습니다.",
+          "",
+          "5건 모두 `TEMP_TC1` 값이 spec 범위(`830~870 ℃`) 안이며 누락 없습니다.",
+        ].join("\n"),
+        tables: [{
+          title: "BAKE STEP 종료 시점 수집 결과",
+          columns: ["batch", "step_end", "TEMP_TC1 (℃)", "status"],
+          rows: [
+            { batch: "B-2031", step_end: "14:04:12", "TEMP_TC1 (℃)": 851, status: "OK" },
+            { batch: "B-2032", step_end: "14:09:38", "TEMP_TC1 (℃)": 853, status: "OK" },
+            { batch: "B-2033", step_end: "14:15:02", "TEMP_TC1 (℃)": 850, status: "OK" },
+            { batch: "B-2034", step_end: "14:20:27", "TEMP_TC1 (℃)": 854, status: "OK" },
+            { batch: "B-2035", step_end: "14:25:51", "TEMP_TC1 (℃)": 852, status: "OK" },
+          ],
+        }],
       },
     ],
   },
@@ -504,10 +531,39 @@ export const SCENARIOS: readonly Scenario[] = [
           "> **권장:** MFC 자체 결함 또는 SiH4 라인 누설 가능성이 있어 [정비 점검 가이드](https://example.com/sih4-line-runbook)를 따라 점검 권장합니다.",
         ].join("\n"),
         recommendQuestion: [
+          // 첫 chip 은 turn 3 의 user 와 동일 — ghost text / chip 클릭 흐름이
+          // 동일하게 turn 3 로 자연스럽게 이어지도록 정렬 (#52)
           "다른 라인의 MFC 상태는?",
           "최근 정비 이력 조회해줘",
           "유사 케이스 권장 조치 정리해줘",
         ],
+      },
+      // Turn 3 (#52) — 첫 chip 흐름 이어가기. 같은 챔버의 다른 가스 라인
+      // MFC 상태를 비교한 표.
+      {
+        user: "다른 라인의 MFC 상태는?",
+        assistant: [
+          "### 같은 챔버의 다른 가스 라인 MFC 상태",
+          "",
+          "동일 시점 `14:25:00` 의 MFC 출력을 라인별로 비교했습니다.",
+          "",
+          "| 라인 | setpoint | 측정값 | 편차 | 판정 |",
+          "| --- | --- | --- | --- | --- |",
+          "| `GAS_FLOW_SiH4` | 200 sccm | 156 sccm | **−22%** | 이상 |",
+          "| `GAS_FLOW_NH3` | 50 sccm | 49.6 sccm | −0.8% | 정상 |",
+          "| `GAS_FLOW_Ar` | 100 sccm | 100.4 sccm | +0.4% | 정상 |",
+          "",
+          "이상 편차는 `GAS_FLOW_SiH4` 한 라인에서만 관측되어, 라인 단위 결함(MFC 또는 SiH4 라인 누설) 가능성이 높습니다.",
+        ].join("\n"),
+        tables: [{
+          title: "MFC 라인별 상태 (14:25:00)",
+          columns: ["line", "setpoint", "measured", "deviation_pct", "status"],
+          rows: [
+            { line: "GAS_FLOW_SiH4", setpoint: "200 sccm", measured: "156 sccm", deviation_pct: -22.0, status: "abnormal" },
+            { line: "GAS_FLOW_NH3", setpoint: "50 sccm", measured: "49.6 sccm", deviation_pct: -0.8, status: "ok" },
+            { line: "GAS_FLOW_Ar", setpoint: "100 sccm", measured: "100.4 sccm", deviation_pct: 0.4, status: "ok" },
+          ],
+        }],
       },
     ],
   },
@@ -558,10 +614,35 @@ export const SCENARIOS: readonly Scenario[] = [
           "기본값은 *오늘 00:00 ~ 23:59* 입니다.",
         ].join("\n"),
         recommendQuestion: [
+          // 첫 chip 은 turn 3 의 user 와 동일 — ghost text / chip 클릭 흐름이
+          // 동일하게 turn 3 로 자연스럽게 이어지도록 정렬 (#52)
           "설정값을 저장할 수 있나요?",
           "기본값을 변경할 수 있나요?",
           "시간대(timezone) 처리는 어떻게 되나요?",
         ],
+      },
+      // Turn 3 (#52) — 첫 chip 흐름 이어가기. 설정값 저장 정책 안내.
+      {
+        user: "설정값을 저장할 수 있나요?",
+        assistant: [
+          "### 설정값 저장 안내",
+          "",
+          "별도 *저장* 버튼 없이, 입력하신 값은 **브라우저에 자동 저장**됩니다.",
+          "",
+          "- **설비 정보 패널** — 행/챔버/센서 입력이 변경될 때마다 즉시 저장",
+          "- **발생 시간** — 시작/종료 시각 변경 시 즉시 저장",
+          "- **대화 이력** — 메시지가 추가될 때마다 저장 (좌측 사이드바에서 다시 열기 가능)",
+          "",
+          "다음 접속 때 같은 브라우저라면 마지막 상태가 그대로 복원됩니다.",
+          "",
+          "| 항목 | 저장 위치 | 비고 |",
+          "| --- | --- | --- |",
+          "| 설비 정보 | `localStorage` | 브라우저별 |",
+          "| 발생 시간 | `localStorage` | 브라우저별 |",
+          "| 대화 이력 | `localStorage` | 브라우저별 |",
+          "",
+          "> 다른 기기/브라우저로의 동기화는 현재 지원하지 않으며, 추후 계정 기반 동기화를 검토 중입니다.",
+        ].join("\n"),
       },
     ],
   },
