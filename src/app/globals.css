@@ -214,3 +214,98 @@
     opacity: 1;
   }
 }
+
+/* ==========================================================================
+ * Theme overrides (#77)
+ *
+ * @theme 의 light 토큰이 default. <html data-theme="..."> attribute 로
+ * 토큰 값을 override 한다. Tailwind v4 utilities 는 var(--color-*) 로
+ * 컴파일되어 런타임 변경이 즉시 반영됨.
+ *
+ * `system` 옵션은 별도 작업 (#77 out of scope) — 현재는 light 와 동일.
+ * ========================================================================== */
+
+@layer base {
+[data-theme="dark"] {
+  --color-brand-canvas: #1a1814;
+  --color-brand-surface-soft: #221f1a;
+  --color-brand-surface-card: #2a2620;
+  --color-brand-surface-cream-strong: #312c25;
+  --color-brand-ink: #f5f1e8;
+  --color-brand-body: #d4cfc1;
+  --color-brand-body-strong: #ebe6db;
+  --color-brand-muted: #9b958a;
+  --color-brand-muted-soft: #6c6a64;
+  --color-brand-hairline: #3a352d;
+  --color-brand-hairline-soft: #2e2a23;
+  --color-brand-primary: #d68870;
+  --color-brand-primary-active: #b86a52;
+  --color-brand-primary-disabled: #4a423a;
+  --color-brand-on-primary: #1a1814;
+  --color-brand-primary-translucent-15: rgba(214, 136, 112, 0.15);
+  --color-brand-error-soft: rgba(220, 100, 100, 0.18);
+  --color-brand-ink-translucent-04: rgba(245, 241, 232, 0.06);
+}
+
+[data-theme="sepia"] {
+  --color-brand-canvas: #f5ebd6;
+  --color-brand-surface-soft: #ede0c4;
+  --color-brand-surface-card: #e3d3b0;
+  --color-brand-surface-cream-strong: #d8c599;
+  --color-brand-ink: #3a2e1f;
+  --color-brand-body: #5c4a32;
+  --color-brand-body-strong: #2a2014;
+  --color-brand-muted: #8a7656;
+  --color-brand-muted-soft: #a89578;
+  --color-brand-hairline: #d4c2a0;
+  --color-brand-hairline-soft: #ddcfb2;
+  --color-brand-primary: #b8624a;
+  --color-brand-primary-active: #964c38;
+  --color-brand-primary-disabled: #d4c2a0;
+  --color-brand-on-primary: #ffffff;
+  --color-brand-primary-translucent-15: rgba(184, 98, 74, 0.15);
+}
+
+[data-theme="cool-gray"] {
+  --color-brand-canvas: #f4f5f7;
+  --color-brand-surface-soft: #e9ebef;
+  --color-brand-surface-card: #dde0e6;
+  --color-brand-surface-cream-strong: #ced3db;
+  --color-brand-ink: #1c1f24;
+  --color-brand-body: #3a3f47;
+  --color-brand-body-strong: #14171c;
+  --color-brand-muted: #6b7280;
+  --color-brand-muted-soft: #9ca3af;
+  --color-brand-hairline: #d1d5db;
+  --color-brand-hairline-soft: #dde1e7;
+  --color-brand-primary: #4f6d8a;
+  --color-brand-primary-active: #3a5874;
+  --color-brand-primary-disabled: #cbd2db;
+  --color-brand-on-primary: #ffffff;
+  --color-brand-primary-translucent-15: rgba(79, 109, 138, 0.15);
+}
+
+[data-theme="high-contrast"] {
+  --color-brand-canvas: #ffffff;
+  --color-brand-surface-soft: #f0f0f0;
+  --color-brand-surface-card: #e6e6e6;
+  --color-brand-surface-cream-strong: #d0d0d0;
+  --color-brand-ink: #000000;
+  --color-brand-body: #000000;
+  --color-brand-body-strong: #000000;
+  --color-brand-muted: #2a2a2a;
+  --color-brand-muted-soft: #4a4a4a;
+  --color-brand-hairline: #000000;
+  --color-brand-hairline-soft: #2a2a2a;
+  --color-brand-primary: #b00020;
+  --color-brand-primary-active: #800018;
+  --color-brand-primary-disabled: #999999;
+  --color-brand-on-primary: #ffffff;
+  --color-brand-success: #006400;
+  --color-brand-warning: #b85c00;
+  --color-brand-error: #b00020;
+  --color-brand-primary-translucent-15: rgba(176, 0, 32, 0.18);
+  --color-brand-error-soft: rgba(176, 0, 32, 0.10);
+  --color-brand-ink-translucent-04: rgba(0, 0, 0, 0.08);
+}
+}

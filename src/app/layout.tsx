@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Inter, JetBrains_Mono, Noto_Serif_KR } from "next/font/google";
 import localFont from "next/font/local";
+import Script from "next/script";
 import "./globals.css";
 
 // Latin display
@@ -66,14 +67,25 @@ const fontVariables = [
   d2coding.variable,
 ].join(" ");
 
+/**
+ * 첫 paint 부터 저장된 테마(없으면 default 인 cool-gray) 적용 — hydration
+ * 전에 동기 실행되어 light → cool-gray 깜빡임(FOUC) 방지. (#77)
+ */
+const themeBootScript = `(function(){try{var s=JSON.parse(localStorage.getItem('fdc-fe.settings.v1')||'null');var t=(s&&s.theme)||'cool-gray';if(t&&t!=='light'&&t!=='system'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={fontVariables}>
-      <body className="bg-brand-canvas text-brand-ink font-sans antialiased">{children}</body>
+    <html lang="ko" className={fontVariables} suppressHydrationWarning>
+      <body className="bg-brand-canvas text-brand-ink font-sans antialiased">
+        <Script id="theme-boot" strategy="beforeInteractive">
+          {themeBootScript}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

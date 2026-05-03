@@ -2,16 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { readJson, writeJson } from "@/lib/storage";
+import { applyTheme, type Theme } from "@/lib/theme";
 
 /**
- * 설정 화면 v1 (#12).
+ * 설정 화면 (#12 + #77 테마 확장).
  *
- * 항목 (테마 / 폰트 크기 / 언어 / 모델) UI 자리만 잡고 localStorage 에
- * 선택값을 보존. 실제 테마/폰트 적용은 후속 PR (디자인 토큰 / dark
- * variant 등) 에서 진행.
+ * 테마는 light / dark / sepia / cool-gray / high-contrast / system 6종.
+ * 폰트 / 언어 / 모델 은 v1 UI 자리 — 실제 동작은 후속 PR.
  */
 
-export type ThemeOption = "light" | "dark" | "system";
+export type ThemeOption = Theme;
 export type FontSizeOption = "sm" | "md" | "lg";
 export type ModelOption = "default";
 
@@ -26,7 +26,7 @@ export type Settings = {
 const SETTINGS_KEY = "fdc-fe.settings.v1";
 
 const DEFAULT_SETTINGS: Settings = {
-  theme: "system",
+  theme: "cool-gray",
   fontSize: "md",
   language: "ko",
   model: "default",
@@ -44,8 +44,10 @@ export function SettingsModal({ open, onClose }: Props) {
   // 첫 마운트 시 localStorage 에서 읽음. SSR/hydration 일관성을 위해
   // 초기 렌더는 default 로 두고 useEffect 에서 클라이언트 값으로 교체.
   useEffect(() => {
+    const stored = readJson<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSettings(readJson<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS));
+    setSettings(stored);
+    applyTheme(stored.theme);
   }, []);
 
   // 변경 즉시 저장 (별도 [저장] 버튼 없음 — 도움말 / 채팅 등 다른
@@ -54,6 +56,7 @@ export function SettingsModal({ open, onClose }: Props) {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
       writeJson(SETTINGS_KEY, next);
+      if (key === "theme") applyTheme(value as Theme);
       return next;
     });
   }
@@ -106,6 +109,9 @@ export function SettingsModal({ open, onClose }: Props) {
             options={[
               { value: "light", label: "라이트" },
               { value: "dark", label: "다크" },
+              { value: "sepia", label: "세피아" },
+              { value: "cool-gray", label: "쿨 그레이" },
+              { value: "high-contrast", label: "고대비" },
               { value: "system", label: "시스템 따라가기" },
             ]}
           />
@@ -150,8 +156,8 @@ export function SettingsModal({ open, onClose }: Props) {
           </Field>
 
           <div className="mt-xs px-sm py-xs rounded-sm bg-brand-surface-card text-caption text-brand-muted">
-            * 본 v1 에서는 선택값이 저장되지만 시각적 적용(다크 테마 / 폰트
-            크기 등) 은 후속 업데이트에서 지원됩니다.
+            * 테마는 즉시 적용됩니다. 폰트 크기·언어·모델 은 선택값만 저장되고
+            실제 적용은 후속 업데이트에서 지원됩니다.
           </div>
         </div>
       </div>
