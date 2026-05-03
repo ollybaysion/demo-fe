@@ -25,6 +25,11 @@ type Props = {
   expanded?: boolean;
   /** 토글 버튼 핸들러. 없으면 토글 버튼 자체를 노출하지 않음. */
   onToggleExpand?: () => void;
+  /**
+   * 풍선 DOM ref — [확장] overlay 의 위치/높이를 풍선과 정렬하기 위함.
+   * 비면 overlay 가 viewport 정중앙에 띄워짐 (fallback).
+   */
+  bubbleRef?: React.RefObject<HTMLDivElement | null>;
 };
 
 export function MessageDataTable({
@@ -32,14 +37,21 @@ export function MessageDataTable({
   maxHeight,
   expanded,
   onToggleExpand,
+  bubbleRef,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowsY, setOverflowsY] = useState(false);
   const [overflowsX, setOverflowsX] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
-  // [확장] overlay — 가로 폭이 부모를 초과할 때 화면 거의 풀 폭으로
-  // 표를 띄워 보는 모드 (#42). 메시지마다 독립 상태.
+  // [확장] overlay — 가로 폭이 부모를 초과할 때 풍선과 같은 높이로 폭만
+  // 풀로 펼쳐 표를 보는 모드 (#42). 메시지마다 독립 상태.
   const [maximized, setMaximized] = useState(false);
+  // 풍선 위치를 viewport 좌표계로 추적 — overlay 가 풍선 위에 정확히
+  // 겹치도록. 스크롤/리사이즈 시에도 따라 움직임.
+  const [bubbleRect, setBubbleRect] = useState<{
+    top: number;
+    height: number;
+  } | null>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -64,6 +76,29 @@ export function MessageDataTable({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [maximized]);
+
+  // overlay 가 켜져 있을 때 풍선 위치를 viewport 좌표로 트래킹. scroll /
+  // resize 모두 반응. capture 단계로 등록해 chat 스크롤 컨테이너의 내부
+  // 스크롤 이벤트도 잡음.
+  useEffect(() => {
+    if (!maximized || !bubbleRef) return;
+    const update = () => {
+      const el = bubbleRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setBubbleRect({ top: rect.top, height: rect.height });
+    };
+    update();
+    window.addEventListener("scroll", update, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, { capture: true });
+      window.removeEventListener("resize", update);
+    };
+  }, [maximized, bubbleRef]);
 
   const columns =
     table.columns ??
@@ -141,6 +176,7 @@ export function MessageDataTable({
           columns={columns}
           rows={table.rows}
           onClose={() => setMaximized(false)}
+          rect={bubbleRect}
         />
       )}
     </>
@@ -156,33 +192,43 @@ function ExpandedTableOverlay({
   columns,
   rows,
   onClose,
+  rect,
 }: {
   columns: string[];
   rows: Record<string, unknown>[];
   onClose: () => void;
+  /** 풍선의 viewport 좌표 — overlay 의 top/height 를 여기 맞춤. 비면 fallback. */
+  rect: { top: number; height: number } | null;
 }) {
+  // 풍선과 같은 세로 위치/높이로 띄움. 가로는 좌우 2.5vw 만 남기고 풀.
+  // rect 가 아직 측정 안 됐으면 임시로 viewport 가운데 띄움 (잠깐 깜빡일 수 있음).
+  const overlayStyle: React.CSSProperties = rect
+    ? { top: rect.top, height: rect.height }
+    : { top: "10vh", height: "70vh" };
+
   return (
     <div
       role="dialog"
-      aria-label="표 전체 보기"
+      aria-label="표 확장 보기"
       aria-modal="false"
-      className="fixed top-[5vh] bottom-[5vh] left-[2.5vw] right-[2.5vw] z-30 bg-brand-canvas border border-brand-ink shadow-md flex flex-col"
+      className="fixed left-[2.5vw] right-[2.5vw] z-30 bg-brand-canvas border border-brand-ink shadow-md flex flex-col"
+      style={overlayStyle}
     >
-      <header className="px-md py-sm border-b border-brand-ink flex items-center justify-between gap-sm shrink-0">
-        <h3 className="font-sans text-title-sm text-brand-ink">
-          표 전체 보기 ({rows.length} 행 × {columns.length} 칼럼)
-        </h3>
+      <header className="px-md py-xs border-b border-brand-ink flex items-center justify-between gap-sm shrink-0">
+        <span className="font-sans text-caption text-brand-muted">
+          표 확장 보기 ({rows.length} 행 × {columns.length} 칼럼)
+        </span>
         <button
           type="button"
           onClick={onClose}
           aria-label="확장 닫기"
           title="닫기 (Esc)"
-          className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-sm text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
           <XIcon />
         </button>
       </header>
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto min-h-0">
         <TableMarkup columns={columns} rows={rows} />
       </div>
     </div>
