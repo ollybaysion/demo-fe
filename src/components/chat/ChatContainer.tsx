@@ -26,7 +26,7 @@ import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
-import { MessageList } from "./MessageList";
+import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
 import { SummaryToggleHandle } from "./summary/SummaryToggleHandle";
