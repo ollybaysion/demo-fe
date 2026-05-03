@@ -112,6 +112,7 @@ export async function POST(request: Request): Promise<Response> {
   let responseText: string;
   let responseTable: ReturnType<typeof pickTable> = undefined;
   let responseChart: ReturnType<typeof pickChart> = undefined;
+  let responseRecommend: string[] | undefined;
   if (body.demo) {
     const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
     const turn = scenario?.turns[body.demo.turnIndex];
@@ -119,6 +120,7 @@ export async function POST(request: Request): Promise<Response> {
       responseText = turn.assistant;
       responseTable = pickTable(turn);
       responseChart = pickChart(turn);
+      responseRecommend = turn.recommendQuestion;
     } else {
       responseText =
         "데모 시나리오의 마지막 응답을 이미 재생했습니다. 헤더의 '다시 시작' 버튼으로 새 시나리오를 선택하세요.";
@@ -140,17 +142,19 @@ export async function POST(request: Request): Promise<Response> {
           controller.enqueue(encodeSseEvent("token", { content: ch }));
           await sleep(TOKEN_INTERVAL_MS);
         }
-        // 표(#34) / 차트(#37) 페이로드는 모든 토큰이 끝난 직후 emit.
-        // 클라이언트는 `done` 시점에 한 번에 적용 → 응답이 모두 끝나고
-        // 자연스럽게 등장. 백엔드(/api/fdc/v1/chat) 도 같은 패턴 권장.
-        if (responseTable) {
-          controller.enqueue(encodeSseEvent("table", responseTable));
-        }
-        if (responseChart) {
-          controller.enqueue(encodeSseEvent("chart", responseChart));
-        }
+        // 표(#34) / 차트(#37) / 추천 후속 질문(#40) 은 docs/api.md
+        // 스펙대로 `done` 이벤트 페이로드에 번들로 동봉. 백엔드도 같은
+        // 형태로 보낼 예정이라 클라이언트가 단일 done 핸들러만 신경 쓰면 됨.
         controller.enqueue(
-          encodeSseEvent("done", { messageId, finishReason: "stop" }),
+          encodeSseEvent("done", {
+            messageId,
+            finishReason: "stop",
+            ...(responseTable ? { table: responseTable } : {}),
+            ...(responseChart ? { chart: responseChart } : {}),
+            ...(responseRecommend && responseRecommend.length > 0
+              ? { recommendQuestion: responseRecommend }
+              : {}),
+          }),
         );
         controller.close();
       } catch (err) {
