@@ -87,6 +87,8 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
 function ActionGroup({
   message,
   isUser,
+  // 재생성 버튼은 v1 에서 숨김. prop 통로는 유지.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onRegenerate,
 }: {
   message: Message;
@@ -124,12 +126,19 @@ function ActionGroup({
         {justCopied ? <CheckIcon /> : <CopyIcon />}
         <span>{justCopied ? "복사됨" : "복사"}</span>
       </ActionButton>
-      {!isUser && onRegenerate && (
-        <ActionButton onClick={onRegenerate} aria-label="응답 재생성">
-          <RegenerateIcon />
-          <span>재생성</span>
-        </ActionButton>
-      )}
+      {/*
+        재생성 버튼은 v1 에서 표시하지 않음. 핸들러(`onRegenerate`)·
+        아이콘·prop 통로(MessageList → ChatMessage)·`handleRegenerate`
+        in ChatContainer 는 그대로 살려둬, 다시 켤 때는 아래 한 블록을
+        복원하면 됨.
+
+        {!isUser && onRegenerate && (
+          <ActionButton onClick={onRegenerate} aria-label="응답 재생성">
+            <RegenerateIcon />
+            <span>재생성</span>
+          </ActionButton>
+        )}
+      */}
       {!isUser && (
         <>
           <ActionButton
@@ -229,6 +238,8 @@ function CheckIcon() {
   );
 }
 
+// 재생성 버튼은 v1 에서 숨김. 아이콘 정의는 유지.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RegenerateIcon() {
   return (
     <svg
