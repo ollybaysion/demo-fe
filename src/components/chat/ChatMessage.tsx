@@ -35,10 +35,18 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
   // 하기 위해 필요.
   const bubbleRef = useRef<HTMLDivElement>(null);
 
-  // 메시지 단위 paired panel collapse (#70). 그 메시지의 좌·우 표/차트/
-  // 타임라인을 한 번에 숨기거나 다시 노출. 본문에 집중하고 싶을 때 사용.
-  // 세션 메모리(컴포넌트 state) — 새로고침 시 default(노출) 로 reset.
+  // 메시지 단위 paired panel 토글 (#70). 두 종류:
+  //   1) paneCollapsed — 패널 자체를 hide/show (DOM 에서 제거 / 복원).
+  //      "패널 비활성화 / 활성화".
+  //   2) paneFoldCmd — 모든 자식 패널의 본문을 일괄 fold/unfold (헤더만
+  //      남김 / 다시 펼침). "패널 접기 / 펼치기". tick 으로 단발성 명령
+  //      을 자식 패널에 전달, 자식은 effect 로 sync 후 자체 토글 자유.
+  // 세션 메모리(컴포넌트 state) — 새로고침 시 default(노출/펼침) 로 reset.
   const [paneCollapsed, setPaneCollapsed] = useState(false);
+  const [paneFoldCmd, setPaneFoldCmd] = useState<{
+    folded: boolean;
+    tick: number;
+  }>({ folded: false, tick: 0 });
 
   // tables / charts / event timelines 를 좌·우 컬럼에 분배 (#45 P4 + #49).
   // 백엔드의 `side?` 힌트가 있으면 그쪽으로, 없으면 적은 쪽 우선
@@ -140,6 +148,18 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   }
                 : undefined
             }
+            paneFoldToggle={
+              hasPaired && !paneCollapsed
+                ? {
+                    folded: paneFoldCmd.folded,
+                    onToggle: () =>
+                      setPaneFoldCmd((prev) => ({
+                        folded: !prev.folded,
+                        tick: prev.tick + 1,
+                      })),
+                  }
+                : undefined
+            }
           />
         )}
       </div>
@@ -155,6 +175,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   table={entry.payload}
                   defaultExpanded={defaultExpanded}
                   bubbleRef={bubbleRef}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -164,6 +185,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   key={key}
                   chart={entry.payload}
                   defaultExpanded={defaultExpanded}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -173,6 +195,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                 timeline={entry.payload}
                 defaultExpanded={defaultExpanded}
                 bubbleRef={bubbleRef}
+                foldCmd={paneFoldCmd}
               />
             );
           })}
@@ -190,6 +213,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   table={entry.payload}
                   defaultExpanded={defaultExpanded}
                   bubbleRef={bubbleRef}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -199,6 +223,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                   key={key}
                   chart={entry.payload}
                   defaultExpanded={defaultExpanded}
+                  foldCmd={paneFoldCmd}
                 />
               );
             }
@@ -208,6 +233,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
                 timeline={entry.payload}
                 defaultExpanded={defaultExpanded}
                 bubbleRef={bubbleRef}
+                foldCmd={paneFoldCmd}
               />
             );
           })}
@@ -228,15 +254,22 @@ function ActionGroup({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onRegenerate,
   paneToggle,
+  paneFoldToggle,
 }: {
   message: Message;
   isUser: boolean;
   onRegenerate?: () => void;
   /**
    * 메시지에 paired 표/차트/타임라인이 있을 때만 전달. 클릭 시 좌·우 패널
-   * 일괄 collapse / 다시 expand. (#70 — 메시지 단위 토글)
+   * 자체를 hide / show — "패널 비활성화 / 활성화". (#70)
    */
   paneToggle?: { collapsed: boolean; onToggle: () => void };
+  /**
+   * 메시지의 모든 paired 패널 본문을 일괄 fold / unfold (헤더만 남김 /
+   * 다시 펼침). "패널 접기 / 펼치기". paneToggle 로 패널이 hide 된 상태
+   * 에선 의미 없으므로 미전달. (#70)
+   */
+  paneFoldToggle?: { folded: boolean; onToggle: () => void };
 }) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
   const [justCopied, setJustCopied] = useState(false);
@@ -304,6 +337,17 @@ function ActionGroup({
           >
             <ThumbsDownIcon filled={feedback === "down"} />
           </ActionButton>
+          {paneFoldToggle && (
+            <ActionButton
+              onClick={paneFoldToggle.onToggle}
+              aria-label={paneFoldToggle.folded ? "패널 펼치기" : "패널 접기"}
+              aria-pressed={paneFoldToggle.folded}
+              active={paneFoldToggle.folded}
+            >
+              <PanelFoldIcon folded={paneFoldToggle.folded} />
+              <span>{paneFoldToggle.folded ? "패널 펼치기" : "패널 접기"}</span>
+            </ActionButton>
+          )}
           {paneToggle && (
             <ActionButton
               onClick={paneToggle.onToggle}
@@ -354,6 +398,38 @@ function ActionButton({
 // ────────────────────────────────────────────────────────────────────
 // Icons
 // ────────────────────────────────────────────────────────────────────
+
+/**
+ * Paired panel fold/unfold 아이콘 (#70). 위·아래 chevron 으로 본문이
+ * 접혀 있는지 / 펼쳐져 있는지 표현. 패널 자체 hide 와 의미 구분.
+ */
+function PanelFoldIcon({ folded }: { folded: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {folded ? (
+        // 접혀 있음 → 누르면 펼침 (아래로 펼쳐지는 chevron)
+        <>
+          <polyline points="6 9 12 15 18 9" />
+        </>
+      ) : (
+        // 펼쳐 있음 → 누르면 접기 (위로 접히는 chevron)
+        <>
+          <polyline points="6 15 12 9 18 15" />
+        </>
+      )}
+    </svg>
+  );
+}
 
 /**
  * Paired panel collapse 토글 아이콘 (#70). 양쪽 안쪽 화살표(접기) /

@@ -28,6 +28,11 @@ type Props = {
   timeline: MessageEventTimelinePayload;
   defaultExpanded?: boolean;
   /**
+   * 메시지 단위 일괄 fold/unfold 명령 (#70). tick 증가 시 expanded 를
+   * !folded 로 sync. 첫 렌더(tick=0) 무시.
+   */
+  foldCmd?: { folded: boolean; tick: number };
+  /**
    * 풍선 DOM ref — [전체 보기] overlay 위치 anchor 용. 비면 viewport
    * 기준 fallback.
    */
@@ -92,10 +97,19 @@ export function MessageEventTimeline({
   timeline,
   defaultExpanded = true,
   bubbleRef,
+  foldCmd,
 }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [maximized, setMaximized] = useState(false);
   const [overlayTop, setOverlayTop] = useState<number | null>(null);
+
+  // #70 — 메시지 단위 fold/unfold 명령 sync. 렌더 중 prev-state 비교
+  // (React 19 권장 — useEffect cascade 회피).
+  const [prevFoldTick, setPrevFoldTick] = useState(foldCmd?.tick ?? 0);
+  if (foldCmd && foldCmd.tick !== prevFoldTick) {
+    setPrevFoldTick(foldCmd.tick);
+    if (foldCmd.tick > 0) setExpanded(!foldCmd.folded);
+  }
 
   // ESC 키로 overlay 닫기.
   useEffect(() => {
