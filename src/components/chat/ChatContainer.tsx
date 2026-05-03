@@ -315,7 +315,7 @@ export function ChatContainer() {
   );
 
   const handleSubmit = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: import("@/lib/types").MessageAttachment[]) => {
       if (demoState?.ended) {
         return;
       }
@@ -324,6 +324,7 @@ export function ChatContainer() {
         role: "user",
         content: text,
         createdAt: Date.now(),
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
       };
       const nextHistory = [...messages, userMessage];
       setMessages(nextHistory);
