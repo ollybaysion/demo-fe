@@ -3,7 +3,14 @@
 import { type ReactNode, useMemo, useState } from "react";
 import {
   COL_NAMES,
+  COMPARE_RECIPES,
+  COMPARE_WINDOWS,
+  type CompareData,
+  type CompareSide,
+  type CompareWindowDays,
   type EquipmentDetail,
+  type SensorStats,
+  getCompareData,
   getEquipmentDetail,
   getPeers,
 } from "@/demo/equipment";
@@ -25,12 +32,13 @@ type Props = {
   onClose: () => void;
 };
 
-type Category = "equipment" | "chamber" | "sensor";
+type Category = "equipment" | "chamber" | "sensor" | "compare";
 
 const CATEGORY_OPTIONS: ReadonlyArray<{ id: Category; label: string }> = [
   { id: "equipment", label: "설비 정보" },
   { id: "chamber", label: "챔버 정보" },
   { id: "sensor", label: "센서 정보" },
+  { id: "compare", label: "설비 데이터 비교" },
 ];
 
 export function EquipmentDetailPanel({
@@ -105,39 +113,50 @@ export function EquipmentDetailPanel({
 
       <div
         className="flex-1 overflow-y-auto px-lg py-lg flex flex-col gap-xl"
-        // 패널 영역에서 포인터가 빠져나가면 호버 강조 해제. 셀-셀 이동
-        // 사이의 깜빡임을 막기 위해 컨테이너에서만 leave 처리.
+        // 패널 영역에서 포인터가 빠져나가면 호버 강조 해제.
         onMouseLeave={() => setHoveredCol(null)}
       >
-        <DetailBlock
-          label="현재 설비"
-          options={equipmentNames}
-          value={effectiveSelected}
-          onChange={setSelectedName}
-          detail={detail}
-          category={category}
-          hoveredCol={hoveredCol}
-          onHoverCol={setHoveredCol}
-          emptyHint="조회할 설비가 없습니다. 컨텍스트 패널에서 설비를 입력해주세요."
-        />
-
-        <DetailBlock
-          label="동종설비 비교"
-          options={peers.map((p) => p.id)}
-          value={peerActual?.id ?? ""}
-          onChange={setPeerName}
-          detail={peerActual}
-          category={category}
-          hoveredCol={hoveredCol}
-          onHoverCol={setHoveredCol}
-          emptyHint={
-            !detail
-              ? "현재 설비가 선택되지 않았습니다."
-              : peers.length === 0
-                ? "같은 모델의 다른 설비가 없습니다."
-                : undefined
-          }
-        />
+        {category === "compare" ? (
+          <CompareView
+            currentId={effectiveSelected}
+            currentOptions={equipmentNames}
+            onCurrentChange={setSelectedName}
+            peerOptions={peers.map((p) => p.id)}
+            peerId={peerActual?.id ?? ""}
+            onPeerChange={setPeerName}
+          />
+        ) : (
+          <>
+            <DetailBlock
+              label="현재 설비"
+              options={equipmentNames}
+              value={effectiveSelected}
+              onChange={setSelectedName}
+              detail={detail}
+              category={category}
+              hoveredCol={hoveredCol}
+              onHoverCol={setHoveredCol}
+              emptyHint="조회할 설비가 없습니다. 컨텍스트 패널에서 설비를 입력해주세요."
+            />
+            <DetailBlock
+              label="동종설비 비교"
+              options={peers.map((p) => p.id)}
+              value={peerActual?.id ?? ""}
+              onChange={setPeerName}
+              detail={peerActual}
+              category={category}
+              hoveredCol={hoveredCol}
+              onHoverCol={setHoveredCol}
+              emptyHint={
+                !detail
+                  ? "현재 설비가 선택되지 않았습니다."
+                  : peers.length === 0
+                    ? "같은 모델의 다른 설비가 없습니다."
+                    : undefined
+              }
+            />
+          </>
+        )}
       </div>
     </aside>
   );
@@ -366,6 +385,263 @@ function WideTable({
               ))}
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CompareView (#79 v2 — Phase 1)
+// ────────────────────────────────────────────────────────────────────
+
+/**
+ * 1:1 비교 — 공정 컨텍스트(레시피 + 윈도우) 안에서 현재 설비 vs 단일
+ * 동종설비의 센서 통계를 비교 표로 표시. 매칭 모드는 post-setup 단일.
+ *
+ * Phase 1 범위:
+ *   - 레시피 / window 셀렉트 (mock 옵션)
+ *   - 양쪽의 셋업 시점 + 매칭 run 메타
+ *   - 센서 통계 표 (평균±σ / 최대 / 최소 / 이상 횟수) + 차이 % + 큰 차이
+ *     셀 자동 강조
+ */
+function CompareView({
+  currentId,
+  currentOptions,
+  onCurrentChange,
+  peerOptions,
+  peerId,
+  onPeerChange,
+}: {
+  currentId: string;
+  currentOptions: string[];
+  onCurrentChange: (v: string) => void;
+  peerOptions: string[];
+  peerId: string;
+  onPeerChange: (v: string) => void;
+}) {
+  const [recipe, setRecipe] = useState<string>(COMPARE_RECIPES[0]);
+  const [windowDays, setWindowDays] = useState<CompareWindowDays>(7);
+
+  const data = useMemo<CompareData | null>(() => {
+    if (!currentId || !peerId) return null;
+    return getCompareData(currentId, peerId, recipe, windowDays);
+  }, [currentId, peerId, recipe, windowDays]);
+
+  if (!currentId) {
+    return (
+      <Empty>
+        조회할 설비가 없습니다. 컨텍스트 패널에서 설비를 먼저 입력해주세요.
+      </Empty>
+    );
+  }
+  if (!peerId) {
+    return <Empty>같은 모델의 동종설비가 없어 비교할 수 없습니다.</Empty>;
+  }
+  if (!data) return null;
+
+  return (
+    <section className="flex flex-col gap-md">
+      {/* 공정 컨텍스트 + 설비 셀렉트 */}
+      <header className="flex flex-col gap-sm">
+        <div className="flex flex-wrap items-center gap-md">
+          <ComparePicker
+            label="현재 설비"
+            value={currentId}
+            options={currentOptions}
+            onChange={onCurrentChange}
+          />
+          <span className="text-body-sm text-brand-muted">vs</span>
+          <ComparePicker
+            label="동종설비 (baseline)"
+            value={peerId}
+            options={peerOptions}
+            onChange={onPeerChange}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-md">
+          <ComparePicker
+            label="레시피"
+            value={recipe}
+            options={[...COMPARE_RECIPES]}
+            onChange={setRecipe}
+          />
+          <ComparePicker
+            label="윈도우 (post-setup 이후)"
+            value={String(windowDays)}
+            options={COMPARE_WINDOWS.map(String)}
+            onChange={(v) => setWindowDays(Number(v) as CompareWindowDays)}
+            suffix="일"
+          />
+        </div>
+      </header>
+
+      {/* 양쪽 메타 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
+        <SideMeta side={data.current} title="현재 설비" />
+        <SideMeta side={data.baseline} title="동종설비 (baseline)" />
+      </div>
+
+      {/* 통계 비교 표 */}
+      <Card>
+        <h4 className="font-sans text-title-sm text-brand-ink mb-sm">
+          센서 통계 비교
+        </h4>
+        {data.current.matchedRun && data.baseline.matchedRun ? (
+          <CompareStatsTable
+            currentId={data.current.equipmentId}
+            baselineId={data.baseline.equipmentId}
+            current={data.current.sensorStats}
+            baseline={data.baseline.sensorStats}
+          />
+        ) : (
+          <p className="text-body-sm text-brand-muted">
+            한쪽 이상에 매칭 run 이 없어 비교할 수 없습니다. 윈도우를
+            늘리거나 레시피를 변경해보세요.
+          </p>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+function ComparePicker({
+  label,
+  value,
+  options,
+  onChange,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+  suffix?: string;
+}) {
+  return (
+    <label className="flex items-center gap-xs text-body-sm">
+      <span className="text-brand-muted">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+      >
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+            {suffix ? ` ${suffix}` : ""}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SideMeta({ side, title }: { side: CompareSide; title: string }) {
+  return (
+    <Card>
+      <h4 className="font-sans text-title-sm text-brand-ink">
+        {title} — {side.equipmentId}
+      </h4>
+      <dl className="mt-xs grid grid-cols-[max-content_1fr] gap-x-md gap-y-xxs text-body-sm">
+        <dt className="text-brand-muted">셋업 시점</dt>
+        <dd className="text-brand-ink font-mono">{side.setupTime}</dd>
+        <dt className="text-brand-muted">매칭 run</dt>
+        <dd className="text-brand-ink font-mono">
+          {side.matchedRun
+            ? `${side.matchedRun.id} · ${side.matchedRun.startTime} · ${side.matchedRun.durationMin}분`
+            : "데이터 없음 (셋업 후 윈도우 내 해당 공정 없음)"}
+        </dd>
+      </dl>
+    </Card>
+  );
+}
+
+function CompareStatsTable({
+  currentId,
+  baselineId,
+  current,
+  baseline,
+}: {
+  currentId: string;
+  baselineId: string;
+  current: SensorStats[];
+  baseline: SensorStats[];
+}) {
+  const baseByName = new Map(baseline.map((b) => [b.sensor, b]));
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-body-sm font-mono w-full">
+        <thead>
+          <tr className="border-b border-brand-hairline text-caption text-brand-muted text-left">
+            <th className="py-xxs px-md font-medium">센서</th>
+            <th className="py-xxs px-md font-medium">현재 ({currentId})</th>
+            <th className="py-xxs px-md font-medium">baseline ({baselineId})</th>
+            <th className="py-xxs px-md font-medium">평균 차이</th>
+            <th className="py-xxs px-md font-medium">이상 횟수 (현재 / baseline)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {current.map((s) => {
+            const b = baseByName.get(s.sensor);
+            const diffPct =
+              b && b.mean !== 0 ? ((s.mean - b.mean) / b.mean) * 100 : null;
+            const sigDiff = diffPct !== null && Math.abs(diffPct) >= 5;
+            const anomalyDiff = b ? s.anomalies - b.anomalies : 0;
+            const sigAnomaly = Math.abs(anomalyDiff) >= 2;
+            return (
+              <tr
+                key={s.sensor}
+                className="border-b border-brand-hairline-soft last:border-b-0"
+              >
+                <td className="py-xs px-md text-brand-ink whitespace-nowrap">
+                  {s.sensor}
+                </td>
+                <td className="py-xs px-md text-brand-ink whitespace-nowrap">
+                  {s.mean} ±{s.stddev}{" "}
+                  <span className="text-brand-muted">
+                    ({s.min}~{s.max})
+                  </span>
+                </td>
+                <td className="py-xs px-md text-brand-ink whitespace-nowrap">
+                  {b ? (
+                    <>
+                      {b.mean} ±{b.stddev}{" "}
+                      <span className="text-brand-muted">
+                        ({b.min}~{b.max})
+                      </span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td
+                  className={[
+                    "py-xs px-md whitespace-nowrap",
+                    sigDiff
+                      ? diffPct! > 0
+                        ? "bg-brand-warning/15 text-brand-ink font-medium"
+                        : "bg-brand-accent-teal/15 text-brand-ink font-medium"
+                      : "text-brand-ink",
+                  ].join(" ")}
+                >
+                  {diffPct === null
+                    ? "—"
+                    : `${diffPct > 0 ? "+" : ""}${diffPct.toFixed(1)}%`}
+                </td>
+                <td
+                  className={[
+                    "py-xs px-md whitespace-nowrap",
+                    sigAnomaly
+                      ? "bg-brand-error-soft text-brand-error font-medium"
+                      : "text-brand-ink",
+                  ].join(" ")}
+                >
+                  {s.anomalies} / {b?.anomalies ?? "—"}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
