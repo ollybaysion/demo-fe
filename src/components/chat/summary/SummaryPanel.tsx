@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from "react";
 import { CONTEXT_LABELS } from "@/config/contextColumns";
 import type { ContextRow } from "@/lib/types";
-import type { TimeRange } from "./context/useContextRows";
+import type { TimeRange } from "../context/useContextRows";
 
 /**
  * 대화 요약 패널 — 운영자 인계용 사이드 패널.

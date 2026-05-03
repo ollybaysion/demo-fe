@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { HELP_MARKDOWN } from "@/content/help";
-import { MarkdownContent } from "@/components/chat/markdown/MarkdownContent";
+import { MarkdownContent } from "@/components/chat/message/markdown/MarkdownContent";
 
 /**
  * 도움말 FAB + 모달.

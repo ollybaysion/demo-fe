@@ -9,9 +9,9 @@ import type {
 } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
 import { MarkdownErrorBoundary } from "./markdown/MarkdownErrorBoundary";
-import { MessageChart } from "./MessageChart";
-import { MessageDataTable } from "./MessageDataTable";
-import { MessageEventTimeline } from "./MessageEventTimeline";
+import { MessageChart } from "../paired/MessageChart";
+import { MessageDataTable } from "../paired/MessageDataTable";
+import { MessageEventTimeline } from "../paired/MessageEventTimeline";
 
 /**
  * 메시지 단위 액션.
