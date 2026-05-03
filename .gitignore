@@ -43,3 +43,7 @@ next-env.d.ts
 # project-internal (not for public repo)
 CLAUDE.md
 docs/
+
+# claude code / playwright MCP artifacts
+.claude/
+.playwright-mcp/
