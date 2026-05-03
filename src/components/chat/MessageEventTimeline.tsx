@@ -34,10 +34,26 @@ type Props = {
   bubbleRef?: React.RefObject<HTMLDivElement | null>;
 };
 
-const LEVEL_DEFAULT_COLOR: Record<EventTimelineLevel, string> = {
-  process: "#cc785c", // brand-primary
-  step: "#5db8a6", // brand-accent-teal
-};
+// Process tracks 의 기본 색 (단일).
+const PROCESS_DEFAULT_COLOR = "#cc785c"; // brand-primary
+
+// Step tracks 의 기본 색 cycle. 트랙별로 다른 색이 배정되도록.
+// 백엔드가 `event.color` 명시하면 그쪽이 우선.
+const STEP_TRACK_PALETTE = [
+  "#5db8a6", // brand-accent-teal
+  "#e8a55a", // brand-accent-amber
+  "#5db872", // brand-success
+  "#c64545", // brand-error
+  "#d4a017", // brand-warning
+];
+
+function trackDefaultColor(
+  level: EventTimelineLevel,
+  indexInLevel: number,
+): string {
+  if (level === "process") return PROCESS_DEFAULT_COLOR;
+  return STEP_TRACK_PALETTE[indexInLevel % STEP_TRACK_PALETTE.length];
+}
 
 const TRACK_LABEL_WIDTH = 96;
 const SUBROW_HEIGHT = 24;
@@ -63,6 +79,8 @@ type TrackInfo = {
   key: string;
   label: string;
   level: EventTimelineLevel;
+  /** 트랙별 기본 색. event.color 미지정 시 사용. */
+  defaultColor: string;
   subrowCount: number;
   /** 이 트랙 시작 y (timeline plot 좌표계 기준, axis 제외). */
   yOffset: number;
@@ -331,6 +349,22 @@ function TimelineSvg({
           );
         })}
 
+        {/* 트랙 사이 구분선 (옅은 회색). 마지막 트랙 뒤엔 안 그림. */}
+        {tracks.slice(0, -1).map((t, i) => {
+          const y = AXIS_HEIGHT + t.yOffset + t.height + TRACK_GAP / 2;
+          return (
+            <line
+              key={`divider-${i}`}
+              x1={0}
+              x2={containerWidth}
+              y1={y}
+              y2={y}
+              stroke="#e6dfd8"
+              strokeWidth={1}
+            />
+          );
+        })}
+
         {/* 이벤트 막대 */}
         {events.map((ev, i) => {
           const track = tracks.find((t) => t.key === ev.trackKey);
@@ -342,7 +376,7 @@ function TimelineSvg({
           const x1 = xFor(ev.startNum);
           const x2 = xFor(ev.endNum);
           const w = Math.max(2, x2 - x1);
-          const fill = ev.color ?? LEVEL_DEFAULT_COLOR[ev.level];
+          const fill = ev.color ?? track.defaultColor;
           return (
             <g key={i}>
               <rect
@@ -470,24 +504,26 @@ function computeLayout(events: NumericEvent[]): {
   events: LaidOutEvent[];
 } {
   // 1. 트랙 발견 순서 정리 (process 먼저, step 나중. 같은 level 내 입력 순서)
+  // indexInLevel 도 같이 잡아 트랙별 default 색 매핑에 사용.
   const trackOrder: Array<{
     key: string;
     label: string;
     level: EventTimelineLevel;
+    indexInLevel: number;
   }> = [];
-  const seen = new Map<string, number>(); // key -> orderIndex
+  const seen = new Map<string, number>(); // key -> orderIndex (in-level)
   let processOrder = 0;
   let stepOrder = 0;
   for (const ev of events) {
     const key = `${ev.level}::${ev.track}`;
     if (seen.has(key)) continue;
-    const order = ev.level === "process" ? processOrder++ : stepOrder++;
-    seen.set(key, order);
-    trackOrder.push({ key, label: ev.track, level: ev.level });
+    const indexInLevel = ev.level === "process" ? processOrder++ : stepOrder++;
+    seen.set(key, indexInLevel);
+    trackOrder.push({ key, label: ev.track, level: ev.level, indexInLevel });
   }
   trackOrder.sort((a, b) => {
     if (a.level !== b.level) return a.level === "process" ? -1 : 1;
-    return (seen.get(a.key) ?? 0) - (seen.get(b.key) ?? 0);
+    return a.indexInLevel - b.indexInLevel;
   });
 
   // 2. 트랙별 sub-row 할당. 같은 트랙에서 시간 겹치면 다음 sub-row 로.
@@ -531,6 +567,7 @@ function computeLayout(events: NumericEvent[]): {
       key: t.key,
       label: t.label,
       level: t.level,
+      defaultColor: trackDefaultColor(t.level, t.indexInLevel),
       subrowCount,
       yOffset: yCursor,
       height,
