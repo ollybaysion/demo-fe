@@ -35,14 +35,20 @@ type Props = {
 export function MessageDataTable({
   table,
   maxHeight,
-  expanded,
-  onToggleExpand,
+  expanded: externalExpanded,
+  onToggleExpand: externalOnToggle,
   bubbleRef,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowsY, setOverflowsY] = useState(false);
   const [overflowsX, setOverflowsX] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
+  // 외부 제어가 없으면 내부 state 로 [펼치기] 토글 자체 관리.
+  // (PairedItemCard 안에서 사용될 때처럼 부모가 신경 안 쓰는 케이스)
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded = externalExpanded ?? internalExpanded;
+  const onToggleExpand =
+    externalOnToggle ?? (() => setInternalExpanded((v) => !v));
   // [확장] overlay — 가로 폭이 부모를 초과할 때 풍선과 같은 높이로 폭만
   // 풀로 펼쳐 표를 보는 모드 (#42). 메시지마다 독립 상태.
   const [maximized, setMaximized] = useState(false);

@@ -10,6 +10,8 @@ export type MessageRole = "user" | "assistant" | "error";
 export type MessageTable = {
   rows: Record<string, unknown>[];
   columns?: string[];
+  /** Card 헤더에 노출되는 제목. 비면 fallback (예: "표"). */
+  title?: string;
 };
 
 /**
@@ -69,14 +71,37 @@ export type MessageChart = {
   };
 };
 
+/**
+ * Paired 항목의 위치 힌트 (#45). 백엔드가 의미 있는 짝짓기를 강제할
+ * 때 명시. 미지정 시 FE 가 균형 분배.
+ */
+export type PairedSide = "left" | "right";
+
+export type MessageTableEntry = MessageTable & {
+  side?: PairedSide;
+};
+
+export type MessageChartEntry = MessageChart & {
+  side?: PairedSide;
+};
+
 export type Message = {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: number;
-  /** Paired data table (#34) — 어시스턴트 메시지에만. */
+  /** Paired data tables (#34, #45) — 어시스턴트 메시지에만. */
+  tables?: MessageTableEntry[];
+  /** Paired charts (#37, #45) — 어시스턴트 메시지에만. */
+  charts?: MessageChartEntry[];
+  /**
+   * @deprecated #45 이후 `tables` 사용. 기존 localStorage 호환용.
+   * 렌더 시 `tables ?? [table]` 로 coalesce.
+   */
   table?: MessageTable;
-  /** Paired chart (#37) — 어시스턴트 메시지에만. */
+  /**
+   * @deprecated #45 이후 `charts` 사용. 기존 localStorage 호환용.
+   */
   chart?: MessageChart;
   /**
    * 추천 후속 질문 (#40) — 어시스턴트 메시지에만. ChatInput 위에 chip

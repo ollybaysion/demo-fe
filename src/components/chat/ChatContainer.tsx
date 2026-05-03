@@ -6,8 +6,8 @@ import { parseSseStream } from "@/lib/sse";
 import type {
   ContextRow,
   Message,
-  MessageChart,
-  MessageTable,
+  MessageChartEntry,
+  MessageTableEntry,
 } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
@@ -38,8 +38,8 @@ type ErrorPayload = { message: string };
 type DonePayload = {
   messageId: string;
   finishReason: "stop" | "length" | "error";
-  table?: MessageTable;
-  chart?: MessageChart;
+  tables?: MessageTableEntry[];
+  charts?: MessageChartEntry[];
   recommendQuestion?: string[];
 };
 type StreamPayload = TokenPayload | ErrorPayload | DonePayload;
@@ -214,24 +214,26 @@ export function ChatContainer() {
           } else if (ev.event === "done") {
             // 응답 종료 — 표 / 차트 / 추천 후속 질문이 동봉되어 있으면
             // 이때 어시스턴트 메시지에 한 번에 attach. 백엔드 페이로드
-            // 형태(docs/api.md §5)와 동일.
+            // 형태(docs/api.md §5)와 동일. tables/charts 는 다중(#45).
             const payload = ev.data as DonePayload;
-            const hasExtras =
-              !!payload.table ||
-              !!payload.chart ||
-              (!!payload.recommendQuestion &&
-                payload.recommendQuestion.length > 0);
-            if (assistantInserted && hasExtras) {
+            const hasTables =
+              !!payload.tables && payload.tables.length > 0;
+            const hasCharts =
+              !!payload.charts && payload.charts.length > 0;
+            const hasRecommend =
+              !!payload.recommendQuestion &&
+              payload.recommendQuestion.length > 0;
+            if (
+              assistantInserted &&
+              (hasTables || hasCharts || hasRecommend)
+            ) {
               setMessages((prev) =>
                 prev.map((m) => {
                   if (m.id !== assistantId) return m;
                   const next: Message = { ...m };
-                  if (payload.table) next.table = payload.table;
-                  if (payload.chart) next.chart = payload.chart;
-                  if (
-                    payload.recommendQuestion &&
-                    payload.recommendQuestion.length > 0
-                  ) {
+                  if (hasTables) next.tables = payload.tables;
+                  if (hasCharts) next.charts = payload.charts;
+                  if (hasRecommend) {
                     next.recommendQuestion = payload.recommendQuestion;
                   }
                   return next;

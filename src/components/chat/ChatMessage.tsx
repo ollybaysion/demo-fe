@@ -1,10 +1,13 @@
 "use client";
 
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { Message } from "@/lib/types";
+import { type ReactNode, useMemo, useRef, useState } from "react";
+import type {
+  Message,
+  MessageChartEntry,
+  MessageTableEntry,
+} from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
-import { MessageChart } from "./MessageChart";
-import { MessageDataTable } from "./MessageDataTable";
+import { PairedItemCard } from "./PairedItemCard";
 
 /**
  * 메시지 단위 액션 (#30).
@@ -25,22 +28,28 @@ type Props = {
 };
 
 export function ChatMessage({ message, streaming, onRegenerate }: Props) {
-  // 풍선 높이를 측정해 paired 표 의 max-height 를 거기에 맞춤(#34) —
-  // 표 내부 세로 스크롤. 사용자가 토글 버튼으로 풀 펼침 가능.
+  // 풍선 DOM ref — 표의 [확장] overlay (#42) 가 풍선 위치에 anchor
+  // 하기 위해 필요.
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const [bubbleHeight, setBubbleHeight] = useState<number | null>(null);
-  const [tableExpanded, setTableExpanded] = useState(false);
 
-  useEffect(() => {
-    const el = bubbleRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) setBubbleHeight(entry.contentRect.height);
+  // tables / charts 를 좌·우 컬럼에 분배 (#45 P4 + H5).
+  // 백엔드의 `side?` 힌트가 있으면 그쪽으로, 없으면 적은 쪽 우선
+  // (동률이면 type fallback: 표 → 좌, 차트 → 우).
+  // 단수형 `table?` / `chart?` 는 backward-compat 으로 흡수.
+  // 훅은 early return 이전에 호출해야 하므로 isError / isUser 분기 전에 둠.
+  const distributed = useMemo(() => {
+    if (message.role !== "assistant") return { left: [], right: [] };
+    return distributePairedItems({
+      tables: message.tables ?? (message.table ? [message.table] : []),
+      charts: message.charts ?? (message.chart ? [message.chart] : []),
     });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  }, [
+    message.role,
+    message.tables,
+    message.table,
+    message.charts,
+    message.chart,
+  ]);
 
   if (message.role === "error") {
     return (
@@ -68,8 +77,8 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
   }
 
   const isUser = message.role === "user";
-  const hasTable = !isUser && !!message.table;
-  const hasChart = !isUser && !!message.chart;
+  const hasLeft = distributed.left.length > 0;
+  const hasRight = distributed.right.length > 0;
 
   return (
     <li
@@ -113,20 +122,30 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
           />
         )}
       </div>
-      {hasTable && message.table && (
-        <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex justify-end">
-          <MessageDataTable
-            table={message.table}
-            maxHeight={bubbleHeight}
-            expanded={tableExpanded}
-            onToggleExpand={() => setTableExpanded((v) => !v)}
-            bubbleRef={bubbleRef}
-          />
+      {hasLeft && (
+        <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex flex-col gap-md">
+          {distributed.left.map((entry, idx) => (
+            <PairedItemCard
+              key={`left-${idx}`}
+              kind={entry.kind}
+              payload={entry.payload}
+              defaultExpanded={idx === 0}
+              bubbleRef={bubbleRef}
+            />
+          ))}
         </div>
       )}
-      {hasChart && message.chart && (
-        <div className="xl:col-start-3 xl:row-start-1 min-w-0 flex justify-start">
-          <MessageChart chart={message.chart} />
+      {hasRight && (
+        <div className="xl:col-start-3 xl:row-start-1 min-w-0 flex flex-col gap-md">
+          {distributed.right.map((entry, idx) => (
+            <PairedItemCard
+              key={`right-${idx}`}
+              kind={entry.kind}
+              payload={entry.payload}
+              defaultExpanded={idx === 0}
+              bubbleRef={bubbleRef}
+            />
+          ))}
         </div>
       )}
     </li>
@@ -348,4 +367,53 @@ function ThumbsDownIcon({ filled }: { filled: boolean }) {
       <line x1="17" y1="2" x2="17" y2="13" />
     </svg>
   );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Paired items distribution (#45)
+// ────────────────────────────────────────────────────────────────────
+
+type DistributedEntry =
+  | { kind: "table"; payload: MessageTableEntry }
+  | { kind: "chart"; payload: MessageChartEntry };
+
+/**
+ * tables / charts 를 좌·우 컬럼에 분배.
+ * - entry 의 `side?` 가 명시되어 있으면 그쪽으로
+ * - 미지정 시 항목 수 적은 쪽 우선 (동률이면 type fallback: 표→좌, 차트→우)
+ * - 입력 순서를 보존해 컬럼 안에서의 stack 순서 결정
+ */
+function distributePairedItems({
+  tables,
+  charts,
+}: {
+  tables: readonly MessageTableEntry[];
+  charts: readonly MessageChartEntry[];
+}): { left: DistributedEntry[]; right: DistributedEntry[] } {
+  const left: DistributedEntry[] = [];
+  const right: DistributedEntry[] = [];
+
+  const all: DistributedEntry[] = [
+    ...tables.map<DistributedEntry>((t) => ({ kind: "table", payload: t })),
+    ...charts.map<DistributedEntry>((c) => ({ kind: "chart", payload: c })),
+  ];
+
+  for (const entry of all) {
+    const explicit = entry.payload.side;
+    let chosen: "left" | "right";
+    if (explicit) {
+      chosen = explicit;
+    } else if (left.length < right.length) {
+      chosen = "left";
+    } else if (right.length < left.length) {
+      chosen = "right";
+    } else {
+      // 동률 — type fallback
+      chosen = entry.kind === "table" ? "left" : "right";
+    }
+    if (chosen === "left") left.push(entry);
+    else right.push(entry);
+  }
+
+  return { left, right };
 }
