@@ -215,6 +215,10 @@ export const SCENARIOS: readonly Scenario[] = [
         ],
         // 공정 / STEP 타임라인 (#49). Gantt 식 — 공정 1개 + 챔버 2개의
         // STEP 시퀀스. 챔버 B 는 같은 흐름이지만 약간 offset 으로 진행.
+        // 챔버 A 의 EPD 측정 / RF Tune 은 MAIN_ETCH 와 시간 겹침 →
+        // sub-row stacking 동작 확인용. "이상 감지" 트랙은 cascade 형태
+        // (3개 이벤트 연쇄 overlap) 으로 sub-row 가 2~3 단까지 쌓이는
+        // 케이스 시각 검증.
         eventTimelines: [
           {
             title: "공정 / STEP 타임라인",
@@ -223,10 +227,17 @@ export const SCENARIOS: readonly Scenario[] = [
               { track: "공정",   level: "process", start: "09:00:00", end: "09:10:00", label: "Recipe-2 batch" },
               { track: "챔버 A", level: "step",    start: "09:00:00", end: "09:01:45", label: "PRE_HEAT" },
               { track: "챔버 A", level: "step",    start: "09:02:00", end: "09:08:45", label: "MAIN_ETCH" },
+              // 아래 두 개는 MAIN_ETCH 와 겹침 → 챔버 A 가 sub-row 3단으로 쌓임
+              { track: "챔버 A", level: "step",    start: "09:03:00", end: "09:04:30", label: "RF Tune" },
+              { track: "챔버 A", level: "step",    start: "09:04:00", end: "09:07:30", label: "EPD 측정" },
               { track: "챔버 A", level: "step",    start: "09:09:00", end: "09:10:00", label: "POST_PURGE" },
               { track: "챔버 B", level: "step",    start: "09:00:30", end: "09:02:15", label: "PRE_HEAT" },
               { track: "챔버 B", level: "step",    start: "09:02:30", end: "09:09:00", label: "MAIN_ETCH" },
               { track: "챔버 B", level: "step",    start: "09:09:15", end: "09:10:00", label: "POST_PURGE" },
+              // 별도 트랙 — 연쇄 overlap (sub-row 2단)
+              { track: "이상 감지", level: "step", start: "09:03:00", end: "09:05:00", label: "Pressure spike" },
+              { track: "이상 감지", level: "step", start: "09:04:00", end: "09:06:30", label: "Temp warning" },
+              { track: "이상 감지", level: "step", start: "09:05:30", end: "09:07:00", label: "RF reflected" },
             ],
           },
         ],
