@@ -7,6 +7,7 @@ import type {
   ContextRow,
   Message,
   MessageChartEntry,
+  MessageEventTimelineEntry,
   MessageTableEntry,
 } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -40,6 +41,7 @@ type DonePayload = {
   finishReason: "stop" | "length" | "error";
   tables?: MessageTableEntry[];
   charts?: MessageChartEntry[];
+  eventTimelines?: MessageEventTimelineEntry[];
   recommendQuestion?: string[];
 };
 type StreamPayload = TokenPayload | ErrorPayload | DonePayload;
@@ -220,12 +222,14 @@ export function ChatContainer() {
               !!payload.tables && payload.tables.length > 0;
             const hasCharts =
               !!payload.charts && payload.charts.length > 0;
+            const hasTimelines =
+              !!payload.eventTimelines && payload.eventTimelines.length > 0;
             const hasRecommend =
               !!payload.recommendQuestion &&
               payload.recommendQuestion.length > 0;
             if (
               assistantInserted &&
-              (hasTables || hasCharts || hasRecommend)
+              (hasTables || hasCharts || hasTimelines || hasRecommend)
             ) {
               setMessages((prev) =>
                 prev.map((m) => {
@@ -233,6 +237,7 @@ export function ChatContainer() {
                   const next: Message = { ...m };
                   if (hasTables) next.tables = payload.tables;
                   if (hasCharts) next.charts = payload.charts;
+                  if (hasTimelines) next.eventTimelines = payload.eventTimelines;
                   if (hasRecommend) {
                     next.recommendQuestion = payload.recommendQuestion;
                   }

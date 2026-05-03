@@ -112,6 +112,7 @@ export async function POST(request: Request): Promise<Response> {
   let responseText: string;
   let responseTables: unknown[] | undefined;
   let responseCharts: unknown[] | undefined;
+  let responseEventTimelines: unknown[] | undefined;
   let responseRecommend: string[] | undefined;
   if (body.demo) {
     const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
@@ -120,6 +121,9 @@ export async function POST(request: Request): Promise<Response> {
       responseText = turn.assistant;
       responseTables = turn.tables ? [...turn.tables] : undefined;
       responseCharts = turn.charts ? [...turn.charts] : undefined;
+      responseEventTimelines = turn.eventTimelines
+        ? [...turn.eventTimelines]
+        : undefined;
       responseRecommend = turn.recommendQuestion;
     } else {
       responseText =
@@ -154,6 +158,9 @@ export async function POST(request: Request): Promise<Response> {
               : {}),
             ...(responseCharts && responseCharts.length > 0
               ? { charts: responseCharts }
+              : {}),
+            ...(responseEventTimelines && responseEventTimelines.length > 0
+              ? { eventTimelines: responseEventTimelines }
               : {}),
             ...(responseRecommend && responseRecommend.length > 0
               ? { recommendQuestion: responseRecommend }

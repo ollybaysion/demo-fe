@@ -4,11 +4,13 @@ import { type ReactNode, useMemo, useRef, useState } from "react";
 import type {
   Message,
   MessageChartEntry,
+  MessageEventTimelineEntry,
   MessageTableEntry,
 } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
 import { MessageChart } from "./MessageChart";
 import { MessageDataTable } from "./MessageDataTable";
+import { MessageEventTimeline } from "./MessageEventTimeline";
 
 /**
  * 메시지 단위 액션 (#30).
@@ -33,9 +35,9 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
   // 하기 위해 필요.
   const bubbleRef = useRef<HTMLDivElement>(null);
 
-  // tables / charts 를 좌·우 컬럼에 분배 (#45 P4 + H5).
+  // tables / charts / event timelines 를 좌·우 컬럼에 분배 (#45 P4 + #49).
   // 백엔드의 `side?` 힌트가 있으면 그쪽으로, 없으면 적은 쪽 우선
-  // (동률이면 type fallback: 표 → 좌, 차트 → 우).
+  // (동률이면 type fallback: 표 → 좌, 차트 → 우, 타임라인 → 좌).
   // 단수형 `table?` / `chart?` 는 backward-compat 으로 흡수.
   // 훅은 early return 이전에 호출해야 하므로 isError / isUser 분기 전에 둠.
   const distributed = useMemo(() => {
@@ -43,6 +45,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
     return distributePairedItems({
       tables: message.tables ?? (message.table ? [message.table] : []),
       charts: message.charts ?? (message.chart ? [message.chart] : []),
+      eventTimelines: message.eventTimelines ?? [],
     });
   }, [
     message.role,
@@ -50,6 +53,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
     message.table,
     message.charts,
     message.chart,
+    message.eventTimelines,
   ]);
 
   if (message.role === "error") {
@@ -125,42 +129,70 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
       </div>
       {hasLeft && (
         <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex flex-col gap-md">
-          {distributed.left.map((entry, idx) =>
-            entry.kind === "table" ? (
-              <MessageDataTable
-                key={`left-${idx}`}
-                table={entry.payload}
-                defaultExpanded={idx === 0}
-                bubbleRef={bubbleRef}
+          {distributed.left.map((entry, idx) => {
+            const key = `left-${idx}`;
+            const defaultExpanded = idx === 0;
+            if (entry.kind === "table") {
+              return (
+                <MessageDataTable
+                  key={key}
+                  table={entry.payload}
+                  defaultExpanded={defaultExpanded}
+                  bubbleRef={bubbleRef}
+                />
+              );
+            }
+            if (entry.kind === "chart") {
+              return (
+                <MessageChart
+                  key={key}
+                  chart={entry.payload}
+                  defaultExpanded={defaultExpanded}
+                />
+              );
+            }
+            return (
+              <MessageEventTimeline
+                key={key}
+                timeline={entry.payload}
+                defaultExpanded={defaultExpanded}
               />
-            ) : (
-              <MessageChart
-                key={`left-${idx}`}
-                chart={entry.payload}
-                defaultExpanded={idx === 0}
-              />
-            ),
-          )}
+            );
+          })}
         </div>
       )}
       {hasRight && (
         <div className="xl:col-start-3 xl:row-start-1 min-w-0 flex flex-col gap-md">
-          {distributed.right.map((entry, idx) =>
-            entry.kind === "table" ? (
-              <MessageDataTable
-                key={`right-${idx}`}
-                table={entry.payload}
-                defaultExpanded={idx === 0}
-                bubbleRef={bubbleRef}
+          {distributed.right.map((entry, idx) => {
+            const key = `right-${idx}`;
+            const defaultExpanded = idx === 0;
+            if (entry.kind === "table") {
+              return (
+                <MessageDataTable
+                  key={key}
+                  table={entry.payload}
+                  defaultExpanded={defaultExpanded}
+                  bubbleRef={bubbleRef}
+                />
+              );
+            }
+            if (entry.kind === "chart") {
+              return (
+                <MessageChart
+                  key={key}
+                  chart={entry.payload}
+                  defaultExpanded={defaultExpanded}
+                />
+              );
+            }
+            return (
+              <MessageEventTimeline
+                key={key}
+                timeline={entry.payload}
+                defaultExpanded={defaultExpanded}
               />
-            ) : (
-              <MessageChart
-                key={`right-${idx}`}
-                chart={entry.payload}
-                defaultExpanded={idx === 0}
-              />
-            ),
-          )}
+            );
+          })}
         </div>
       )}
     </li>
@@ -385,25 +417,29 @@ function ThumbsDownIcon({ filled }: { filled: boolean }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Paired items distribution (#45)
+// Paired items distribution (#45 + #49)
 // ────────────────────────────────────────────────────────────────────
 
 type DistributedEntry =
   | { kind: "table"; payload: MessageTableEntry }
-  | { kind: "chart"; payload: MessageChartEntry };
+  | { kind: "chart"; payload: MessageChartEntry }
+  | { kind: "timeline"; payload: MessageEventTimelineEntry };
 
 /**
- * tables / charts 를 좌·우 컬럼에 분배.
+ * tables / charts / event timelines 를 좌·우 컬럼에 분배.
  * - entry 의 `side?` 가 명시되어 있으면 그쪽으로
- * - 미지정 시 항목 수 적은 쪽 우선 (동률이면 type fallback: 표→좌, 차트→우)
+ * - 미지정 시 항목 수 적은 쪽 우선
+ *   (동률이면 type fallback: 표→좌, 차트→우, 타임라인→좌)
  * - 입력 순서를 보존해 컬럼 안에서의 stack 순서 결정
  */
 function distributePairedItems({
   tables,
   charts,
+  eventTimelines,
 }: {
   tables: readonly MessageTableEntry[];
   charts: readonly MessageChartEntry[];
+  eventTimelines: readonly MessageEventTimelineEntry[];
 }): { left: DistributedEntry[]; right: DistributedEntry[] } {
   const left: DistributedEntry[] = [];
   const right: DistributedEntry[] = [];
@@ -411,6 +447,10 @@ function distributePairedItems({
   const all: DistributedEntry[] = [
     ...tables.map<DistributedEntry>((t) => ({ kind: "table", payload: t })),
     ...charts.map<DistributedEntry>((c) => ({ kind: "chart", payload: c })),
+    ...eventTimelines.map<DistributedEntry>((tl) => ({
+      kind: "timeline",
+      payload: tl,
+    })),
   ];
 
   for (const entry of all) {
@@ -423,8 +463,8 @@ function distributePairedItems({
     } else if (right.length < left.length) {
       chosen = "right";
     } else {
-      // 동률 — type fallback
-      chosen = entry.kind === "table" ? "left" : "right";
+      // 동률 — type fallback (table/timeline 좌, chart 우)
+      chosen = entry.kind === "chart" ? "right" : "left";
     }
     if (chosen === "left") left.push(entry);
     else right.push(entry);
