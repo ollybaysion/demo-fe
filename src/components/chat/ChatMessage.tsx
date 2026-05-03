@@ -8,6 +8,7 @@ import type {
   MessageTableEntry,
 } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
+import { MarkdownErrorBoundary } from "./markdown/MarkdownErrorBoundary";
 import { MessageChart } from "./MessageChart";
 import { MessageDataTable } from "./MessageDataTable";
 import { MessageEventTimeline } from "./MessageEventTimeline";
@@ -132,7 +133,11 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
             message.content
           ) : (
             // 스트리밍 중에도 MarkdownContent 가 토큰마다 점진 렌더.
-            <MarkdownContent content={message.content} />
+            // ErrorBoundary 로 감싸 마크다운 라이브러리 throw 시 그 메시지만
+            // plain text 로 fallback (#39). 다른 메시지·앱 트리에 무영향.
+            <MarkdownErrorBoundary fallbackText={message.content}>
+              <MarkdownContent content={message.content} />
+            </MarkdownErrorBoundary>
           )}
         </div>
         {!streaming && (
