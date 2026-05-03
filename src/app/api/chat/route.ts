@@ -7,6 +7,27 @@ export const dynamic = "force-dynamic";
 
 const TOKEN_INTERVAL_MS = 30;
 
+/**
+ * Request body 한도 (#83 보안).
+ *
+ * 제한 없는 size 의 payload 가 들어오면 백엔드 / mock 모두 자원 낭비
+ * 또는 DoS 위험. 일반 데모 / 운영 사용 패턴에서는 충분히 큰 값으로
+ * 잡아 정상 사용에 영향 없음.
+ *
+ * 위반 시 400 + 구조화된 에러: { error, limit, actual }.
+ */
+const MAX_MESSAGES = 100;
+const MAX_MESSAGE_CONTENT_CHARS = 10_000;
+const MAX_CONTEXT_ROWS = 50;
+
+function rejectTooLarge(
+  error: string,
+  limit: number,
+  actual: number,
+): Response {
+  return Response.json({ error, limit, actual }, { status: 400 });
+}
+
 type ChatTimeRange = { start?: string; end?: string };
 
 type ChatDemoMeta = {
@@ -95,6 +116,31 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       { error: "messages is required" },
       { status: 400 },
+    );
+  }
+
+  // #83 — size/length 한도 검증.
+  if (body.messages.length > MAX_MESSAGES) {
+    return rejectTooLarge(
+      "messages_too_many",
+      MAX_MESSAGES,
+      body.messages.length,
+    );
+  }
+  for (const m of body.messages) {
+    if (typeof m?.content === "string" && m.content.length > MAX_MESSAGE_CONTENT_CHARS) {
+      return rejectTooLarge(
+        "message_content_too_long",
+        MAX_MESSAGE_CONTENT_CHARS,
+        m.content.length,
+      );
+    }
+  }
+  if (Array.isArray(body.context) && body.context.length > MAX_CONTEXT_ROWS) {
+    return rejectTooLarge(
+      "context_too_large",
+      MAX_CONTEXT_ROWS,
+      body.context.length,
     );
   }
 
