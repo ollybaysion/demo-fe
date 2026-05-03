@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Message } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
 import { MessageDataTable } from "./MessageDataTable";
@@ -24,6 +24,23 @@ type Props = {
 };
 
 export function ChatMessage({ message, streaming, onRegenerate }: Props) {
+  // 풍선 높이를 측정해 paired 표 의 max-height 를 거기에 맞춤(#34) —
+  // 표 내부 세로 스크롤. 사용자가 토글 버튼으로 풀 펼침 가능.
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const [bubbleHeight, setBubbleHeight] = useState<number | null>(null);
+  const [tableExpanded, setTableExpanded] = useState(false);
+
+  useEffect(() => {
+    const el = bubbleRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setBubbleHeight(entry.contentRect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (message.role === "error") {
     return (
       <li className="flex justify-start">
@@ -70,6 +87,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
         ].join(" ")}
       >
         <div
+          ref={bubbleRef}
           aria-busy={streaming || undefined}
           className={[
             "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body",
@@ -95,7 +113,12 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
       </div>
       {hasTable && message.table && (
         <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex justify-end">
-          <MessageDataTable table={message.table} />
+          <MessageDataTable
+            table={message.table}
+            maxHeight={bubbleHeight}
+            expanded={tableExpanded}
+            onToggleExpand={() => setTableExpanded((v) => !v)}
+          />
         </div>
       )}
     </li>
