@@ -62,19 +62,24 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
         aria-busy={streaming || undefined}
         className={[
           "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body",
-          // user 입력은 사용자가 친 그대로(개행 보존). assistant 본문은
-          // MarkdownContent 가 자체적으로 블록 요소 처리.
           isUser
-            ? "whitespace-pre-wrap bg-brand-primary text-brand-on-primary"
+            ? "bg-brand-primary text-brand-on-primary"
             : "bg-brand-surface-card text-brand-ink",
+          // user 입력은 개행 그대로. assistant 도 스트리밍 중에는 plain
+          // 으로 — 부분 마크다운이 블럭화되며 커서가 줄 아래로 떨어지는
+          // 어색함을 막고, 토큰이 마지막 글자 옆에 인라인으로 붙도록.
+          // 스트리밍이 끝나면 MarkdownContent 가 자체 블록 요소를 그림.
+          isUser || streaming ? "whitespace-pre-wrap" : "",
         ].join(" ")}
       >
-        {isUser ? (
-          message.content
+        {isUser || streaming ? (
+          <>
+            {message.content}
+            {streaming && <StreamingCursor />}
+          </>
         ) : (
           <MarkdownContent content={message.content} />
         )}
-        {streaming && <StreamingCursor />}
       </div>
       {!streaming && (
         <ActionGroup
