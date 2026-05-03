@@ -72,6 +72,35 @@ export function MessageDataTable({
 
   return (
     <div className="flex flex-col items-end min-w-0">
+      {/* 표 액션 — 표 상단에 둠. 하단에 두면 [펼치기] 클릭 시 표가 길어지면서
+          버튼이 같이 아래로 끌려 내려가 다음 클릭 위치가 흔들림.
+          상단 고정 위치로 펼침/접힘 동작이 안정. 디자인은 메시지 본문 아래
+          [복사] / [👍] / [👎] 와 동일 패턴. group hover/focus 시 100% opacity. */}
+      <div
+        className={[
+          "flex gap-xxs mb-xxs",
+          "opacity-60 group-hover:opacity-100 group-focus-within:opacity-100",
+          "transition-opacity",
+        ].join(" ")}
+      >
+        {showToggle && (
+          <TableActionButton
+            onClick={onToggleExpand}
+            aria-label={expanded ? "표 접기" : "표 펼치기"}
+            aria-expanded={!!expanded}
+          >
+            {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+            <span>{expanded ? "접기" : "펼치기"}</span>
+          </TableActionButton>
+        )}
+        <TableActionButton
+          onClick={handleCopyCsv}
+          aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
+        >
+          {justCopied ? <CheckIcon /> : <CopyIcon />}
+          <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
+        </TableActionButton>
+      </div>
       {/* 디자인: 각진 사각형 + 얇은 검정 테두리. 헤더는 약간 회색 음영. */}
       <div className="w-fit max-w-full border border-brand-ink bg-brand-canvas">
         <div
@@ -119,33 +148,6 @@ export function MessageDataTable({
             </tbody>
           </table>
         </div>
-      </div>
-      {/* 표 액션 — 메시지 본문 아래의 [복사] 버튼 패턴과 동일 디자인.
-          group hover/focus 시 100% opacity. */}
-      <div
-        className={[
-          "flex gap-xxs mt-xxs",
-          "opacity-60 group-hover:opacity-100 group-focus-within:opacity-100",
-          "transition-opacity",
-        ].join(" ")}
-      >
-        {showToggle && (
-          <TableActionButton
-            onClick={onToggleExpand}
-            aria-label={expanded ? "표 접기" : "표 펼치기"}
-            aria-expanded={!!expanded}
-          >
-            {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-            <span>{expanded ? "접기" : "펼치기"}</span>
-          </TableActionButton>
-        )}
-        <TableActionButton
-          onClick={handleCopyCsv}
-          aria-label={justCopied ? "복사됨" : "CSV 형식으로 복사"}
-        >
-          {justCopied ? <CheckIcon /> : <CopyIcon />}
-          <span>{justCopied ? "복사됨" : "CSV 복사"}</span>
-        </TableActionButton>
       </div>
     </div>
   );
