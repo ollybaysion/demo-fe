@@ -102,6 +102,7 @@ export function ChatContainer() {
     if (!activeId) return; // null transition handled by handleNewConversation
     const conv = conversations.find((c) => c.id === activeId);
     if (!conv) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(conv.messages);
     replaceRows(conv.context.rows);
     replaceTimeRange(conv.context.timeRange);

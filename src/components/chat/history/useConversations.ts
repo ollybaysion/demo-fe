@@ -107,6 +107,7 @@ export function useConversations() {
     // Drop a stale id that no longer points at any stored conversation.
     const validId =
       storedId && loaded.some((c) => c.id === storedId) ? storedId : null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setList(loaded);
     setActiveId(validId);
     setHydrated(true);
