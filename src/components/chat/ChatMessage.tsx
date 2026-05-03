@@ -2,7 +2,7 @@
 
 import { type ReactNode, useState } from "react";
 import type { Message } from "@/lib/types";
-import { StreamingCursor } from "./StreamingCursor";
+import { MarkdownContent } from "./markdown/MarkdownContent";
 
 /**
  * 메시지 단위 액션 (#30).
@@ -60,14 +60,19 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
       <div
         aria-busy={streaming || undefined}
         className={[
-          "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body whitespace-pre-wrap",
+          "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body",
           isUser
-            ? "bg-brand-primary text-brand-on-primary"
+            ? "whitespace-pre-wrap bg-brand-primary text-brand-on-primary"
             : "bg-brand-surface-card text-brand-ink",
         ].join(" ")}
       >
-        {message.content}
-        {streaming && <StreamingCursor />}
+        {isUser ? (
+          message.content
+        ) : (
+          // 스트리밍 중에도 MarkdownContent 가 토큰마다 점진 렌더. 별도
+          // 깜빡이 커서는 두지 않음 — 콘텐츠가 자라는 자체가 진행 신호.
+          <MarkdownContent content={message.content} />
+        )}
       </div>
       {!streaming && (
         <ActionGroup
