@@ -801,7 +801,9 @@ function CompareSeriesChart({
         <ResponsiveContainer>
           <LineChart
             data={series.data}
-            margin={{ top: 8, right: 16, bottom: 24, left: 8 }}
+            // top 24 — alarm cross-link 의 ReferenceLine label("t=N")이
+            // 차트 상단 밖으로 잘리지 않도록 여유 확보.
+            margin={{ top: 24, right: 16, bottom: 24, left: 8 }}
           >
             <CartesianGrid stroke="var(--color-brand-hairline-soft)" strokeDasharray="3 3" />
             <XAxis
