@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import { parseSseStream } from "@/lib/sse";
 import type { ContextRow, Message } from "@/lib/types";
@@ -18,6 +17,11 @@ import {
   ContextToggleHandle,
   useContextRows,
 } from "./context";
+import {
+  ConversationsSidebar,
+  ConversationToggleHandle,
+  useConversations,
+} from "./history";
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
@@ -55,7 +59,7 @@ export function ChatContainer() {
   const [rightPanel, setRightPanel] = useState<"context" | "summary" | null>(
     null,
   );
-  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [leftPanel, setLeftPanel] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
@@ -74,8 +78,65 @@ export function ChatContainer() {
     deleteSensor,
     replaceRows,
     replaceTimeRange,
-    reset,
+    reset: resetContext,
   } = useContextRows();
+  const {
+    list: conversations,
+    activeId,
+    hydrated: conversationsHydrated,
+    createConversation,
+    updateConversation,
+    selectConversation,
+    startNewConversation,
+  } = useConversations();
+
+  // ── Conversation ↔ local state sync (#11) ─────────────────────────
+  // Load: when activeId transitions to a real id, hydrate local chat state
+  // from that conversation. The ref tracks the last-loaded id so this
+  // effect only fires on actual transitions (not on every list update).
+  const loadedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!conversationsHydrated) return;
+    if (activeId === loadedIdRef.current) return;
+    loadedIdRef.current = activeId;
+    if (!activeId) return; // null transition handled by handleNewConversation
+    const conv = conversations.find((c) => c.id === activeId);
+    if (!conv) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMessages(conv.messages);
+    replaceRows(conv.context.rows);
+    replaceTimeRange(conv.context.timeRange);
+  }, [
+    activeId,
+    conversationsHydrated,
+    conversations,
+    replaceRows,
+    replaceTimeRange,
+  ]);
+
+  // Persist: throttle local state writes to the active conversation. The
+  // 300ms idle window collapses per-token streaming updates into a single
+  // localStorage write while preserving freshness for typed input.
+  // updateConversation has an identity check, so the load case (state ===
+  // conv contents) is a no-op — updatedAt is not bumped.
+  useEffect(() => {
+    if (!conversationsHydrated) return;
+    if (!activeId) return;
+    const handle = setTimeout(() => {
+      updateConversation(activeId, {
+        messages,
+        context: { rows, timeRange },
+      });
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [
+    messages,
+    rows,
+    timeRange,
+    activeId,
+    conversationsHydrated,
+    updateConversation,
+  ]);
 
   const sendToApi = useCallback(
     async (
@@ -162,7 +223,6 @@ export function ChatContainer() {
       if (scenario.timeRange) {
         replaceTimeRange(scenario.timeRange);
       }
-      // Send starter as the first user message
       const starterMsg: Message = {
         id: newId(),
         role: "user",
@@ -180,7 +240,6 @@ export function ChatContainer() {
         { scenarioId: scenario.id, turnIndex: 0 },
       );
 
-      // Advance to next turn (or mark ended if no more)
       const nextIdx = 1;
       setDemoState({
         scenarioId: scenario.id,
@@ -194,7 +253,6 @@ export function ChatContainer() {
   const handleSubmit = useCallback(
     async (text: string) => {
       if (demoState?.ended) {
-        // Demo finished — Enter is a no-op until reset.
         return;
       }
       const userMessage: Message = {
@@ -207,16 +265,24 @@ export function ChatContainer() {
       setMessages(nextHistory);
       setIsStreaming(true);
 
+      // Auto-persist (#11): create a Conversation on the first non-demo
+      // user message. Demo flows are ephemeral — their messages do not
+      // populate the sidebar.
+      if (!demoState && !activeId) {
+        createConversation({
+          messages: nextHistory,
+          context: { rows, timeRange },
+        });
+      }
+
       if (demoState) {
         const scenario = SCENARIOS.find((s) => s.id === demoState.scenarioId);
         const currentTurn = scenario?.turns[demoState.turnIndex];
 
-        // Per-turn auto-fill (used when a scripted user message names
-        // the equipment, time, etc. — the panel "follows" the script).
         let effectiveTimeRange = timeRange;
         if (currentTurn?.contextPanel) {
           replaceRows(currentTurn.contextPanel);
-          setRightPanel("context"); // surface the just-filled panel
+          setRightPanel("context");
         }
         if (currentTurn?.timeRange) {
           replaceTimeRange(currentTurn.timeRange);
@@ -244,26 +310,35 @@ export function ChatContainer() {
       messages,
       rows,
       timeRange,
+      activeId,
       sendToApi,
       replaceRows,
       replaceTimeRange,
+      createConversation,
     ],
   );
 
-  const handleRequestReset = useCallback(() => {
-    setResetDialogOpen(true);
-  }, []);
-
-  const handleConfirmReset = useCallback(() => {
+  const handleNewConversation = useCallback(() => {
     setMessages([]);
     setIsStreaming(false);
     setDemoState(null);
     setDetailOpen(false);
-    reset();
-  }, [reset]);
+    resetContext();
+    startNewConversation();
+  }, [resetContext, startNewConversation]);
 
-  // Names of equipment currently entered in the context panel — feeds
-  // the EquipmentDetailPanel's primary dropdown.
+  const handleSidebarSelect = useCallback(
+    (id: string) => {
+      // Mid-stream switch would orphan the in-flight assistant message —
+      // require the user to wait for the current turn to settle.
+      if (isStreaming) return;
+      setDemoState(null);
+      setDetailOpen(false);
+      selectConversation(id);
+    },
+    [isStreaming, selectConversation],
+  );
+
   const equipmentNames = useMemo(
     () =>
       rows
@@ -285,48 +360,47 @@ export function ChatContainer() {
     setDetailOpen(false);
   }
 
+  function handleLeftToggle() {
+    setLeftPanel((p) => !p);
+  }
+
   const handleRetry = useCallback(() => {
     setMessages((prev) => {
       const lastUserIndex = findLastIndex(prev, (m) => m.role === "user");
       if (lastUserIndex === -1) return prev;
       const trimmed = prev.slice(0, lastUserIndex + 1);
       setIsStreaming(true);
-      // Retry uses the same demo turn (decremented earlier? no — error
-      // doesn't advance turnIndex in the success path, but on async
-      // catch it does). For v1 we just send without demo on retry to
-      // keep behavior predictable; the user can hit "다시 시작" if the
-      // scripted flow is broken.
       void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
       return trimmed;
     });
   }, [rows, timeRange, sendToApi]);
 
-  // Locked input value (ghost text) for demo turns 1+.
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
   if (demoState) {
     if (demoState.ended) {
       lockedValue = "";
-      inputPlaceholder = "데모 종료 — 헤더의 '다시 시작' 버튼을 눌러주세요";
+      inputPlaceholder = "데모 종료 — 헤더의 '새 대화' 버튼을 눌러주세요";
     } else if (!isStreaming && demoState.turnIndex > 0) {
       const scenario = SCENARIOS.find((s) => s.id === demoState.scenarioId);
       lockedValue = scenario?.turns[demoState.turnIndex]?.user;
     }
   }
 
-  const resetDialogTitle = demoState
-    ? "데모를 다시 시작하시겠습니까?"
-    : "대화를 초기화하시겠습니까?";
-  const resetDialogDescription = demoState
-    ? "현재 데모를 종료하고 시작 화면으로 돌아갑니다. 입력하신 설비 정보와 발생 시간도 함께 비워집니다."
-    : "입력하신 설비 정보와 발생 시간도 함께 비워집니다. 되돌릴 수 없습니다.";
-  const resetDialogConfirm = demoState ? "다시 시작" : "초기화";
-
   return (
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
+      {/* Left — conversation history sidebar (#11). Push layout: chat
+          column shrinks when this opens. */}
+      <ConversationsSidebar
+        open={leftPanel}
+        conversations={conversations}
+        activeId={activeId}
+        onSelect={handleSidebarSelect}
+      />
+
       {/* Chat column */}
       <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader onReset={handleRequestReset} />
+        <ChatHeader onNewConversation={handleNewConversation} />
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-chat-narrow px-lg py-xl">
@@ -376,30 +450,39 @@ export function ChatContainer() {
         onAddSensor={addSensor}
         onSetSensorName={setSensorName}
         onDeleteSensor={deleteSensor}
-        onReset={reset}
+        onReset={resetContext}
         onExpandDetail={() => setDetailOpen(true)}
         detailOpen={detailOpen}
         canExpandDetail={equipmentNames.length > 0}
       />
 
-      {/* Equipment detail expansion (#27) — sits to the left of the
-          context panel, fixed-positioned over the chat area. Only
-          visible while context panel is the active right slot. */}
       <EquipmentDetailPanel
         open={rightPanel === "context" && detailOpen}
         equipmentNames={equipmentNames}
         onClose={() => setDetailOpen(false)}
       />
 
-      {/* Right-side summary panel (#24) — mutex with context */}
       <SummaryPanel
         open={rightPanel === "summary"}
         rows={rows}
         timeRange={timeRange}
       />
 
-      {/* Right-edge floating handle stack — context on top, summary
-          stacks below once at least one message exists. */}
+      {/* Left-edge floating handle — mirror of right stack */}
+      <div
+        className={[
+          "fixed top-1/4 left-0 z-20 flex flex-col gap-xs",
+          "transition-transform duration-200 ease-out",
+          leftPanel ? "translate-x-[320px]" : "translate-x-0",
+        ].join(" ")}
+      >
+        <ConversationToggleHandle
+          isOpen={leftPanel}
+          onToggle={handleLeftToggle}
+        />
+      </div>
+
+      {/* Right-edge floating handle stack */}
       <div
         className={[
           "fixed top-1/4 right-0 z-20 flex flex-col gap-xs",
@@ -418,16 +501,6 @@ export function ChatContainer() {
           />
         )}
       </div>
-
-      <ConfirmDialog
-        open={resetDialogOpen}
-        onClose={() => setResetDialogOpen(false)}
-        onConfirm={handleConfirmReset}
-        title={resetDialogTitle}
-        description={resetDialogDescription}
-        confirmLabel={resetDialogConfirm}
-        cancelLabel="취소"
-      />
     </div>
   );
 }
