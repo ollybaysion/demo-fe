@@ -14,7 +14,7 @@ import { MessageDataTable } from "./MessageDataTable";
 import { MessageEventTimeline } from "./MessageEventTimeline";
 
 /**
- * 메시지 단위 액션 (#30).
+ * 메시지 단위 액션.
  *
  * - user 메시지: [복사]
  * - assistant 메시지: [복사] [재생성?] [👍] [👎]
@@ -32,11 +32,11 @@ type Props = {
 };
 
 export function ChatMessage({ message, streaming, onRegenerate }: Props) {
-  // 풍선 DOM ref — 표의 [확장] overlay (#42) 가 풍선 위치에 anchor
+  // 풍선 DOM ref — 표의 [확장] overlay 가 풍선 위치에 anchor
   // 하기 위해 필요.
   const bubbleRef = useRef<HTMLDivElement>(null);
 
-  // 메시지 단위 paired panel 토글 (#70). 두 종류:
+  // 메시지 단위 paired panel 토글. 두 종류:
   //   1) paneCollapsed — 패널 자체를 hide/show (DOM 에서 제거 / 복원).
   //      "패널 비활성화 / 활성화".
   //   2) paneFoldCmd — 모든 자식 패널의 본문을 일괄 fold/unfold (헤더만
@@ -49,7 +49,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
     tick: number;
   }>({ folded: false, tick: 0 });
 
-  // tables / charts / event timelines 를 좌·우 컬럼에 분배 (#45 P4 + #49).
+  // tables / charts / event timelines 를 좌·우 컬럼에 분배.
   // 백엔드의 `side?` 힌트가 있으면 그쪽으로, 없으면 적은 쪽 우선
   // (동률이면 type fallback: 표 → 좌, 차트 → 우, 타임라인 → 좌).
   // 단수형 `table?` / `chart?` 는 backward-compat 으로 흡수.
@@ -122,9 +122,9 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
       className={[
         "group grid gap-xs",
         // xl+ : 좌측 gutter (1fr) | 풍선 (max 768) | 우측 gutter (1fr,
-        //   향후 #37 차트 자리). 풍선은 항상 중앙에 자리잡아 표 유무로
-        //   위치가 흔들리지 않음. xl 미만 viewport 에서는 단일 컬럼 스택
-        //   → 풍선 아래 표 인라인.
+        //   차트 자리). 풍선은 항상 중앙에 자리잡아 표 유무로 위치가
+        //   흔들리지 않음. xl 미만 viewport 에서는 단일 컬럼 스택 → 풍선
+        //   아래 표 인라인.
         "xl:grid-cols-[minmax(0,1fr)_minmax(0,768px)_minmax(0,1fr)] xl:gap-md xl:items-start",
       ].join(" ")}
     >
@@ -146,7 +146,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
         >
           {isUser ? (
             <>
-              {/* (#91) 첨부 thumbnail — content 위에 grid. 텍스트만 있을
+              {/* 첨부 thumbnail — content 위에 grid. 텍스트만 있을
                   때와 첨부 있을 때 두 케이스 모두 자연스럽게. */}
               {message.attachments && message.attachments.length > 0 && (
                 <ul
@@ -177,7 +177,7 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
           ) : (
             // 스트리밍 중에도 MarkdownContent 가 토큰마다 점진 렌더.
             // ErrorBoundary 로 감싸 마크다운 라이브러리 throw 시 그 메시지만
-            // plain text 로 fallback (#39). 다른 메시지·앱 트리에 무영향.
+            // plain text 로 fallback. 다른 메시지·앱 트리에 무영향.
             <MarkdownErrorBoundary fallbackText={message.content}>
               <MarkdownContent content={message.content} />
             </MarkdownErrorBoundary>
@@ -309,13 +309,13 @@ function ActionGroup({
   onRegenerate?: () => void;
   /**
    * 메시지에 paired 표/차트/타임라인이 있을 때만 전달. 클릭 시 좌·우 패널
-   * 자체를 hide / show — "패널 비활성화 / 활성화". (#70)
+   * 자체를 hide / show — "패널 비활성화 / 활성화".
    */
   paneToggle?: { collapsed: boolean; onToggle: () => void };
   /**
    * 메시지의 모든 paired 패널 본문을 일괄 fold / unfold (헤더만 남김 /
    * 다시 펼침). "패널 접기 / 펼치기". paneToggle 로 패널이 hide 된 상태
-   * 에선 의미 없으므로 미전달. (#70)
+   * 에선 의미 없으므로 미전달.
    */
   paneFoldToggle?: { folded: boolean; onToggle: () => void };
 }) {
@@ -448,7 +448,7 @@ function ActionButton({
 // ────────────────────────────────────────────────────────────────────
 
 /**
- * Paired panel fold/unfold 아이콘 (#70). 위·아래 chevron 으로 본문이
+ * Paired panel fold/unfold 아이콘. 위·아래 chevron 으로 본문이
  * 접혀 있는지 / 펼쳐져 있는지 표현. 패널 자체 hide 와 의미 구분.
  */
 function PanelFoldIcon({ folded }: { folded: boolean }) {
@@ -480,7 +480,7 @@ function PanelFoldIcon({ folded }: { folded: boolean }) {
 }
 
 /**
- * Paired panel collapse 토글 아이콘 (#70). 양쪽 안쪽 화살표(접기) /
+ * Paired panel collapse 토글 아이콘. 양쪽 안쪽 화살표(접기) /
  * 양쪽 바깥쪽 화살표(펼치기) 형태로 좌·우 패널 가시성 의미를 직관 표현.
  */
 function PanelToggleIcon({ collapsed }: { collapsed: boolean }) {
@@ -614,7 +614,7 @@ function ThumbsDownIcon({ filled }: { filled: boolean }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Paired items distribution (#45 + #49)
+// Paired items distribution
 // ────────────────────────────────────────────────────────────────────
 
 type DistributedEntry =

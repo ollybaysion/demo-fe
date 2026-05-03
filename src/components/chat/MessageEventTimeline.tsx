@@ -8,12 +8,12 @@ import type {
 } from "@/lib/types";
 
 /**
- * 어시스턴트 메시지에 paired 되는 이벤트 타임라인 (#49).
+ * 어시스턴트 메시지에 paired 되는 이벤트 타임라인.
  *
  * Gantt 식 — 각 트랙(공정/챔버 등)이 한 row, 이벤트는 시작~종료 구간의
  * 가로 막대로 그려짐. 시간축은 위쪽 ticks, 좌측 트랙 라벨, 우측이 막대 영역.
  *
- * 디자인 결정 (#49):
+ * 디자인 결정:
  * - 차트와 동기화 X — 자체 시간축. `range` 미지정 시 events 의 min/max 자동
  * - 2단계 계층: process(공정) tracks 가 위, step(STEP) tracks 가 아래
  * - 색은 백엔드 명시 우선 → `color` 미지정 시 level 기준 기본
@@ -22,13 +22,13 @@ import type {
  *   (greedy interval scheduling)
  * - 표 [확장] 과 동일하게 fixed overlay 로 [전체 보기] 가능
  * - read-only — hover 시 tooltip 으로 라벨 + 시각 노출
- * - 카드 통합 (#45 패턴) — 제목 행 + chevron 토글 + slide
+ * - 카드 통합 — 제목 행 + chevron 토글 + slide
  */
 type Props = {
   timeline: MessageEventTimelinePayload;
   defaultExpanded?: boolean;
   /**
-   * 메시지 단위 일괄 fold/unfold 명령 (#70). tick 증가 시 expanded 를
+   * 메시지 단위 일괄 fold/unfold 명령. tick 증가 시 expanded 를
    * !folded 로 sync. 첫 렌더(tick=0) 무시.
    */
   foldCmd?: { folded: boolean; tick: number };
@@ -103,7 +103,7 @@ export function MessageEventTimeline({
   const [maximized, setMaximized] = useState(false);
   const [overlayTop, setOverlayTop] = useState<number | null>(null);
 
-  // #70 — 메시지 단위 fold/unfold 명령 sync. 렌더 중 prev-state 비교
+  // 메시지 단위 fold/unfold 명령 sync. 렌더 중 prev-state 비교
   // (React 19 권장 — useEffect cascade 회피).
   const [prevFoldTick, setPrevFoldTick] = useState(foldCmd?.tick ?? 0);
   if (foldCmd && foldCmd.tick !== prevFoldTick) {
@@ -448,7 +448,7 @@ function TimelineSvg({
 }
 
 // ────────────────────────────────────────────────────────────────────
-// 전체 보기 overlay (#42 와 같은 패턴 — 풍선 anchor + 1/3 vh + 70% 너비)
+// 전체 보기 overlay — 풍선 anchor + 1/3 vh + 70% 너비
 // ────────────────────────────────────────────────────────────────────
 
 function ExpandedTimelineOverlay({

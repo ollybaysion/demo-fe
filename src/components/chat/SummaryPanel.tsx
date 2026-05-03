@@ -6,7 +6,7 @@ import type { ContextRow } from "@/lib/types";
 import type { TimeRange } from "./context/useContextRows";
 
 /**
- * 대화 요약 패널 (#24) — 운영자 인계용 사이드 패널.
+ * 대화 요약 패널 — 운영자 인계용 사이드 패널.
  *
  * Phase 1: 백엔드 미연결 상태. 상단은 컨텍스트 패널의 설비 정보를
  *          key:value 로 보여주고, 하단 요약은 placeholder 텍스트.
@@ -25,7 +25,7 @@ type Props = {
   rows: ContextRow[];
   timeRange: TimeRange;
   /**
-   * 채팅에 인입된 비교 결과의 마크다운 본문 (#79 Phase 3). 있으면
+   * 채팅에 인입된 비교 결과의 마크다운 본문 (Phase 3). 있으면
    * "비교 결과" Section + 클립보드 복사 본문에 자동 동봉. 없으면 미노출.
    */
   compareDigest?: string;
@@ -76,7 +76,7 @@ export function SummaryPanel({ open, rows, timeRange, compareDigest }: Props) {
               <TimeRangeReadout range={timeRange} />
             </Section>
             {compareDigest && (
-              <Section title="비교 결과 (#79)">
+              <Section title="비교 결과">
                 <pre className="text-caption text-brand-ink whitespace-pre-wrap font-mono leading-relaxed">
                   {compareDigest}
                 </pre>

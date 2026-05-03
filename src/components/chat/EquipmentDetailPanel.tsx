@@ -32,7 +32,7 @@ import {
 } from "@/demo/equipment";
 
 /**
- * 컨텍스트 패널(#16)에서 한 단계 더 들어가는 70vw 슬라이드 패널 (#27).
+ * 컨텍스트 패널에서 한 단계 더 들어가는 70vw 슬라이드 패널.
  *
  * 카테고리 세그먼트(설비/챔버/센서) 중 한 가지만 표시. 양쪽 블록
  * (현재 설비 / 동종설비 비교)이 같은 카테고리를 공유해 1:1 비교가
@@ -47,7 +47,7 @@ type Props = {
   equipmentNames: string[];
   onClose: () => void;
   /**
-   * 비교 결과를 어시스턴트 메시지로 채팅에 인라인 삽입 (#79 Phase 3).
+   * 비교 결과를 어시스턴트 메시지로 채팅에 인라인 삽입 (Phase 3).
    * 메시지에는 통계 비교 표 + 시계열 차트가 paired entry 로 동봉.
    */
   onImportToChat?: (message: import("@/lib/types").Message) => void;
@@ -114,7 +114,7 @@ export function EquipmentDetailPanel({
             설비 상세
           </h2>
           <p className="mt-xxs text-body-sm text-brand-muted">
-            #16 패널 행 + 동종 설비 비교 (Phase 1 — mock data)
+            컨텍스트 패널 행 + 동종 설비 비교 (Phase 1 — mock data)
           </p>
         </div>
         <button
@@ -416,7 +416,7 @@ function WideTable({
 }
 
 // ────────────────────────────────────────────────────────────────────
-// CompareView (#79 v2 — Phase 1)
+// CompareView
 // ────────────────────────────────────────────────────────────────────
 
 /**
@@ -440,7 +440,7 @@ function CompareView({
   onImportToChat,
 }: {
   /**
-   * 부모 패널 open 여부 (#108). 닫힘 상태에서 패널은 display:none 으로
+   * 부모 패널 open 여부. 닫힘 상태에서 패널은 display:none 으로
    * 만 숨겨져 차트 컨테이너 측정값이 0 → recharts width(-1) 경고 발생.
    * 닫힘 시 차트 자체를 mount 안 하도록 ResponsiveContainer 을 gating.
    */
@@ -455,7 +455,7 @@ function CompareView({
 }) {
   const [recipe, setRecipe] = useState<string>(COMPARE_RECIPES[0]);
   const [windowDays, setWindowDays] = useState<CompareWindowDays>(7);
-  // 알람 popover 의 "이 시점 센서 차트로 보기" cross-link (#79 Phase 2).
+  // 알람 popover 의 "이 시점 센서 차트로 보기" cross-link (Phase 2).
   // 클릭 시 모든 sensor chart 에 vertical reference line + 일정 시간 후
   // 자동 사라짐(또는 사용자가 다른 시점 클릭 시 갱신).
   const [highlight, setHighlight] = useState<{
@@ -635,7 +635,7 @@ function CompareView({
         )}
       </Card>
 
-      {/* 센서 시계열 겹침 차트 (#79 Phase 2) — 매칭 run 양쪽 모두에 데이터
+      {/* 센서 시계열 겹침 차트 (Phase 2) — 매칭 run 양쪽 모두에 데이터
           있을 때만 노출. x축은 공정 시작 시점 기준 경과 분(t=0). */}
       {data.series.length > 0 && visibleSeries.length > 0 && (
         <Card>
@@ -682,7 +682,7 @@ function CompareView({
         </Card>
       )}
 
-      {/* 챔버 이벤트 lane (#79 Phase 2) — 같은 시간축 위에 두 설비의
+      {/* 챔버 이벤트 lane (Phase 2) — 같은 시간축 위에 두 설비의
           이벤트(setup / recipe_change / cleaning / maintenance) 표시. */}
       {(data.chamberEvents.current.length > 0 ||
         data.chamberEvents.baseline.length > 0) && (
@@ -694,7 +694,7 @@ function CompareView({
         </Card>
       )}
 
-      {/* 설비 알람 lane (#79 Phase 2) — severity 색 + popover + 카운트
+      {/* 설비 알람 lane (Phase 2) — severity 색 + popover + 카운트
           매트릭스 + cross-link. */}
       {(data.alarms.current.length > 0 ||
         data.alarms.baseline.length > 0) && (
@@ -853,7 +853,7 @@ function CompareStatsTable({
 }
 
 /**
- * 센서별 작은 line chart 그리드 (#79 Phase 2). 각 차트는 같은 시간축
+ * 센서별 작은 line chart 그리드 (Phase 2). 각 차트는 같은 시간축
  * 위에 현재 vs baseline 2 series. xl 미만 1열, xl 이상 2열.
  */
 function CompareSeriesGrid({
@@ -865,7 +865,7 @@ function CompareSeriesGrid({
   highlightTime,
   highlightSide,
 }: {
-  /** 부모 패널 open 여부 (#108) — 닫힘 시 ResponsiveContainer 미마운트. */
+  /** 부모 패널 open 여부 — 닫힘 시 ResponsiveContainer 미마운트. */
   mounted: boolean;
   series: SensorSeries[];
   currentId: string;
@@ -917,7 +917,7 @@ function CompareSeriesChart({
       <div style={{ width: "100%", height: 180 }}>
         {/* 패널 닫힘(display:none) 상태에선 컨테이너 측정값이 0 이라
             recharts 가 width/height -1 경고 출력. mount 자체를 gating
-            해 경고 + 불필요한 렌더 제거 (#108). */}
+            해 경고 + 불필요한 렌더 제거. */}
         {mounted && (
         <ResponsiveContainer>
           <LineChart
@@ -1043,7 +1043,7 @@ function LegendDot({ color, dashed }: { color: string; dashed?: boolean }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// CompareChamberEvents (#79 Phase 2)
+// CompareChamberEvents (Phase 2)
 // ────────────────────────────────────────────────────────────────────
 
 const CHAMBER_EVENT_COLORS: Record<ChamberEventType, string> = {
@@ -1095,7 +1095,7 @@ function CompareChamberEvents({ data }: { data: CompareData }) {
     10,
   );
 
-  // "한쪽만" 매칭 — 같은 타입이 다른 lane 에 한 건도 없으면 outline 강조 (#79).
+  // "한쪽만" 매칭 — 같은 타입이 다른 lane 에 한 건도 없으면 outline 강조.
   const baseTypeSet = new Set(data.chamberEvents.baseline.map((e) => e.type));
   const curTypeSet = new Set(data.chamberEvents.current.map((e) => e.type));
   const annotatedCurrent = data.chamberEvents.current.map((e) => ({
@@ -1226,7 +1226,7 @@ function EventLane({
 }
 
 // ────────────────────────────────────────────────────────────────────
-// CompareAlarms (#79 Phase 2)
+// CompareAlarms (Phase 2)
 // ────────────────────────────────────────────────────────────────────
 
 const ALARM_SEVERITY_COLOR: Record<AlarmSeverity, string> = {
@@ -1533,7 +1533,7 @@ function AlarmMatrix({ data }: { data: CompareData }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// buildCompareMessage (#79 Phase 3 — 채팅 인입)
+// buildCompareMessage — 비교 결과를 채팅에 가져오기
 // ────────────────────────────────────────────────────────────────────
 
 /**

@@ -1,5 +1,5 @@
 /**
- * 서버 측 구조화 로거 (#103).
+ * 서버 측 구조화 로거.
  *
  * - pino 기반. dev 는 pino-pretty 로 사람이 읽기 좋게 출력, production
  *   은 JSON line 으로 stdout — 컨테이너 로그 수집기(Loki / CloudWatch /

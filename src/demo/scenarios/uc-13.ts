@@ -1,5 +1,5 @@
 /**
- * UC-13: 데이터 수집 기준 변경 (#66)
+ * UC-13: 데이터 수집 기준 변경
  */
 
 import type { Scenario } from "./types";

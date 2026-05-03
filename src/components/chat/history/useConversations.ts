@@ -6,7 +6,7 @@ import type { ContextRow, Message } from "@/lib/types";
 import type { TimeRange } from "../context/useContextRows";
 
 /**
- * 대화 이력 (#11) 의 데이터 레이어.
+ * 대화 이력 의 데이터 레이어.
  *
  * 영속화: localStorage. 백엔드 동기화는 v2 후보.
  * 모델: 자동 영속화 (ChatGPT 식) — 첫 user 메시지가 들어오면 자동으로

@@ -9,7 +9,6 @@ import type { Conversation } from "./useConversations";
  * 좌측 320px 사이드바. 대화 이력 목록.
  *
  * 우측 ContextPanel 과 같은 push-layout(`w-0 ↔ w-[320px]`) 패턴을 미러.
- * 자세한 디자인 결정은 issue #11 본문 참고.
  */
 type Props = {
   open: boolean;
@@ -145,7 +144,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Formatters (#11 spec)
+// Formatters
 // ────────────────────────────────────────────────────────────────────
 
 const MINUTE_MS = 60 * 1000;

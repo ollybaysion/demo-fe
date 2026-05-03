@@ -1,7 +1,7 @@
 export type MessageRole = "user" | "assistant" | "error";
 
 /**
- * 어시스턴트 응답에 paired 되는 표 데이터 (#34).
+ * 어시스턴트 응답에 paired 되는 표 데이터.
  *
  * 백엔드(/api/fdc/v1/chat) 페이로드 구조와 호환:
  *   { content, table?: { rows, columns? } }
@@ -15,7 +15,7 @@ export type MessageTable = {
 };
 
 /**
- * 어시스턴트 응답에 paired 되는 차트 데이터 (#37).
+ * 어시스턴트 응답에 paired 되는 차트 데이터.
  *
  * 백엔드(/api/fdc/v1/chat) 페이로드 구조와 호환:
  *   { content, chart?: { type, data, options? } }
@@ -72,7 +72,7 @@ export type MessageChart = {
 };
 
 /**
- * Paired 항목의 위치 힌트 (#45). 백엔드가 의미 있는 짝짓기를 강제할
+ * Paired 항목의 위치 힌트. 백엔드가 의미 있는 짝짓기를 강제할
  * 때 명시. 미지정 시 FE 가 균형 분배.
  */
 export type PairedSide = "left" | "right";
@@ -86,7 +86,7 @@ export type MessageChartEntry = MessageChart & {
 };
 
 /**
- * 어시스턴트 응답에 paired 되는 이벤트 타임라인 (#49).
+ * 어시스턴트 응답에 paired 되는 이벤트 타임라인.
  *
  * Gantt 식 시간 구간 표시 — 각 이벤트는 시작/종료가 있고, 트랙별로
  * 한 row 에 그려짐. 2단계 계층 (process/step) 으로 시각 구분.
@@ -121,13 +121,13 @@ export type MessageEventTimelineEntry = MessageEventTimeline & {
 };
 
 /**
- * 메시지 첨부 — 이미지 paste/drop (#91). Phase 1 은 base64 inline 만,
+ * 메시지 첨부 — 이미지 paste/drop. Phase 1 은 base64 inline 만,
  * 백엔드 업로드 endpoint 도입 후 url 변형 가능.
  */
 export type MessageAttachment = {
   id: string;
   type: "image";
-  /** image/png · image/jpeg · image/webp · image/gif 만 허용 (#91). */
+  /** image/png · image/jpeg · image/webp · image/gif 만 허용. */
   mime: string;
   /** 파일명 — paste 의 경우 자동 생성(`pasted-{ts}.png`). */
   name: string;
@@ -142,30 +142,30 @@ export type Message = {
   role: MessageRole;
   content: string;
   createdAt: number;
-  /** 첨부 (#91) — user 메시지에서 사용. */
+  /** 첨부 — user 메시지에서 사용. */
   attachments?: MessageAttachment[];
-  /** Paired data tables (#34, #45) — 어시스턴트 메시지에만. */
+  /** Paired data tables — 어시스턴트 메시지에만. */
   tables?: MessageTableEntry[];
-  /** Paired charts (#37, #45) — 어시스턴트 메시지에만. */
+  /** Paired charts — 어시스턴트 메시지에만. */
   charts?: MessageChartEntry[];
-  /** Paired event timelines (#49) — 어시스턴트 메시지에만. */
+  /** Paired event timelines — 어시스턴트 메시지에만. */
   eventTimelines?: MessageEventTimelineEntry[];
   /**
-   * @deprecated #45 이후 `tables` 사용. 기존 localStorage 호환용.
+   * @deprecated `tables` 사용. 기존 localStorage 호환용.
    * 렌더 시 `tables ?? [table]` 로 coalesce.
    */
   table?: MessageTable;
   /**
-   * @deprecated #45 이후 `charts` 사용. 기존 localStorage 호환용.
+   * @deprecated `charts` 사용. 기존 localStorage 호환용.
    */
   chart?: MessageChart;
   /**
-   * 추천 후속 질문 (#40) — 어시스턴트 메시지에만. ChatInput 위에 chip
+   * 추천 후속 질문 — 어시스턴트 메시지에만. ChatInput 위에 chip
    * 으로 노출. 비면 미표기. 백엔드가 동봉한 단순 문자열 배열.
    */
   recommendQuestion?: string[];
   /**
-   * 에러 상세 (#32) — `role: "error"` 메시지에만. 사용자 친화 본문은
+   * 에러 상세 — `role: "error"` 메시지에만. 사용자 친화 본문은
    * `content`, 원인 분류 / HTTP 상태 / 원본 메시지 등 기술적 디테일은
    * 여기에. UI 에서 [원인 보기] 토글로 접어 노출.
    */

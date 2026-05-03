@@ -10,7 +10,7 @@ import {
 } from "@/lib/chatErrors";
 
 /**
- * 요청 timeout (#32). 일반 응답이 30초 안에 안 끝나면 AbortController 로 자르고
+ * 요청 timeout. 일반 응답이 30초 안에 안 끝나면 AbortController 로 자르고
  * timeout 분류로 사용자 안내. 데모/mock 은 짧아 영향 없음.
  */
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -134,7 +134,7 @@ export function ChatContainer() {
     startNewConversation,
   } = useConversations();
 
-  // ── Conversation ↔ local state sync (#11) ─────────────────────────
+  // ── Conversation ↔ local state sync ─────────────────────────
   // Load: when activeId transitions to a real id, hydrate local chat state
   // from that conversation. The ref tracks the last-loaded id so this
   // effect only fires on actual transitions (not on every list update).
@@ -195,7 +195,7 @@ export function ChatContainer() {
       const hasRange =
         timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
 
-      // 응답 지연 시 AbortController 로 자르고 timeout 으로 분류 (#32).
+      // 응답 지연 시 AbortController 로 자르고 timeout 으로 분류.
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -241,8 +241,8 @@ export function ChatContainer() {
             );
           } else if (ev.event === "done") {
             // 응답 종료 — 표 / 차트 / 추천 후속 질문이 동봉되어 있으면
-            // 이때 어시스턴트 메시지에 한 번에 attach. 백엔드 페이로드
-            // 형태(docs/api.md §5)와 동일. tables/charts 는 다중(#45).
+            // 이때 어시스턴트 메시지에 한 번에 attach. tables/charts 는
+            // 한 메시지에 여러 개일 수 있다.
             const payload = ev.data as DonePayload;
             const hasTables =
               !!payload.tables && payload.tables.length > 0;
@@ -360,7 +360,7 @@ export function ChatContainer() {
       setMessages(nextHistory);
       setIsStreaming(true);
 
-      // Auto-persist (#11): create a Conversation on the first non-demo
+      // Auto-persist: create a Conversation on the first non-demo
       // user message. Demo flows are ephemeral — their messages do not
       // populate the sidebar.
       if (!demoState && !activeId) {
@@ -442,9 +442,9 @@ export function ChatContainer() {
     [rows],
   );
 
-  // #40 — 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
-  // ChatInput 위에 chip 으로 노출. 빈 시작 화면의 #20 chips 와 같은 슬롯
-  // 공유, 시점이 달라 mutex.
+  // 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
+  // ChatInput 위에 chip 으로 노출. 빈 시작 화면의 예시 질문 chips 와
+  // 같은 슬롯 공유, 시점이 달라 mutex.
   const followUpRecommendations = useMemo<readonly string[]>(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
@@ -455,7 +455,7 @@ export function ChatContainer() {
     return [];
   }, [messages]);
 
-  // 가장 최근 채팅 인입 비교 메시지의 마크다운 (#79 Phase 3) —
+  // 가장 최근 채팅 인입 비교 메시지의 마크다운 (Phase 3) —
   // SummaryPanel 의 [비교 결과] Section + 클립보드 복사에 자동 동봉.
   // EquipmentDetailPanel 이 buildCompareMessage 로 만든 메시지는 id 가
   // `compare_` prefix.
@@ -495,9 +495,9 @@ export function ChatContainer() {
     setLeftPanel((p) => !p);
   }
 
-  // #30 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지
-  // 잘라낸 뒤 같은 컨텍스트로 다시 API 호출. 데모 시나리오 진행 중엔
-  // 호출되지 않도록 onRegenerate prop 자체를 빼서 버튼이 안 보이게 한다.
+  // 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지 잘라낸 뒤
+  // 같은 컨텍스트로 다시 API 호출. 데모 시나리오 진행 중엔 호출되지
+  // 않도록 onRegenerate prop 자체를 빼서 버튼이 안 보이게 한다.
   const handleRegenerate = useCallback(() => {
     setMessages((prev) => {
       const lastUserIndex = findLastIndex(prev, (m) => m.role === "user");
@@ -523,7 +523,7 @@ export function ChatContainer() {
 
   return (
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
-      {/* Left — conversation history sidebar (#11). Push layout: chat
+      {/* Left — conversation history sidebar. Push layout: chat
           column shrinks when this opens. */}
       <ConversationsSidebar
         open={leftPanel}
@@ -568,8 +568,8 @@ export function ChatContainer() {
           <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
             {/*
               ChatInput 위 chip 슬롯 — 시점에 따라 두 모드 mutex.
-              - 메시지 0건 + 데모 아닌 빈 시작 화면: #20 예시 질문 chips
-              - 어시스턴트 응답 후 (스트리밍 종료): #40 추천 후속 질문 chips
+              - 메시지 0건 + 데모 아닌 빈 시작 화면: 예시 질문 chips
+              - 어시스턴트 응답 후 (스트리밍 종료): 추천 후속 질문 chips
             */}
             {messages.length === 0 && !isStreaming && !demoState && (
               <SuggestedQuestions onSelect={handleSubmit} />

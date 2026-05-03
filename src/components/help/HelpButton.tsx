@@ -5,15 +5,15 @@ import { HELP_MARKDOWN } from "@/content/help";
 import { MarkdownContent } from "@/components/chat/markdown/MarkdownContent";
 
 /**
- * 도움말 FAB + 모달 (#50).
+ * 도움말 FAB + 모달.
  *
  * - 좌측 하단 fixed FAB (`?` 아이콘) — 모든 화면에서 항상 노출
  * - 클릭 → 중앙 모달 (마크다운 렌더링)
  * - 닫기: X 버튼 / ESC / backdrop 클릭
  * - 모달 내부 스크롤 — 긴 가이드 대응
  *
- * 콘텐츠는 `src/content/help.ts` 의 정적 마크다운 string. 마크다운
- * 렌더링은 #31 MarkdownContent 재사용.
+ * 콘텐츠는 `src/content/help.md` (raw text import). 마크다운 렌더링은
+ * MarkdownContent 재사용.
  */
 export function HelpButton() {
   const [open, setOpen] = useState(false);

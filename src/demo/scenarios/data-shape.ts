@@ -3,7 +3,7 @@
  *
  * APC_PRESSURE 시계열을 STEP 구간(PRE_HEAT / MAIN_ETCH / POST_PURGE) 으로
  * 구분해 추세·통계·동종설비 비교까지 보여주는 풍부한 다중 paired item
- * (#45) 시나리오. 표 2 + 차트 2 + 이벤트 타임라인 1 등 거의 모든 paired
+ * 시나리오. 표 2 + 차트 2 + 이벤트 타임라인 1 등 거의 모든 paired
  * 위젯 검증 가능.
  */
 

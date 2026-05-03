@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 const TOKEN_INTERVAL_MS = 30;
 
 /**
- * Request body 한도 (#83 보안).
+ * Request body 한도 (보안).
  *
  * 제한 없는 size 의 payload 가 들어오면 백엔드 / mock 모두 자원 낭비
  * 또는 DoS 위험. 일반 데모 / 운영 사용 패턴에서는 충분히 큰 값으로
@@ -47,11 +47,11 @@ type ChatDemoMeta = {
 
 type ChatRequestBody = {
   messages: Message[];
-  /** Optional 설비 정보 table (#16) included by the client. */
+  /** Optional 설비 정보 table included by the client. */
   context?: ContextRow[];
   /** Optional 발생 시간 범위 (datetime-local strings). */
   timeRange?: ChatTimeRange;
-  /** Optional demo-mode metadata (#19) — bypasses echo with scripted text. */
+  /** Optional demo-mode metadata — bypasses echo with scripted text. */
   demo?: ChatDemoMeta;
 };
 
@@ -120,7 +120,7 @@ function badRequest(
 }
 
 export async function POST(request: Request): Promise<Response> {
-  // #103 — 요청 단위 logger + requestId. 응답 헤더에도 첨부해 클라이언트
+  // 요청 단위 logger + requestId. 응답 헤더에도 첨부해 클라이언트
   // 가 같은 ID 로 서버 로그를 추적할 수 있게.
   const requestId = newRequestId();
   const log = makeRequestLogger(requestId, "POST /api/chat");
@@ -139,7 +139,7 @@ export async function POST(request: Request): Promise<Response> {
     return badRequest({ error: "messages is required" }, requestId);
   }
 
-  // #83 — size/length 한도 검증.
+  // size/length 한도 검증.
   if (body.messages.length > MAX_MESSAGES) {
     log.warn(
       { limit: MAX_MESSAGES, actual: body.messages.length },
@@ -236,9 +236,9 @@ export async function POST(request: Request): Promise<Response> {
           controller.enqueue(encodeSseEvent("token", { content: ch }));
           await sleep(TOKEN_INTERVAL_MS);
         }
-        // 표(#34) / 차트(#37, 다중 #45) / 추천 후속 질문(#40) 은 docs/api.md
-        // 스펙대로 `done` 이벤트 페이로드에 번들로 동봉. 백엔드도 같은
-        // 형태로 보낼 예정이라 클라이언트가 단일 done 핸들러만 신경 쓰면 됨.
+        // 표 / 차트 (다중) / 추천 후속 질문 은 `done` 이벤트 페이로드에
+        // 번들로 동봉. 백엔드도 같은 형태로 보낼 예정이라 클라이언트가
+        // 단일 done 핸들러만 신경 쓰면 됨.
         controller.enqueue(
           encodeSseEvent("done", {
             messageId,
@@ -267,7 +267,7 @@ export async function POST(request: Request): Promise<Response> {
         );
         controller.close();
       } catch (err) {
-        // (#85) production 에서는 stack / 내부 경로 / DB 메시지 등이 SSE
+        // production 에서는 stack / 내부 경로 / DB 메시지 등이 SSE
         // payload 로 누출되지 않도록 generic 메시지만 전송. 상세는 server
         // log 로만 남김.
         log.error(

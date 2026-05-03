@@ -4,14 +4,14 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { MessageTable } from "@/lib/types";
 
 /**
- * 어시스턴트 메시지의 paired 데이터 표 (#34, #45).
+ * 어시스턴트 메시지의 paired 데이터 표.
  *
  * - 표 자체에 통합된 제목 행: 테두리 안 맨 위, 헤더 위, 칼럼 전체 폭으로
  *   제목 + 우측 토글 (▼/▲). 디폴트는 `defaultExpanded` prop 으로 결정
  *   (좌·우 컬럼 첫 항목만 펼친 상태)
  * - 펼친 상태에서:
  *   - 행 cap: ~280px (≈10행) 내부 세로 스크롤 + 헤더 sticky
- *   - 액션: [펼치기] (cap 해제) / [확장] (overlay #42, 가로 overflow 시) /
+ *   - 액션: [펼치기] (cap 해제) / [확장] (overlay, 가로 overflow 시) /
  *     [CSV 복사]
  * - 너비: `w-fit max-w-full` — 칼럼 합계만큼 + 부모 폭 cap. 초과 시 가로
  *   스크롤
@@ -20,7 +20,7 @@ import type { MessageTable } from "@/lib/types";
  */
 type Props = {
   table: MessageTable;
-  /** 디폴트 펼침 여부 (#45). 미지정 시 true. */
+  /** 디폴트 펼침 여부. 미지정 시 true. */
   defaultExpanded?: boolean;
   /**
    * 풍선 DOM ref — [확장] overlay 의 위치/높이를 풍선과 정렬하기 위함.
@@ -28,7 +28,7 @@ type Props = {
    */
   bubbleRef?: React.RefObject<HTMLDivElement | null>;
   /**
-   * 메시지 단위 일괄 fold/unfold 명령 (#70). tick 증가 시 collapseExpanded
+   * 메시지 단위 일괄 fold/unfold 명령. tick 증가 시 collapseExpanded
    * 를 !folded 로 sync. 첫 렌더(tick=0) 무시 — defaultExpanded 보존.
    */
   foldCmd?: { folded: boolean; tick: number };
@@ -51,12 +51,12 @@ export function MessageDataTable({
   // height-cap-removal: [펼치기] 액션 — 280px cap 해제
   const [heightExpanded, setHeightExpanded] = useState(false);
   // [확장] overlay — 가로 폭이 부모를 초과할 때 풍선과 같은 높이로 폭만
-  // 풀로 펼쳐 표를 보는 모드 (#42). 메시지마다 독립 상태.
+  // 풀로 펼쳐 표를 보는 모드. 메시지마다 독립 상태.
   const [maximized, setMaximized] = useState(false);
   // overlay 의 viewport top 좌표만 트래킹 — 높이는 33.33vh 고정 (CSS).
   const [overlayTop, setOverlayTop] = useState<number | null>(null);
 
-  // #70 — 메시지 단위 fold/unfold 명령 sync. tick=0 (초기) 은 무시.
+  // 메시지 단위 fold/unfold 명령 sync. tick=0 (초기) 은 무시.
   // 렌더 중 prev-state 비교 — useEffect cascade 회피 (React 19 권장).
   const [prevFoldTick, setPrevFoldTick] = useState(foldCmd?.tick ?? 0);
   if (foldCmd && foldCmd.tick !== prevFoldTick) {
@@ -264,7 +264,7 @@ function Chevron({ expanded }: { expanded: boolean }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Expanded overlay (#42) — fixed full-width 패널. EquipmentDetailPanel
+// Expanded overlay — fixed full-width 패널. EquipmentDetailPanel
 // 과 같은 톤(z-30, 얇은 테두리, 그림자) 으로.
 // ────────────────────────────────────────────────────────────────────
 

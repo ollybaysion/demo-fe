@@ -24,7 +24,7 @@ import type {
 } from "@/lib/types";
 
 /**
- * 어시스턴트 메시지의 우측 gutter 에 paired 되는 차트 (#37).
+ * 어시스턴트 메시지의 우측 gutter 에 paired 되는 차트.
  *
  * - v1 지원 타입: line / bar / area
  * - 색은 디자인 토큰(`brand-primary` / `accent-teal` / `accent-amber`)
@@ -48,10 +48,10 @@ export function MessageChart({
   foldCmd,
 }: {
   chart: MessageChartPayload;
-  /** 디폴트 펼침 여부 (#45). 미지정 시 true. */
+  /** 디폴트 펼침 여부. 미지정 시 true. */
   defaultExpanded?: boolean;
   /**
-   * 메시지 단위 일괄 fold/unfold 명령 (#70). tick 이 증가할 때마다 본문
+   * 메시지 단위 일괄 fold/unfold 명령. tick 이 증가할 때마다 본문
    * expanded 를 !folded 로 sync. 첫 렌더(tick=0) 는 무시 — defaultExpanded
    * 보존. 사용자가 헤더 chevron 으로 개별 토글한 뒤에도 다음 명령에서
    * 다시 sync 됨.
