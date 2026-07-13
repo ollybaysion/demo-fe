@@ -16,7 +16,9 @@ export const CONTEXT_LABELS = {
     placeholder: "예: A",
   },
   sensor: {
-    label: "센서명",
-    placeholder: "예: APC_PRESSURE",
+    // 개발 편의상 센서를 이름이 아닌 PARAM_INDEX(센서 파라미터 인덱스)로 입력받는다.
+    // 데이터 구조상 키는 여전히 sensor 지만, 사용자에게 보이는 라벨/값은 PARAM_INDEX.
+    label: "PARAM_INDEX",
+    placeholder: "예: 5",
   },
 } as const;
