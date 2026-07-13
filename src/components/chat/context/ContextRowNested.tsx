@@ -192,8 +192,8 @@ function SensorRow({
       />
       <RoundIconButton
         onClick={onDelete}
-        ariaLabel="이 센서 삭제"
-        title="이 센서 삭제"
+        ariaLabel="이 PARAM_INDEX 삭제"
+        title="이 PARAM_INDEX 삭제"
         size="tiny"
       >
         <XIcon size={10} />
