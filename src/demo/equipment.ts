@@ -31,15 +31,41 @@ export type SensorDetail = {
   values: string[];
 };
 
-export type EquipmentDetail = {
+/** 내부 mock 원본 (설비/챔버/센서 raw). getEquipmentDetail 이 sections 로 변환. */
+type RawEquipment = {
   id: string;
-  /** ContextRow.equipment 와 매칭되는 키. */
   name: string;
-  /** peer(동종 설비) 매칭에만 쓰는 내부 키 — UI에 노출되지 않음. */
   model: string;
   values: string[];
   chambers: ChamberDetail[];
   sensors: SensorDetail[];
+};
+
+/** 설비 상세 표의 한 행 (equipment=1행, chamber/sensor=N행). */
+export type SectionRow = { id: string; values: string[] };
+
+/**
+ * 설비 상세를 구성하는 한 "세션"(정보 묶음). 데이터(fetch)는 공통이고, FE 는
+ * `key` 로 렌더러를 골라 그린다(기본 = 공용 표). 세션을 늘리려면 BE 가 이
+ * 배열에 하나 더 push, 기본 표로 충분하면 FE 는 무수정.
+ */
+export type EquipmentSection = {
+  /** 렌더러 선택 키. "equipment" | "chamber" | "sensor" | 확장. */
+  key: string;
+  /** 탭/카드 라벨. */
+  label: string;
+  /** 표 컬럼 헤더 라벨 (BE-driven). rows[].values 와 같은 순서·길이. */
+  columns: string[];
+  rows: SectionRow[];
+};
+
+export type EquipmentDetail = {
+  id: string;
+  name: string;
+  /** peer(동종 설비) 매칭에만 쓰는 내부 키 — UI에 노출되지 않음. */
+  model: string;
+  /** 세션 배열(설비/챔버/센서 + 확장). BE 가 실어 보냄. */
+  sections: EquipmentSection[];
 };
 
 // 더미 행 생성: 접두사 기반으로 col1..col10 채우기. 행마다 값이 달라
@@ -48,7 +74,7 @@ function mkRow(prefix: string): string[] {
   return Array.from({ length: COL_NAMES.length }, (_, i) => `${prefix}-v${i + 1}`);
 }
 
-const ETCH: EquipmentDetail[] = [
+const ETCH: RawEquipment[] = [
   {
     id: "ETCH-01",
     name: "ETCH-01",
@@ -94,7 +120,7 @@ const ETCH: EquipmentDetail[] = [
   },
 ];
 
-const CVD: EquipmentDetail[] = [
+const CVD: RawEquipment[] = [
   {
     id: "CVD-01",
     name: "CVD-01",
@@ -139,21 +165,48 @@ const CVD: EquipmentDetail[] = [
   },
 ];
 
-export const EQUIPMENT_DETAILS: readonly EquipmentDetail[] = [...ETCH, ...CVD];
+const EQUIPMENT_DETAILS: readonly RawEquipment[] = [...ETCH, ...CVD];
 
-export function getEquipmentDetail(name: string): EquipmentDetail | undefined {
+/** 컬럼 라벨 (mock) = col1..col10. 실 백엔드는 SCHEMA-MAP 라벨을 보냄. */
+const FIXTURE_COLS: string[] = [...COL_NAMES];
+
+/** raw mock → sections 모델 (+ 하위호환 flat 필드). */
+function toDetail(r: RawEquipment): EquipmentDetail {
+  return {
+    id: r.id,
+    name: r.name,
+    model: r.model,
+    sections: [
+      {
+        key: "equipment",
+        label: "설비 정보",
+        columns: FIXTURE_COLS,
+        rows: [{ id: r.id, values: r.values }],
+      },
+      { key: "chamber", label: "챔버 정보", columns: FIXTURE_COLS, rows: r.chambers },
+      { key: "sensor", label: "센서 정보", columns: FIXTURE_COLS, rows: r.sensors },
+    ],
+  };
+}
+
+function findRaw(name: string): RawEquipment | undefined {
   const trimmed = name.trim();
   if (!trimmed) return undefined;
   return EQUIPMENT_DETAILS.find((e) => e.name === trimmed);
 }
 
+export function getEquipmentDetail(name: string): EquipmentDetail | undefined {
+  const raw = findRaw(name);
+  return raw ? toDetail(raw) : undefined;
+}
+
 /** 같은 모델의 다른 설비 (자기 자신 제외). */
 export function getPeers(name: string): EquipmentDetail[] {
-  const me = getEquipmentDetail(name);
+  const me = findRaw(name);
   if (!me) return [];
   return EQUIPMENT_DETAILS.filter(
     (e) => e.model === me.model && e.id !== me.id,
-  );
+  ).map(toDetail);
 }
 
 // ────────────────────────────────────────────────────────────────────
