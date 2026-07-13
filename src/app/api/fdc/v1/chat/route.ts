@@ -1,5 +1,6 @@
 import { CONTEXT_LABELS } from "@/config/contextColumns";
 import { SCENARIOS } from "@/demo/scenarios";
+import { IS_MOCK, forwardOrMock } from "@/lib/backend";
 import { makeRequestLogger, newRequestId } from "@/lib/logger";
 import type { ContextRow, Message } from "@/lib/types";
 
@@ -120,6 +121,16 @@ function badRequest(
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // BACKEND_URL 설정 시 채팅도 백엔드로 SSE 를 그대로 forward (스트림 통과).
+  // 다른 /api/fdc/v1/* route 와 동일하게 seam 을 통과시켜, 프론트에서 질문을
+  // 던지면 백엔드의 실제 응답이 그대로 스트리밍된다. 미설정 시 아래 mock.
+  if (!IS_MOCK) {
+    return forwardOrMock(request, "/api/fdc/v1/chat", () => {
+      // BACKEND_URL 이 있으면 forwardOrMock 은 이 mock 을 호출하지 않는다.
+      throw new Error("unreachable: BACKEND_URL is set");
+    });
+  }
+
   // 요청 단위 logger + requestId. 응답 헤더에도 첨부해 클라이언트
   // 가 같은 ID 로 서버 로그를 추적할 수 있게.
   const requestId = newRequestId();
