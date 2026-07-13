@@ -1,37 +1,44 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Inter, JetBrains_Mono, Noto_Serif_KR } from "next/font/google";
 import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
 
+// 모든 폰트는 레포에 커밋된 woff2(./fonts/)를 self-host 한다 — next/font/google
+// 은 빌드 타임에 fonts.googleapis.com 을 받아와 사내(폐쇄망) 빌드에서 깨진다.
+// 여기 로컬 파일만 쓰므로 외부/네트워크/npm 폰트 의존성 0. (src/app/fonts/README.md)
+
 // Latin display
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["500"],
+const cormorant = localFont({
+  src: "./fonts/cormorant-garamond-500.woff2",
+  weight: "500",
   variable: "--font-cormorant",
   display: "swap",
 });
 
 // Latin sans
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+const inter = localFont({
+  src: [
+    { path: "./fonts/inter-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/inter-500.woff2", weight: "500", style: "normal" },
+  ],
   variable: "--font-inter",
   display: "swap",
 });
 
 // Latin mono
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400"],
+const jetbrainsMono = localFont({
+  src: "./fonts/jetbrains-mono-400.woff2",
+  weight: "400",
   variable: "--font-jetbrains-mono",
   display: "swap",
 });
 
-// Korean display fallback (Google Fonts — Noto family pairs visually with Cormorant)
-const notoSerifKr = Noto_Serif_KR({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+// Korean display fallback (Noto Serif KR — Cormorant 와 시각적으로 페어링)
+const notoSerifKr = localFont({
+  src: [
+    { path: "./fonts/noto-serif-kr-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/noto-serif-kr-500.woff2", weight: "500", style: "normal" },
+  ],
   variable: "--font-noto-serif-kr",
   display: "swap",
 });
@@ -39,7 +46,7 @@ const notoSerifKr = Noto_Serif_KR({
 // Korean sans (Pretendard variable — Inter와 비례 매칭, 한국 웹의 모던 표준)
 // Single variable woff2 covers all weights (45 ~ 920)
 const pretendard = localFont({
-  src: "../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
+  src: "./fonts/pretendard-variable.woff2",
   variable: "--font-pretendard",
   display: "swap",
   weight: "45 920",
@@ -47,7 +54,7 @@ const pretendard = localFont({
 
 // Korean mono (D2Coding subset — KS-X-1001 한글 + Latin/숫자/기호, 357KB)
 const d2coding = localFont({
-  src: "../../node_modules/d2coding/fonts/d2coding-subset.woff2",
+  src: "./fonts/d2coding-subset.woff2",
   variable: "--font-d2coding",
   display: "swap",
   weight: "400",
