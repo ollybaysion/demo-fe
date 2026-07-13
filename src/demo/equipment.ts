@@ -66,10 +66,6 @@ export type EquipmentDetail = {
   model: string;
   /** 세션 배열(설비/챔버/센서 + 확장). BE 가 실어 보냄. */
   sections: EquipmentSection[];
-  /** @deprecated 하위호환 — sections 로 이행. */
-  values?: string[];
-  chambers?: ChamberDetail[];
-  sensors?: SensorDetail[];
 };
 
 // 더미 행 생성: 접두사 기반으로 col1..col10 채우기. 행마다 값이 달라
@@ -190,9 +186,6 @@ function toDetail(r: RawEquipment): EquipmentDetail {
       { key: "chamber", label: "챔버 정보", columns: FIXTURE_COLS, rows: r.chambers },
       { key: "sensor", label: "센서 정보", columns: FIXTURE_COLS, rows: r.sensors },
     ],
-    values: r.values,
-    chambers: r.chambers,
-    sensors: r.sensors,
   };
 }
 
