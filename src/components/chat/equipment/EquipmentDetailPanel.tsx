@@ -13,7 +13,6 @@ import {
   YAxis,
 } from "recharts";
 import {
-  COL_NAMES,
   COMPARE_RECIPES,
   COMPARE_WINDOWS,
   type AlarmEvent,
@@ -24,6 +23,7 @@ import {
   type CompareSide,
   type CompareWindowDays,
   type EquipmentDetail,
+  type EquipmentSection,
   type SensorSeries,
   type SensorStats,
 } from "@/demo/equipment";
@@ -51,14 +51,17 @@ type Props = {
   onImportToChat?: (message: import("@/lib/types").Message) => void;
 };
 
-type Category = "equipment" | "chamber" | "sensor" | "compare";
+/** 세션 key(동적) 또는 특수 탭 "compare". */
+type Category = string;
+const COMPARE_CATEGORY = "compare";
 
-const CATEGORY_OPTIONS: ReadonlyArray<{ id: Category; label: string }> = [
+/** detail 미도착 시 기본 탭. detail 이 오면 sections 에서 파생(세션 추가 = FE 무수정). */
+const DEFAULT_SECTION_TABS: ReadonlyArray<{ id: string; label: string }> = [
   { id: "equipment", label: "설비 정보" },
   { id: "chamber", label: "챔버 정보" },
   { id: "sensor", label: "센서 정보" },
-  { id: "compare", label: "설비 데이터 비교" },
 ];
+const COMPARE_TAB = { id: COMPARE_CATEGORY, label: "설비 데이터 비교" };
 
 export function EquipmentDetailPanel({
   open,
@@ -84,6 +87,15 @@ export function EquipmentDetailPanel({
 
   const [peerName, setPeerName] = useState<string>("");
   const peerActual = peers.find((p) => p.id === peerName) ?? peers[0];
+
+  // 카테고리 탭 — detail 의 sections 에서 파생(+ 특수 탭 compare).
+  // 세션이 늘면 BE 가 sections 에 push → 탭·렌더 자동, FE 무수정.
+  const categoryOptions = useMemo(() => {
+    const sectionTabs = detail?.sections?.length
+      ? detail.sections.map((s) => ({ id: s.key, label: s.label }))
+      : DEFAULT_SECTION_TABS;
+    return [...sectionTabs, COMPARE_TAB];
+  }, [detail]);
 
   return (
     <aside
@@ -125,7 +137,11 @@ export function EquipmentDetailPanel({
 
       {/* 카테고리 세그먼트 — 양쪽 블록이 같은 카테고리를 공유 */}
       <div className="px-lg pt-md">
-        <CategorySegment value={category} onChange={setCategory} />
+        <CategorySegment
+          value={category}
+          onChange={setCategory}
+          options={categoryOptions}
+        />
       </div>
 
       <div
@@ -188,9 +204,11 @@ export function EquipmentDetailPanel({
 function CategorySegment({
   value,
   onChange,
+  options,
 }: {
   value: Category;
   onChange: (v: Category) => void;
+  options: ReadonlyArray<{ id: string; label: string }>;
 }) {
   return (
     <div
@@ -198,7 +216,7 @@ function CategorySegment({
       aria-label="상세 정보 카테고리"
       className="inline-flex rounded-md border border-brand-hairline bg-brand-surface-card p-[2px]"
     >
-      {CATEGORY_OPTIONS.map((opt) => {
+      {options.map((opt) => {
         const active = opt.id === value;
         return (
           <button
@@ -282,6 +300,43 @@ function DetailBlock({
   );
 }
 
+type SectionRenderProps = {
+  section: EquipmentSection;
+  hoveredCol: number | null;
+  onHoverCol: (col: number | null) => void;
+};
+
+/**
+ * 기본 세션 렌더러 — 공용 와이드 테이블. 컬럼 헤더는 BE 가 보낸
+ * section.columns, 행은 section.rows.
+ */
+function TableSection({ section, hoveredCol, onHoverCol }: SectionRenderProps) {
+  if (section.rows.length === 0) {
+    return <Empty>등록된 {section.label} 없음</Empty>;
+  }
+  return (
+    <Card>
+      <WideTable
+        columns={section.columns}
+        rows={section.rows.map((r) => ({ key: r.id, cells: r.values }))}
+        hoveredCol={hoveredCol}
+        onHoverCol={onHoverCol}
+      />
+    </Card>
+  );
+}
+
+/**
+ * 세션별 렌더러 레지스트리. 데이터(fetch)는 공통, 렌더만 세션별로 갈아끼운다.
+ * 커스텀 화면이 필요한 key 만 등록하고, 없으면 TableSection(기본 표).
+ * 새 세션 추가 = BE 가 sections 에 push. 기본 표로 충분하면 여기도 무수정.
+ *   예) sensor: SensorSection,   // 센서만 다른 레이아웃으로 그리고 싶을 때
+ */
+const SECTION_RENDERERS: Record<
+  string,
+  (props: SectionRenderProps) => ReactNode
+> = {};
+
 function CategoryView({
   detail,
   category,
@@ -293,50 +348,15 @@ function CategoryView({
   hoveredCol: number | null;
   onHoverCol: (col: number | null) => void;
 }) {
-  // 모든 카테고리가 동일한 와이드 테이블 레이아웃 — 칼럼은 항상 가로
-  // 헤더로 나열. 설비는 1행, 챔버/센서는 항목당 1행.
-  if (category === "equipment") {
-    return (
-      <Card>
-        <WideTable
-          columns={detail.columns ?? [...COL_NAMES]}
-          rows={[{ key: detail.id, cells: detail.values }]}
-          hoveredCol={hoveredCol}
-          onHoverCol={onHoverCol}
-        />
-      </Card>
-    );
-  }
-
-  if (category === "chamber") {
-    if (detail.chambers.length === 0) {
-      return <Empty>등록된 챔버 없음</Empty>;
-    }
-    return (
-      <Card>
-        <WideTable
-          columns={detail.chamberColumns ?? [...COL_NAMES]}
-          rows={detail.chambers.map((c) => ({ key: c.id, cells: c.values }))}
-          hoveredCol={hoveredCol}
-          onHoverCol={onHoverCol}
-        />
-      </Card>
-    );
-  }
-
-  // sensor
-  if (detail.sensors.length === 0) {
-    return <Empty>등록된 센서 없음</Empty>;
-  }
+  const section = detail.sections.find((s) => s.key === category);
+  if (!section) return <Empty>정보 없음</Empty>;
+  const Renderer = SECTION_RENDERERS[section.key] ?? TableSection;
   return (
-    <Card>
-      <WideTable
-        columns={detail.sensorColumns ?? [...COL_NAMES]}
-        rows={detail.sensors.map((s) => ({ key: s.id, cells: s.values }))}
-        hoveredCol={hoveredCol}
-        onHoverCol={onHoverCol}
-      />
-    </Card>
+    <Renderer
+      section={section}
+      hoveredCol={hoveredCol}
+      onHoverCol={onHoverCol}
+    />
   );
 }
 
