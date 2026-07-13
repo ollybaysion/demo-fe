@@ -299,7 +299,7 @@ function CategoryView({
     return (
       <Card>
         <WideTable
-          columns={[...COL_NAMES]}
+          columns={detail.columns ?? [...COL_NAMES]}
           rows={[{ key: detail.id, cells: detail.values }]}
           hoveredCol={hoveredCol}
           onHoverCol={onHoverCol}
@@ -315,7 +315,7 @@ function CategoryView({
     return (
       <Card>
         <WideTable
-          columns={[...COL_NAMES]}
+          columns={detail.chamberColumns ?? [...COL_NAMES]}
           rows={detail.chambers.map((c) => ({ key: c.id, cells: c.values }))}
           hoveredCol={hoveredCol}
           onHoverCol={onHoverCol}
@@ -331,7 +331,7 @@ function CategoryView({
   return (
     <Card>
       <WideTable
-        columns={[...COL_NAMES]}
+        columns={detail.sensorColumns ?? [...COL_NAMES]}
         rows={detail.sensors.map((s) => ({ key: s.id, cells: s.values }))}
         hoveredCol={hoveredCol}
         onHoverCol={onHoverCol}

@@ -40,6 +40,14 @@ export type EquipmentDetail = {
   values: string[];
   chambers: ChamberDetail[];
   sensors: SensorDetail[];
+  /**
+   * BE-driven 컬럼 라벨. 백엔드가 실어 보내면 그 라벨을, 비면 COL_NAMES 로
+   * fallback. 스키마가 정해져도 FE 는 무수정 — 라벨은 BE(SCHEMA-MAP) 가 결정.
+   * (각 values 배열과 같은 순서·길이.)
+   */
+  columns?: string[];
+  chamberColumns?: string[];
+  sensorColumns?: string[];
 };
 
 // 더미 행 생성: 접두사 기반으로 col1..col10 채우기. 행마다 값이 달라
