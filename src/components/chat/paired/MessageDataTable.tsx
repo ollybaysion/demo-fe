@@ -264,8 +264,7 @@ function Chevron({ expanded }: { expanded: boolean }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Expanded overlay — fixed full-width 패널. EquipmentDetailPanel
-// 과 같은 톤(z-30, 얇은 테두리, 그림자) 으로.
+// Expanded overlay — fixed full-width 패널 (z-30, 얇은 테두리, 그림자).
 // ────────────────────────────────────────────────────────────────────
 
 function ExpandedTableOverlay({

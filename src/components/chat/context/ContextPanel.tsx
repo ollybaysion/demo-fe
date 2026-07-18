@@ -26,11 +26,6 @@ type Props = {
   ) => void;
   onDeleteSensor: (rowId: string, chamberId: string, sensorId: string) => void;
   onReset: () => void;
-  /** "확장 보기" 트리거. ContextPanel 헤더 우측에 작은 버튼으로 노출. */
-  onExpandDetail?: () => void;
-  detailOpen?: boolean;
-  /** 표 행이 비었을 때 트리거를 disabled 로 표시. */
-  canExpandDetail?: boolean;
 };
 
 export function ContextPanel({
@@ -49,9 +44,6 @@ export function ContextPanel({
   onSetSensorName,
   onDeleteSensor,
   onReset,
-  onExpandDetail,
-  detailOpen,
-  canExpandDetail,
 }: Props) {
   return (
     <aside
@@ -65,38 +57,6 @@ export function ContextPanel({
       ].join(" ")}
     >
       <div className="w-[320px] h-full flex flex-col">
-        {onExpandDetail && (
-          <div className="px-lg pt-md flex justify-end">
-            <button
-              type="button"
-              onClick={onExpandDetail}
-              disabled={!canExpandDetail || detailOpen}
-              title={
-                !canExpandDetail
-                  ? "설비를 입력하면 활성됩니다"
-                  : detailOpen
-                    ? "이미 열려 있습니다"
-                    : "설비 상세 보기"
-              }
-              className="inline-flex items-center gap-xxs text-caption text-brand-primary hover:text-brand-primary-active disabled:text-brand-muted-soft disabled:cursor-not-allowed disabled:hover:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs px-xxs py-xxs"
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              상세 보기
-            </button>
-          </div>
-        )}
         <div className="flex-1 overflow-y-auto">
           <Section title="설비 정보">
             <ContextTable

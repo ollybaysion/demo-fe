@@ -25,7 +25,6 @@ import type {
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
-import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
@@ -103,7 +102,6 @@ export function ChatContainer() {
     null,
   );
   const [leftPanel, setLeftPanel] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
     rows,
@@ -417,7 +415,6 @@ export function ChatContainer() {
     setMessages([]);
     setIsStreaming(false);
     setDemoState(null);
-    setDetailOpen(false);
     resetContext();
     startNewConversation();
   }, [resetContext, startNewConversation]);
@@ -428,18 +425,9 @@ export function ChatContainer() {
       // require the user to wait for the current turn to settle.
       if (isStreaming) return;
       setDemoState(null);
-      setDetailOpen(false);
       selectConversation(id);
     },
     [isStreaming, selectConversation],
-  );
-
-  const equipmentNames = useMemo(
-    () =>
-      rows
-        .map((r) => r.equipment.trim())
-        .filter((n) => n.length > 0),
-    [rows],
   );
 
   // 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
@@ -455,20 +443,6 @@ export function ChatContainer() {
     return [];
   }, [messages]);
 
-  // 가장 최근 채팅 인입 비교 메시지의 마크다운 (Phase 3) —
-  // SummaryPanel 의 [비교 결과] Section + 클립보드 복사에 자동 동봉.
-  // EquipmentDetailPanel 이 buildCompareMessage 로 만든 메시지는 id 가
-  // `compare_` prefix.
-  const lastCompareDigest = useMemo<string | undefined>(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant" && m.id.startsWith("compare_")) {
-        return m.content;
-      }
-    }
-    return undefined;
-  }, [messages]);
-
   // 데모 모드에서 다음 turn 에 매칭되는 user 텍스트 — 일치하지 않는 chip
   // 은 SuggestedQuestions 가 비활성화. 비-데모 (실 백엔드) 일 때는 모든
   // chip 활성.
@@ -479,16 +453,11 @@ export function ChatContainer() {
   }, [demoState]);
 
   function handleContextToggle() {
-    setRightPanel((prev) => {
-      const next = prev === "context" ? null : "context";
-      if (next !== "context") setDetailOpen(false);
-      return next;
-    });
+    setRightPanel((prev) => (prev === "context" ? null : "context"));
   }
 
   function handleSummaryToggle() {
     setRightPanel((prev) => (prev === "summary" ? null : "summary"));
-    setDetailOpen(false);
   }
 
   function handleLeftToggle() {
@@ -611,26 +580,12 @@ export function ChatContainer() {
         onSetSensorName={setSensorName}
         onDeleteSensor={deleteSensor}
         onReset={resetContext}
-        onExpandDetail={() => setDetailOpen(true)}
-        detailOpen={detailOpen}
-        canExpandDetail={equipmentNames.length > 0}
-      />
-
-      <EquipmentDetailPanel
-        open={rightPanel === "context" && detailOpen}
-        equipmentNames={equipmentNames}
-        onClose={() => setDetailOpen(false)}
-        onImportToChat={(msg) => {
-          setMessages((prev) => [...prev, msg]);
-          setDetailOpen(false);
-        }}
       />
 
       <SummaryPanel
         open={rightPanel === "summary"}
         rows={rows}
         timeRange={timeRange}
-        compareDigest={lastCompareDigest}
       />
 
       {/* Left-edge floating handle — mirror of right stack */}
