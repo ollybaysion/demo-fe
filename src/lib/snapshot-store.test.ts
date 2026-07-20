@@ -4,6 +4,7 @@ import {
   migrateSnapshots,
   pinnedSnapshots,
   removeSnapshot,
+  toChatPayload,
   toggleIncluded,
   togglePinned,
   upsertSnapshot,
@@ -116,6 +117,47 @@ describe("removeSnapshot", () => {
   it("id 로 지운다", () => {
     const list = [snap({ id: "snap-1" }), snap({ id: "snap-2" })];
     expect(removeSnapshot(list, "snap-1").map((s) => s.id)).toEqual(["snap-2"]);
+  });
+});
+
+describe("toChatPayload", () => {
+  it("동봉이 없으면 undefined — 필드 자체를 요청에서 빼기 위한 것", () => {
+    // 빈 배열을 보내면 이 기능을 안 쓰는 요청의 본문이 달라진다.
+    expect(toChatPayload([])).toBeUndefined();
+    expect(toChatPayload([snap({ included: false })])).toBeUndefined();
+  });
+
+  it("동봉된 것만 싣는다", () => {
+    const list = [
+      snap({ id: "snap-1", queryKey: "q1", included: false }),
+      snap({ id: "snap-2", queryKey: "q2", included: true }),
+    ];
+    const out = toChatPayload(list);
+    expect(out?.map((s) => s.queryKey)).toEqual(["q2"]);
+  });
+
+  it("고정하지 않은 것은 내용 없이 카탈로그 항목으로만 나간다", () => {
+    // 표 하나가 수천 행일 수 있어 기본은 머리말만 보낸다.
+    const out = toChatPayload([snap({ included: true, pinned: false })]);
+    expect(out?.[0].rows).toBeUndefined();
+    expect(out?.[0]).toMatchObject({
+      queryKey: "q1",
+      label: "센서 목록",
+      columns: ["A", "B"],
+      rowCount: 1,
+    });
+  });
+
+  it("📌 는 표 전문을 싣는다", () => {
+    const out = toChatPayload([snap({ included: true, pinned: true })]);
+    expect(out?.[0].rows).toEqual([["1", null]]);
+  });
+
+  it("행 수는 실제 행 배열에서 센다", () => {
+    const out = toChatPayload([
+      snap({ included: true, rows: [["1", "2"], ["3", "4"], ["5", "6"]] }),
+    ]);
+    expect(out?.[0].rowCount).toBe(3);
   });
 });
 
