@@ -1,0 +1,153 @@
+"use client";
+
+import { useState } from "react";
+import type { DataRequest } from "@/lib/types";
+import type { AddSnapshotResult } from "./useDataSnapshots";
+
+/**
+ * 데이터 요청 카드 — "이게 있어야 답할 수 있다"에 사용자가 답하는 자리.
+ *
+ * DB 에 붙지 못하는 환경에서 모델은 스스로 조회할 수 없다. 없는 데이터를 지어내는
+ * 대신 여기서 조달을 요청하고, 사용자가 결과를 붙여넣으면 다시 분석한다.
+ *
+ * 채운 스냅샷은 **동봉 ON 으로 등록**된다. 이미 "이 데이터가 필요하다"는 요구에
+ * 대한 응답이라 꺼진 상태로 시작할 이유가 없다.
+ */
+type Props = {
+  request: DataRequest;
+  /** 이미 충족됐는가 — 같은 `queryKey` 의 스냅샷이 동봉돼 있는지. */
+  fulfilled: boolean;
+  onFulfill: (
+    input: string,
+    label: string,
+    opts: { include: boolean; queryKey: string },
+  ) => AddSnapshotResult;
+  onReanalyze: () => void;
+  /** 다시 분석 가능 여부 — 스트리밍 중에는 막는다. */
+  canReanalyze: boolean;
+};
+
+export function RequestCard({
+  request,
+  fulfilled,
+  onFulfill,
+  onReanalyze,
+  canReanalyze,
+}: Props) {
+  const [open, setOpen] = useState(!fulfilled);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<{ code: string; message: string } | null>(
+    null,
+  );
+  const [copied, setCopied] = useState(false);
+
+  function submit() {
+    if (text.trim().length === 0) return;
+    const result = onFulfill(text, request.label, {
+      include: true,
+      queryKey: request.queryKey,
+    });
+    if (!result.ok) {
+      setError({ code: result.code, message: result.message });
+      return;
+    }
+    setError(null);
+    setText("");
+    setOpen(false);
+  }
+
+  async function copySql() {
+    if (!request.sql) return;
+    try {
+      await navigator.clipboard.writeText(request.sql);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 클립보드 권한이 없어도 SQL 은 화면에 그대로 있다 — 복사만 실패한다.
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-brand-hairline bg-brand-surface-card px-md py-sm flex flex-col gap-xs">
+      <div className="flex items-center gap-xs">
+        <span
+          aria-hidden
+          className={[
+            "shrink-0 w-2 h-2 rounded-full",
+            fulfilled ? "bg-brand-success" : "bg-brand-warning",
+          ].join(" ")}
+        />
+        <span className="flex-1 min-w-0 text-body-sm text-brand-ink">
+          {fulfilled ? "받았습니다" : "데이터가 필요합니다"} —{" "}
+          <span className="text-brand-muted">{request.label}</span>
+        </span>
+      </div>
+
+      {request.columns && request.columns.length > 0 && (
+        <p className="text-caption text-brand-muted-soft font-mono">
+          {request.columns.join(", ")}
+        </p>
+      )}
+
+      {request.sql && !fulfilled && (
+        <div className="flex flex-col gap-xxs">
+          <pre className="text-caption font-mono text-brand-ink bg-brand-canvas rounded-sm px-sm py-xs overflow-x-auto">
+            {request.sql}
+          </pre>
+          <button
+            type="button"
+            onClick={copySql}
+            className="self-start text-caption text-brand-primary hover:text-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs px-xxs"
+          >
+            {copied ? "복사됨" : "SQL 복사"}
+          </button>
+        </div>
+      )}
+
+      {!fulfilled && open && (
+        <>
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (error) setError(null);
+            }}
+            rows={4}
+            aria-label={`${request.label} 결과 붙여넣기`}
+            placeholder="실행한 결과를 붙여넣으세요."
+            className="w-full min-w-0 bg-brand-canvas text-brand-ink font-mono text-caption rounded-md border border-brand-hairline px-sm py-xs resize-y focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          />
+          {error && (
+            <p
+              role="alert"
+              className="text-caption text-brand-error bg-brand-error-soft rounded-sm px-sm py-xs"
+            >
+              <span className="font-semibold">{error.code}</span> —{" "}
+              {error.message}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={text.trim().length === 0}
+            className="self-end inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
+          >
+            등록
+          </button>
+        </>
+      )}
+
+      {fulfilled && (
+        <button
+          type="button"
+          onClick={onReanalyze}
+          disabled={!canReanalyze}
+          className="self-end inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
+        >
+          다시 분석
+        </button>
+      )}
+    </div>
+  );
+}

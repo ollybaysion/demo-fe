@@ -14,6 +14,7 @@ import {
   setLabel as setLabelIn,
   toggleIncluded as toggleIncludedIn,
   togglePinned as togglePinnedIn,
+  upsertFulfilling,
   upsertSnapshot,
 } from "@/lib/snapshot-store";
 import type { DataSnapshot } from "@/lib/types";
@@ -60,12 +61,20 @@ export function useDataSnapshots() {
    * 만들지 않고 기존 항목을 갱신한다(`replacedExisting`).
    *
    * 기본 포함값은 OFF 다. 등록만으로 요청이 무거워지지 않게, 동봉은 사용자가
-   * 명시적으로 켠다.
+   * 명시적으로 켠다. 예외는 요청 카드로 채운 경우인데(`opts.include`), 그건
+   * 이미 "이 데이터가 필요하다"는 요구에 대한 응답이라 끄고 시작할 이유가 없다.
+   *
+   * `opts.queryKey` 를 주면 라벨에서 만들지 않고 그 값을 쓴다 — 요청 카드가 지정한
+   * 키로 등록해야 백엔드가 충족 여부를 알아본다.
    */
   const addSnapshot = useCallback(
-    (input: string, label: string): AddSnapshotResult => {
+    (
+      input: string,
+      label: string,
+      opts?: { include?: boolean; queryKey?: string },
+    ): AddSnapshotResult => {
       const id = newId();
-      const queryKey = toQueryKey(label, id);
+      const queryKey = opts?.queryKey ?? toQueryKey(label, id);
       const parsed = parseSnapshot(input, { queryKey });
       if (!parsed.ok) {
         return {
@@ -84,7 +93,7 @@ export function useDataSnapshots() {
         columns: parsed.columns,
         rows: parsed.rows,
         contentHash: parsed.contentHash,
-        included: false,
+        included: opts?.include === true,
         pinned: false,
         warnings: parsed.warnings,
       };
@@ -93,7 +102,11 @@ export function useDataSnapshots() {
       // 값을 새어 나오게 하면 읽는 시점이 렌더 타이밍에 묶인다.
       const replacedExisting =
         findByContentHash(snapshots, snapshot.contentHash) !== undefined;
-      setSnapshots((prev) => upsertSnapshot(prev, snapshot));
+      setSnapshots((prev) =>
+        opts?.include
+          ? upsertFulfilling(prev, snapshot)
+          : upsertSnapshot(prev, snapshot),
+      );
       return { ok: true, snapshot, replacedExisting };
     },
     [snapshots],

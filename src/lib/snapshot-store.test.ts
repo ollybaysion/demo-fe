@@ -7,6 +7,7 @@ import {
   toChatPayload,
   toggleIncluded,
   togglePinned,
+  upsertFulfilling,
   upsertSnapshot,
 } from "@/lib/snapshot-store";
 import type { DataSnapshot } from "@/lib/types";
@@ -72,6 +73,36 @@ describe("upsertSnapshot", () => {
       snap({ id: "snap-9", contentHash: "b".repeat(64) }),
     );
     expect(out.map((s) => s.id)).toEqual(["snap-1", "snap-2", "snap-3"]);
+  });
+});
+
+describe("upsertFulfilling — 요청 카드를 채우는 경로", () => {
+  it("새 스냅샷은 동봉된 채로 들어온다", () => {
+    const out = upsertFulfilling([], snap({ included: false }));
+    expect(out[0].included).toBe(true);
+  });
+
+  it("이미 동봉 OFF 로 있던 같은 내용도 동봉으로 바꾼다", () => {
+    // 평소엔 사용자 토글을 보존하지만, 여기선 그게 함정이다 — 요청을 채웠는데도
+    // 요청에 실리지 않으면 영영 채워지지 않은 것으로 보인다.
+    const existing = [snap({ id: "snap-1", included: false })];
+    const out = upsertFulfilling(existing, snap({ id: "snap-2" }));
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("snap-1");
+    expect(out[0].included).toBe(true);
+  });
+
+  it("다른 항목의 동봉 상태는 건드리지 않는다", () => {
+    const list = [
+      snap({ id: "snap-1", contentHash: "a".repeat(64), included: false }),
+      snap({ id: "snap-2", contentHash: "b".repeat(64), included: false }),
+    ];
+    const out = upsertFulfilling(
+      list,
+      snap({ id: "snap-9", contentHash: "b".repeat(64) }),
+    );
+    expect(out.find((s) => s.id === "snap-1")?.included).toBe(false);
+    expect(out.find((s) => s.id === "snap-2")?.included).toBe(true);
   });
 });
 

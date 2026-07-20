@@ -2,7 +2,12 @@ import { CONTEXT_LABELS } from "@/config/contextColumns";
 import { SCENARIOS } from "@/demo/scenarios";
 import { IS_MOCK, forwardOrMock } from "@/lib/backend";
 import { makeRequestLogger, newRequestId } from "@/lib/logger";
-import type { ContextRow, Message } from "@/lib/types";
+import type {
+  ChatDataSnapshot,
+  ContextRow,
+  DataRequest,
+  Message,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +59,8 @@ type ChatRequestBody = {
   timeRange?: ChatTimeRange;
   /** Optional demo-mode metadata — bypasses echo with scripted text. */
   demo?: ChatDemoMeta;
+  /** 사용자가 데이터 패널에서 동봉으로 켠 스냅샷들. */
+  dataSnapshots?: ChatDataSnapshot[];
 };
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
@@ -215,6 +222,7 @@ export async function POST(request: Request): Promise<Response> {
   let responseCharts: unknown[] | undefined;
   let responseEventTimelines: unknown[] | undefined;
   let responseRecommend: string[] | undefined;
+  let responseDataRequests: DataRequest[] | undefined;
   if (body.demo) {
     const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
     const turn = scenario?.turns[body.demo.turnIndex];
@@ -231,11 +239,20 @@ export async function POST(request: Request): Promise<Response> {
         "데모 시나리오의 마지막 응답을 이미 재생했습니다. 헤더의 '다시 시작' 버튼으로 새 시나리오를 선택하세요.";
     }
   } else {
-    responseText = buildMockResponse(
-      lastUser.content,
-      body.context,
-      body.timeRange,
-    );
+    // 데모 모드에는 데이터 요청을 끼우지 않는다 — 시나리오는 정해진 대사를
+    // 순서대로 재생하는 것이라, 중간에 사용자 조달을 요구하면 흐름이 끊긴다.
+    const missing = missingDataRequests(lastUser.content, body.dataSnapshots);
+    if (missing.length > 0) {
+      responseDataRequests = missing;
+      responseText = buildDataRequestResponse(missing);
+    } else {
+      const supplied = suppliedLabels(body.dataSnapshots);
+      responseText =
+        supplied.length > 0
+          ? `제공해주신 ${supplied.join(", ")} 을(를) 근거로 답변합니다.\n\n` +
+            buildMockResponse(lastUser.content, body.context, body.timeRange)
+          : buildMockResponse(lastUser.content, body.context, body.timeRange);
+    }
   }
   const characters = [...responseText];
   const messageId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -265,6 +282,9 @@ export async function POST(request: Request): Promise<Response> {
               : {}),
             ...(responseRecommend && responseRecommend.length > 0
               ? { recommendQuestion: responseRecommend }
+              : {}),
+            ...(responseDataRequests && responseDataRequests.length > 0
+              ? { dataRequests: responseDataRequests }
               : {}),
           }),
         );
@@ -314,5 +334,61 @@ export async function POST(request: Request): Promise<Response> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * mock 이 조달을 요구할 수 있는 데이터 목록.
+ *
+ * 실제 백엔드에서는 모델이 "이 질문에 답하려면 무엇이 없는지"를 판단하겠지만,
+ * mock 은 그럴 수 없으므로 키워드로 흉내 낸다. 요청 카드 왕복을 화면에서 실제로
+ * 걸어볼 수 있게 하는 것이 목적이다.
+ */
+const REQUESTABLE: Array<DataRequest & { triggers: string[] }> = [
+  {
+    queryKey: "sensor_list",
+    label: "챔버별 센서 목록",
+    triggers: ["센서", "sensor"],
+    columns: ["CHAMBER", "SENSOR_ID", "SENSOR_NAME"],
+    sql: "SELECT chamber, sensor_id, sensor_name\n  FROM fdc_sensor_master\n WHERE equipment_id = :equipment_id\n ORDER BY chamber, sensor_id",
+  },
+  {
+    queryKey: "recipe_steps",
+    label: "레시피 STEP 구성",
+    triggers: ["레시피", "recipe", "step"],
+    columns: ["RECIPE_ID", "STEP_NO", "STEP_NAME", "DURATION_SEC"],
+    sql: "SELECT recipe_id, step_no, step_name, duration_sec\n  FROM fdc_recipe_step\n WHERE recipe_id = :recipe_id\n ORDER BY step_no",
+  },
+];
+
+/** 질문이 건드리는 데이터 중, 아직 동봉되지 않은 것들. */
+function missingDataRequests(
+  question: string,
+  supplied: ChatRequestBody["dataSnapshots"],
+): DataRequest[] {
+  const q = question.toLowerCase();
+  const have = new Set((supplied ?? []).map((s) => s.queryKey));
+  return REQUESTABLE.filter(
+    (r) =>
+      !have.has(r.queryKey) &&
+      r.triggers.some((t) => q.includes(t.toLowerCase())),
+  ).map((r) => ({
+    queryKey: r.queryKey,
+    label: r.label,
+    columns: r.columns,
+    sql: r.sql,
+  }));
+}
+
+function suppliedLabels(supplied: ChatRequestBody["dataSnapshots"]): string[] {
+  return (supplied ?? []).map((s) => s.label);
+}
+
+function buildDataRequestResponse(missing: DataRequest[]): string {
+  const names = missing.map((r) => `**${r.label}**`).join(", ");
+  return (
+    `이 질문에 답하려면 ${names} 이(가) 필요한데, 지금은 DB 에 직접 조회할 수 없습니다.\n\n` +
+    "아래 카드의 SQL 을 실행하고 결과를 붙여넣어 주시면 이어서 분석하겠습니다. " +
+    "없는 데이터를 추정해서 답하지 않겠습니다."
+  );
 }
 
