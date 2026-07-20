@@ -202,3 +202,37 @@ export type ContextRow = {
   equipment: string;
   chambers: ContextChamber[];
 };
+
+/**
+ * 데이터 스냅샷 — DB 미접속 환경에서 사람이 직접 실행한 조회 결과.
+ *
+ * 표 내용(`columns`/`rows`)은 `data-provisioning` 엔진이 해석한 산출물을 그대로
+ * 담는다. 값이 전부 문자열인 것은 엔진 규율이다 — Oracle NUMBER 를 double 로
+ * 왕복시키면 정밀도가 깨지므로 숫자 파싱을 하지 않는다. NULL 은 빈 문자열과
+ * 구별해 `null` 이다.
+ */
+export type DataSnapshot = {
+  id: string;
+  /**
+   * 엔진 `query_id` 로 그대로 넘어가는 안정 식별자 — 엔진 모델 스키마의 패턴
+   * (`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)을 만족해야 한다. `toQueryKey` 로 만든다.
+   */
+  queryKey: string;
+  /** 사용자가 보는 이름. 자유 텍스트라 `queryKey` 와 다를 수 있다. */
+  label: string;
+  /**
+   * 등록 시각(ISO). 엔진 `provenance.executed_at` 은 자유형 입력에서 `null` 이라
+   * (엔진에 시계가 없다) 신선도 판단은 이 값으로 한다.
+   */
+  capturedAt: string;
+  columns: string[];
+  rows: (string | null)[][];
+  /** 엔진 `provenance.sha256`. 중복 감지 전용. */
+  contentHash: string;
+  /** 요청에 동봉할지 — 카탈로그 노출 + 풀 가능. */
+  included: boolean;
+  /** 📌 내용 푸시 보장. `included` 없이는 성립하지 않는다. */
+  pinned: boolean;
+  /** 등록 시점의 비치명 경고 코드들. 자유형은 `INTEGRITY_ABSENT` 가 정상. */
+  warnings: string[];
+};
