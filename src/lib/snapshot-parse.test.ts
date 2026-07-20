@@ -25,6 +25,16 @@ describe("toQueryKey", () => {
     expect(toQueryKey("센서 목록", "snap-abc")).toBe("snap-abc");
   });
 
+  it("손실이 있는 접기는 하지 않는다 — 충돌 방지", () => {
+    // "챔버A 센서"를 억지로 접으면 "A" 가 되고, "설비A 압력"도 "A" 가 된다.
+    // queryKey 는 모델이 내용을 되찾는 키라 겹치면 엉뚱한 표를 가져간다.
+    expect(toQueryKey("챔버A 센서", "snap-1")).toBe("snap-1");
+    expect(toQueryKey("설비A 압력", "snap-2")).toBe("snap-2");
+    expect(toQueryKey("챔버A 센서", "snap-1")).not.toBe(
+      toQueryKey("설비A 압력", "snap-2"),
+    );
+  });
+
   it("접을 수 있으면 라벨에서 읽히는 키를 만든다", () => {
     expect(toQueryKey("sensor list", "snap-abc")).toBe("sensor-list");
   });

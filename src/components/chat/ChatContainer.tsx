@@ -40,6 +40,8 @@ import {
   ConversationToggleHandle,
   useConversations,
 } from "./history";
+import { DataPanel, DataToggleHandle, useDataSnapshots } from "./data";
+import { toChatPayload } from "@/lib/snapshot-store";
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
@@ -99,9 +101,9 @@ export function ChatContainer() {
   const [isStreaming, setIsStreaming] = useState(false);
   // Single source of truth for the right-side slot — at most one panel
   // is shown at a time; flipping flips both visually.
-  const [rightPanel, setRightPanel] = useState<"context" | "summary" | null>(
-    null,
-  );
+  const [rightPanel, setRightPanel] = useState<
+    "context" | "summary" | "data" | null
+  >(null);
   const [leftPanel, setLeftPanel] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
@@ -133,6 +135,13 @@ export function ChatContainer() {
     selectConversation,
     startNewConversation,
   } = useConversations();
+  const {
+    snapshots,
+    addSnapshot,
+    remove: removeSnapshot,
+    toggleIncluded: toggleSnapshotIncluded,
+    togglePinned: toggleSnapshotPinned,
+  } = useDataSnapshots();
 
   // ── Conversation ↔ local state sync ─────────────────────────
   // Load: when activeId transitions to a real id, hydrate local chat state
@@ -208,6 +217,9 @@ export function ChatContainer() {
             context,
             timeRange: hasRange ? timeRangeSnapshot : undefined,
             demo: demoMeta,
+            // 동봉이 없으면 undefined 라 필드 자체가 빠진다 — 이 기능을 안 쓰는
+            // 요청은 지금까지와 똑같은 본문으로 나간다.
+            dataSnapshots: toChatPayload(snapshots),
           }),
           signal: controller.signal,
         });
@@ -307,7 +319,7 @@ export function ChatContainer() {
         setIsStreaming(false);
       }
     },
-    [appendRows, replaceRows, replaceTimeRange],
+    [appendRows, replaceRows, replaceTimeRange, snapshots],
   );
 
   const handleScenarioStart = useCallback(
@@ -491,6 +503,11 @@ export function ChatContainer() {
     setDetailOpen(false);
   }
 
+  function handleDataToggle() {
+    setRightPanel((prev) => (prev === "data" ? null : "data"));
+    setDetailOpen(false);
+  }
+
   function handleLeftToggle() {
     setLeftPanel((p) => !p);
   }
@@ -633,6 +650,15 @@ export function ChatContainer() {
         compareDigest={lastCompareDigest}
       />
 
+      <DataPanel
+        open={rightPanel === "data"}
+        snapshots={snapshots}
+        onAdd={addSnapshot}
+        onToggleIncluded={toggleSnapshotIncluded}
+        onTogglePinned={toggleSnapshotPinned}
+        onRemove={removeSnapshot}
+      />
+
       {/* Left-edge floating handle — mirror of right stack */}
       <div
         className={[
@@ -658,6 +684,11 @@ export function ChatContainer() {
         <ContextToggleHandle
           isOpen={rightPanel === "context"}
           onToggle={handleContextToggle}
+        />
+        <DataToggleHandle
+          isOpen={rightPanel === "data"}
+          onToggle={handleDataToggle}
+          includedCount={snapshots.filter((s) => s.included).length}
         />
         {messages.length > 0 && (
           <SummaryToggleHandle

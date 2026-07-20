@@ -236,3 +236,22 @@ export type DataSnapshot = {
   /** 등록 시점의 비치명 경고 코드들. 자유형은 `INTEGRITY_ABSENT` 가 정상. */
   warnings: string[];
 };
+
+/**
+ * 채팅 요청에 실리는 스냅샷 — `POST /api/fdc/v1/chat` 의 `dataSnapshots[]`.
+ *
+ * 브라우저에 보관된 `DataSnapshot` 을 그대로 보내지 않는다. 표 하나가 수천 행일 수
+ * 있어 전부 실으면 요청이 감당이 안 되기 때문에, 기본은 **카탈로그 항목**(어떤 표가
+ * 있는지 알리는 머리말)만 보내고 내용은 모델이 필요할 때 가져가게 한다.
+ *
+ * `rows` 가 있는 것은 📌 로 지정된 것뿐이다 — "이건 반드시 보고 답해라"에 해당한다.
+ */
+export type ChatDataSnapshot = {
+  queryKey: string;
+  label: string;
+  capturedAt: string;
+  columns: string[];
+  rowCount: number;
+  /** 📌 인 것만 채워진다. 없으면 내용은 pull 대상. */
+  rows?: (string | null)[][];
+};

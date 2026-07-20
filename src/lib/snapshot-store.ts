@@ -15,7 +15,7 @@
  *    켜면 `included` 도 켜지고, `included` 를 끄면 `pinned` 도 풀린다.
  */
 
-import type { DataSnapshot } from "@/lib/types";
+import type { ChatDataSnapshot, DataSnapshot } from "@/lib/types";
 
 export const SNAPSHOTS_STORAGE_KEY = "fdc-agent:data-snapshots";
 
@@ -95,6 +95,29 @@ export function includedSnapshots(list: DataSnapshot[]): DataSnapshot[] {
 /** 그중 전문이 주입되는 것들(📌). */
 export function pinnedSnapshots(list: DataSnapshot[]): DataSnapshot[] {
   return list.filter((s) => s.included && s.pinned);
+}
+
+/**
+ * 채팅 요청에 실을 모양으로 접는다.
+ *
+ * 동봉된 것만 나가고, 그중 📌 만 `rows` 를 달고 나간다 — 나머지는 카탈로그 항목이라
+ * 내용 없이 "이런 표가 있다"만 알린다. 동봉이 하나도 없으면 빈 배열이 아니라
+ * `undefined` 를 준다: 요청 본문에서 필드 자체를 빼기 위한 것이고, 그래야 이 기능을
+ * 안 쓰는 요청이 지금과 똑같은 모양으로 나간다.
+ */
+export function toChatPayload(
+  list: DataSnapshot[],
+): ChatDataSnapshot[] | undefined {
+  const included = includedSnapshots(list);
+  if (included.length === 0) return undefined;
+  return included.map((s) => ({
+    queryKey: s.queryKey,
+    label: s.label,
+    capturedAt: s.capturedAt,
+    columns: s.columns,
+    rowCount: s.rows.length,
+    ...(s.pinned ? { rows: s.rows } : {}),
+  }));
 }
 
 /**
