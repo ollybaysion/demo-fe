@@ -41,6 +41,22 @@ export function upsertSnapshot(
   return list.map((s, i) => (i === dupIndex ? merged : s));
 }
 
+/**
+ * 요청 카드를 채우는 경로의 등록.
+ *
+ * `upsertSnapshot` 과 달리 동봉을 못박는다. 갱신 경로가 사용자 토글을 보존하는 건
+ * 평소엔 맞지만 여기선 함정이 된다 — 예전에 동봉 OFF 로 등록해 둔 것과 내용이
+ * 같으면, 요청을 채웠는데도 요청에 실리지 않아 채워지지 않은 채로 남는다.
+ */
+export function upsertFulfilling(
+  list: DataSnapshot[],
+  next: DataSnapshot,
+): DataSnapshot[] {
+  return upsertSnapshot(list, next).map((s) =>
+    s.contentHash === next.contentHash ? { ...s, included: true } : s,
+  );
+}
+
 export function removeSnapshot(
   list: DataSnapshot[],
   id: string,

@@ -17,6 +17,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 import { parseSseStream } from "@/lib/sse";
 import type {
   ContextRow,
+  DataRequest,
   Message,
   MessageChartEntry,
   MessageEventTimelineEntry,
@@ -40,7 +41,12 @@ import {
   ConversationToggleHandle,
   useConversations,
 } from "./history";
-import { DataPanel, DataToggleHandle, useDataSnapshots } from "./data";
+import {
+  DataPanel,
+  DataToggleHandle,
+  RequestCard,
+  useDataSnapshots,
+} from "./data";
 import { toChatPayload } from "@/lib/snapshot-store";
 
 type TokenPayload = { content: string };
@@ -68,6 +74,11 @@ type DonePayload = {
     rowsMode?: "replace" | "append";
     timeRange?: { start?: string; end?: string };
   };
+  /**
+   * 답하는 데 필요한데 없는 데이터. DB 에 붙지 못하는 환경에서 모델이 지어내는
+   * 대신 사용자에게 조달을 요청하는 통로.
+   */
+  dataRequests?: DataRequest[];
 };
 type StreamPayload = TokenPayload | ErrorPayload | DonePayload;
 
@@ -265,9 +276,15 @@ export function ChatContainer() {
             const hasRecommend =
               !!payload.recommendQuestion &&
               payload.recommendQuestion.length > 0;
+            const hasDataRequests =
+              !!payload.dataRequests && payload.dataRequests.length > 0;
             if (
               assistantInserted &&
-              (hasTables || hasCharts || hasTimelines || hasRecommend)
+              (hasTables ||
+                hasCharts ||
+                hasTimelines ||
+                hasRecommend ||
+                hasDataRequests)
             ) {
               setMessages((prev) =>
                 prev.map((m) => {
@@ -279,6 +296,7 @@ export function ChatContainer() {
                   if (hasRecommend) {
                     next.recommendQuestion = payload.recommendQuestion;
                   }
+                  if (hasDataRequests) next.dataRequests = payload.dataRequests;
                   return next;
                 }),
               );
@@ -508,6 +526,15 @@ export function ChatContainer() {
     setDetailOpen(false);
   }
 
+  /**
+   * 요청이 채워졌는가 — 같은 `queryKey` 의 스냅샷이 **동봉된 채로** 있는지.
+   *
+   * 보관만 하고 동봉을 꺼두면 요청에 실리지 않으므로 채워진 것이 아니다.
+   */
+  function isRequestFulfilled(req: DataRequest): boolean {
+    return snapshots.some((s) => s.queryKey === req.queryKey && s.included);
+  }
+
   function handleLeftToggle() {
     setLeftPanel((p) => !p);
   }
@@ -516,15 +543,16 @@ export function ChatContainer() {
   // 같은 컨텍스트로 다시 API 호출. 데모 시나리오 진행 중엔 호출되지
   // 않도록 onRegenerate prop 자체를 빼서 버튼이 안 보이게 한다.
   const handleRegenerate = useCallback(() => {
-    setMessages((prev) => {
-      const lastUserIndex = findLastIndex(prev, (m) => m.role === "user");
-      if (lastUserIndex === -1) return prev;
-      const trimmed = prev.slice(0, lastUserIndex + 1);
-      setIsStreaming(true);
-      void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
-      return trimmed;
-    });
-  }, [rows, timeRange, sendToApi]);
+    // 자르기와 재요청을 setMessages 업데이터 밖에서 한다. 업데이터는 순수해야
+    // 하는데 그 안에서 sendToApi 를 부르면, StrictMode 가 업데이터를 두 번
+    // 실행할 때 요청도 두 번 나가 같은 답변이 두 개 쌓인다.
+    const lastUserIndex = findLastIndex(messages, (m) => m.role === "user");
+    if (lastUserIndex === -1) return;
+    const trimmed = messages.slice(0, lastUserIndex + 1);
+    setMessages(trimmed);
+    setIsStreaming(true);
+    void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
+  }, [messages, rows, timeRange, sendToApi]);
 
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
@@ -573,6 +601,20 @@ export function ChatContainer() {
                 messages={messages}
                 isStreaming={isStreaming}
                 onRegenerate={demoState ? undefined : handleRegenerate}
+                renderDataRequests={(m) =>
+                  m.dataRequests?.map((req) => (
+                    <RequestCard
+                      key={req.queryKey}
+                      request={req}
+                      fulfilled={isRequestFulfilled(req)}
+                      onFulfill={addSnapshot}
+                      // 다시 분석 = 마지막 user 메시지로 재요청. 이제 요청 본문에
+                      // 새로 등록된 스냅샷이 실리므로 같은 질문이 다른 답을 얻는다.
+                      onReanalyze={handleRegenerate}
+                      canReanalyze={!isStreaming}
+                    />
+                  ))
+                }
               />
             )}
           </div>
