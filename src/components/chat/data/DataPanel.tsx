@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { PendingRequest } from "@/lib/request-store";
 import type { DataSnapshot } from "@/lib/types";
+import { RequestCard } from "./RequestCard";
 import { SnapshotAddForm } from "./SnapshotAddForm";
 import { SnapshotCard } from "./SnapshotCard";
 import type { AddSnapshotResult } from "./useDataSnapshots";
@@ -16,7 +18,14 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
 type Props = {
   open: boolean;
   snapshots: DataSnapshot[];
+  /** 아직 채워지지 않은 데이터 요청 — 최상단에 카드로 뜬다. */
+  requests: PendingRequest[];
   onAdd: (input: string, label: string) => AddSnapshotResult;
+  onFulfill: (
+    input: string,
+    label: string,
+    opts: { include: boolean; queryKey: string },
+  ) => AddSnapshotResult;
   onToggleIncluded: (id: string) => void;
   onTogglePinned: (id: string) => void;
   onRemove: (id: string) => void;
@@ -25,7 +34,9 @@ type Props = {
 export function DataPanel({
   open,
   snapshots,
+  requests,
   onAdd,
+  onFulfill,
   onToggleIncluded,
   onTogglePinned,
   onRemove,
@@ -46,6 +57,22 @@ export function DataPanel({
     >
       <div className="w-[320px] h-full flex flex-col">
         <div className="flex-1 overflow-y-auto">
+          {/* 요청이 있으면 무엇보다 먼저 — 보관이 비어 있어도 카드가 우선이다.
+              모델이 "이게 있어야 답한다"고 세운 요구라, 등록 폼보다 위에 둔다. */}
+          {requests.length > 0 && (
+            <Section title={`요청받은 데이터 (${requests.length})`}>
+              <div className="flex flex-col gap-xs">
+                {requests.map((p) => (
+                  <RequestCard
+                    key={p.request.queryKey}
+                    request={p.request}
+                    onFulfill={onFulfill}
+                  />
+                ))}
+              </div>
+            </Section>
+          )}
+
           <Section title="스냅샷 등록">
             <SnapshotAddForm onAdd={onAdd} />
           </Section>

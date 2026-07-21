@@ -44,7 +44,7 @@ import {
 import {
   DataPanel,
   DataToggleHandle,
-  RequestCard,
+  useDataRequests,
   useDataSnapshots,
 } from "./data";
 import { toChatPayload } from "@/lib/snapshot-store";
@@ -153,6 +153,14 @@ export function ChatContainer() {
     toggleIncluded: toggleSnapshotIncluded,
     togglePinned: toggleSnapshotPinned,
   } = useDataSnapshots();
+  const {
+    open: openRequests,
+    receive: receiveRequests,
+    fulfill: fulfillRequest,
+    clearForOrigin: clearRequestsForOrigin,
+    clear: clearRequests,
+    fulfilledFor: fulfilledRequestsFor,
+  } = useDataRequests();
 
   // ── Conversation ↔ local state sync ─────────────────────────
   // Load: when activeId transitions to a real id, hydrate local chat state
@@ -229,8 +237,10 @@ export function ChatContainer() {
             timeRange: hasRange ? timeRangeSnapshot : undefined,
             demo: demoMeta,
             // 동봉이 없으면 undefined 라 필드 자체가 빠진다 — 이 기능을 안 쓰는
-            // 요청은 지금까지와 똑같은 본문으로 나간다.
-            dataSnapshots: toChatPayload(snapshots),
+            // 요청은 지금까지와 똑같은 본문으로 나간다. 데모 재생 중에는 아예
+            // 싣지 않는다: 시나리오는 정해진 답을 내야 하는데, 사용자가 보관해 둔
+            // 스냅샷이 끼어들면 재생이 결정론을 잃는다.
+            dataSnapshots: demoMeta ? undefined : toChatPayload(snapshots),
           }),
           signal: controller.signal,
         });
@@ -301,6 +311,22 @@ export function ChatContainer() {
                 }),
               );
             }
+            // 요청 카드는 데이터 패널이 안는다. 어느 질문에서 비롯됐는지 함께
+            // 넘겨야, 채워졌을 때 그 질문까지의 히스토리로 되돌려 보낼 수 있다.
+            // 데모 재생 중에는 만들지 않는다(시나리오 결정론 보존).
+            if (hasDataRequests && !demoMeta) {
+              const originIndex = findLastIndex(
+                history,
+                (m) => m.role === "user",
+              );
+              const origin = originIndex === -1 ? undefined : history[originIndex];
+              if (origin) {
+                receiveRequests(payload.dataRequests!, origin.id);
+                // 패널을 열어 준다 — 안 그러면 조달 요청이 접힌 패널 안에서
+                // 조용히 기다리고, 사용자는 아무 일도 안 일어난 줄 안다.
+                setRightPanel("data");
+              }
+            }
             // 비-데모 모드에서만 extractedContext 적용. 데모는
             // turn.contextPanel 흐름이 우선이라 스킵.
             if (!demoMeta && payload.extractedContext) {
@@ -337,7 +363,7 @@ export function ChatContainer() {
         setIsStreaming(false);
       }
     },
-    [appendRows, replaceRows, replaceTimeRange, snapshots],
+    [appendRows, replaceRows, replaceTimeRange, snapshots, receiveRequests],
   );
 
   const handleScenarioStart = useCallback(
@@ -449,8 +475,11 @@ export function ChatContainer() {
     setDemoState(null);
     setDetailOpen(false);
     resetContext();
+    // 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라져야 한다.
+    // 스냅샷은 반대로 남는다(대화와 독립된 보관물).
+    clearRequests();
     startNewConversation();
-  }, [resetContext, startNewConversation]);
+  }, [resetContext, startNewConversation, clearRequests]);
 
   const handleSidebarSelect = useCallback(
     (id: string) => {
@@ -459,9 +488,10 @@ export function ChatContainer() {
       if (isStreaming) return;
       setDemoState(null);
       setDetailOpen(false);
+      clearRequests();
       selectConversation(id);
     },
-    [isStreaming, selectConversation],
+    [isStreaming, selectConversation, clearRequests],
   );
 
   const equipmentNames = useMemo(
@@ -527,13 +557,22 @@ export function ChatContainer() {
   }
 
   /**
-   * 요청이 채워졌는가 — 같은 `queryKey` 의 스냅샷이 **동봉된 채로** 있는지.
-   *
-   * 보관만 하고 동봉을 꺼두면 요청에 실리지 않으므로 채워진 것이 아니다.
+   * 요청 카드에서 결과를 등록한다 — 스냅샷으로 보관하고, 그 요청을 충족으로
+   * 표시한다. 충족된 요청은 패널에서 스냅샷 카드에 자리를 내주고, 채팅에는
+   * "다시 분석" 방아쇠가 나타난다.
    */
-  function isRequestFulfilled(req: DataRequest): boolean {
-    return snapshots.some((s) => s.queryKey === req.queryKey && s.included);
-  }
+  const handleFulfillRequest = useCallback(
+    (
+      input: string,
+      label: string,
+      opts: { include: boolean; queryKey: string },
+    ) => {
+      const result = addSnapshot(input, label, opts);
+      if (result.ok) fulfillRequest(opts.queryKey);
+      return result;
+    },
+    [addSnapshot, fulfillRequest],
+  );
 
   function handleLeftToggle() {
     setLeftPanel((p) => !p);
@@ -553,6 +592,40 @@ export function ChatContainer() {
     setIsStreaming(true);
     void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
   }, [messages, rows, timeRange, sendToApi]);
+
+  /**
+   * 다시 분석 — 요청을 낳은 **그 질문까지** 되감아 그대로 다시 보낸다. 사용자가
+   * 질문을 다시 타이핑하지 않게 하는 게 요점이라, 마지막 질문이 아니라 요청의
+   * 출처 메시지를 기준으로 자른다.
+   *
+   * 그 질문에 매인 요청들은 여기서 걷어낸다 — 새 응답이 여전히 부족하다면 다시
+   * 요청해 올 것이고, 그때 새 카드로 뜨는 게 맞다.
+   */
+  const handleReanalyze = useCallback(
+    (originMessageId: string) => {
+      const index = messages.findIndex((m) => m.id === originMessageId);
+      if (index === -1) return;
+      const trimmed = messages.slice(0, index + 1);
+      clearRequestsForOrigin(originMessageId);
+      setMessages(trimmed);
+      setIsStreaming(true);
+      void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
+    },
+    [messages, rows, timeRange, sendToApi, clearRequestsForOrigin],
+  );
+
+  /**
+   * 채워진 요청을 가진 가장 최근 질문 — 있으면 채팅에 "다시 분석"이 뜬다.
+   * 없으면 아직 조달 중이거나 요청 자체가 없다는 뜻이라 방아쇠를 내지 않는다.
+   */
+  const reanalyzeOrigin = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== "user") continue;
+      if (fulfilledRequestsFor(m.id).length > 0) return m;
+    }
+    return undefined;
+  }, [messages, fulfilledRequestsFor]);
 
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
@@ -601,20 +674,22 @@ export function ChatContainer() {
                 messages={messages}
                 isStreaming={isStreaming}
                 onRegenerate={demoState ? undefined : handleRegenerate}
-                renderDataRequests={(m) =>
-                  m.dataRequests?.map((req) => (
-                    <RequestCard
-                      key={req.queryKey}
-                      request={req}
-                      fulfilled={isRequestFulfilled(req)}
-                      onFulfill={addSnapshot}
-                      // 다시 분석 = 마지막 user 메시지로 재요청. 이제 요청 본문에
-                      // 새로 등록된 스냅샷이 실리므로 같은 질문이 다른 답을 얻는다.
-                      onReanalyze={handleRegenerate}
-                      canReanalyze={!isStreaming}
-                    />
-                  ))
-                }
+                renderReanalyze={() => {
+                  // 요청 카드는 패널이 그린다. 여기 남는 건 "이제 답할 수 있다"는
+                  // 신호 — 채워진 요청이 하나라도 있을 때만 방아쇠를 낸다.
+                  if (!reanalyzeOrigin) return null;
+                  const origin = reanalyzeOrigin;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleReanalyze(origin.id)}
+                      disabled={isStreaming}
+                      className="self-start inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
+                    >
+                      ↻ 다시 분석 — “{truncate(origin.content, 24)}”
+                    </button>
+                  );
+                }}
               />
             )}
           </div>
@@ -695,7 +770,9 @@ export function ChatContainer() {
       <DataPanel
         open={rightPanel === "data"}
         snapshots={snapshots}
+        requests={openRequests}
         onAdd={addSnapshot}
+        onFulfill={handleFulfillRequest}
         onToggleIncluded={toggleSnapshotIncluded}
         onTogglePinned={toggleSnapshotPinned}
         onRemove={removeSnapshot}
@@ -764,6 +841,12 @@ function appendErrorMessage(
       }),
     },
   ]);
+}
+
+/** 버튼 라벨에 원 질문을 얹기 위한 축약 — 어느 질문을 다시 묻는지만 알면 된다. */
+function truncate(text: string, max: number): string {
+  const one = text.replace(/\s+/g, " ").trim();
+  return one.length <= max ? one : `${one.slice(0, max)}…`;
 }
 
 function findLastIndex<T>(

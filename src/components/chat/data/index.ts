@@ -1,4 +1,4 @@
 export { DataPanel } from "./DataPanel";
 export { DataToggleHandle } from "./DataToggleHandle";
-export { RequestCard } from "./RequestCard";
+export { useDataRequests } from "./useDataRequests";
 export { useDataSnapshots, type AddSnapshotResult } from "./useDataSnapshots";
