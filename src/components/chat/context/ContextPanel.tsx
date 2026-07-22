@@ -60,11 +60,11 @@ export function ContextPanel({
       className={[
         "shrink-0 overflow-hidden",
         "transition-[width] duration-200 ease-out",
-        open ? "w-[320px]" : "w-0",
+        open ? "w-[440px]" : "w-0",
         "border-l border-brand-hairline bg-brand-canvas",
       ].join(" ")}
     >
-      <div className="w-[320px] h-full flex flex-col">
+      <div className="w-[440px] h-full flex flex-col">
         {onExpandDetail && (
           <div className="px-lg pt-md flex justify-end">
             <button
@@ -244,7 +244,7 @@ function TimeField({
           onChange={(e) => onChange(e.target.value)}
           // min-w-0 lets the flex item shrink below the browser's
           // intrinsic min-width for datetime-local, keeping the
-          // clear (×) button in view inside a 320px-wide panel.
+          // clear (×) button in view inside a 440px-wide panel.
           className="flex-1 min-w-0 bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         />
         {value && (

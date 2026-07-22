@@ -55,11 +55,11 @@ export function SummaryPanel({ open, rows, timeRange, compareDigest }: Props) {
       className={[
         "shrink-0 overflow-hidden",
         "transition-[width] duration-200 ease-out",
-        open ? "w-[320px]" : "w-0",
+        open ? "w-[440px]" : "w-0",
         "border-l border-brand-hairline bg-brand-canvas",
       ].join(" ")}
     >
-      <div className="w-[320px] h-full flex flex-col">
+      <div className="w-[440px] h-full flex flex-col">
         <header className="px-lg pt-lg pb-md border-b border-brand-hairline-soft">
           <h2 className="font-sans text-title-md text-brand-ink">대화 요약</h2>
           <p className="mt-xxs text-body-sm text-brand-muted">

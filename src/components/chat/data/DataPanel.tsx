@@ -11,9 +11,11 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
 /**
  * 데이터 스냅샷 패널 — 우측 슬롯의 세 번째 거주자.
  *
- * 폭은 `ContextPanel`·`SummaryPanel` 과 같은 320px 다. 같은 mutex 슬롯을 공유하는데
+ * 폭은 `ContextPanel`·`SummaryPanel` 과 같은 440px 다. 같은 mutex 슬롯을 공유하는데
  * 폭이 다르면 패널을 바꿀 때마다 채팅 영역이 그 차이만큼 출렁이고, 핸들 스택의
- * `translate-x` 도 슬롯 폭에 맞춰 하드코딩돼 있다.
+ * `translate-x` 도 슬롯 폭에 맞춰 하드코딩돼 있다. 440px 은 요청 카드의 SQL
+ * 전문이 가로 스크롤 없이 보이는 폭에서 나왔다 — 바꿀 땐 세 패널과
+ * `ChatContainer` 의 translate 를 함께 바꿀 것.
  */
 type Props = {
   open: boolean;
@@ -51,11 +53,11 @@ export function DataPanel({
       className={[
         "shrink-0 overflow-hidden",
         "transition-[width] duration-200 ease-out",
-        open ? "w-[320px]" : "w-0",
+        open ? "w-[440px]" : "w-0",
         "border-l border-brand-hairline bg-brand-canvas",
       ].join(" ")}
     >
-      <div className="w-[320px] h-full flex flex-col">
+      <div className="w-[440px] h-full flex flex-col">
         <div className="flex-1 overflow-y-auto">
           {/* 요청이 있으면 무엇보다 먼저 — 보관이 비어 있어도 카드가 우선이다.
               모델이 "이게 있어야 답한다"고 세운 요구라, 등록 폼보다 위에 둔다. */}

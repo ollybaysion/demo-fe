@@ -797,7 +797,7 @@ export function ChatContainer() {
         className={[
           "fixed top-1/4 right-0 z-20 flex flex-col gap-xs",
           "transition-transform duration-200 ease-out",
-          rightPanel !== null ? "translate-x-[-320px]" : "translate-x-0",
+          rightPanel !== null ? "translate-x-[-440px]" : "translate-x-0",
         ].join(" ")}
       >
         <ContextToggleHandle

@@ -82,7 +82,9 @@ export function RequestCard({ request, onFulfill }: Props) {
 
       {request.sql && (
         <div className="flex flex-col gap-xxs">
-          <pre className="text-caption font-mono text-brand-ink bg-brand-canvas rounded-sm px-sm py-xs overflow-x-auto">
+          {/* whitespace-pre-wrap: 패널 폭(440px)을 넘는 SQL 줄도 스크롤에
+              숨기지 않고 줄바꿈해 전문이 보이게 — 폭은 안전망일 뿐이다. */}
+          <pre className="text-caption font-mono text-brand-ink bg-brand-canvas rounded-sm px-sm py-xs whitespace-pre-wrap">
             {request.sql}
           </pre>
           <button
