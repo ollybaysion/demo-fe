@@ -16,9 +16,14 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onAdd: (input: string) => AddSnapshotResult;
+  /**
+   * 붙여넣기 즉시 등록이 실패했을 때 — 그 텍스트와 실패 사유를 그대로 안고
+   * 열린다. 사용자가 붙여넣은 것을 잃지 않고 원인을 보게 하기 위한 것.
+   */
+  seed?: { text: string; error: { code: string; message: string } } | null;
 };
 
-export function AddDataModal({ open, onClose, onAdd }: Props) {
+export function AddDataModal({ open, onClose, onAdd, seed }: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<{ code: string; message: string } | null>(
     null,
@@ -32,6 +37,17 @@ export function AddDataModal({ open, onClose, onAdd }: Props) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // seed 가 바뀌면 그걸로 채운다 — 없으면 이전 내용 유지(실패한 입력은 다시
+  // 만들기 번거로우니 지우지 않는다). effect 대신 렌더 중 상태 조정 패턴.
+  const [appliedSeed, setAppliedSeed] = useState<typeof seed>(null);
+  if (seed !== appliedSeed) {
+    setAppliedSeed(seed);
+    if (seed) {
+      setText(seed.text);
+      setError(seed.error);
+    }
+  }
 
   if (!open) return null;
 

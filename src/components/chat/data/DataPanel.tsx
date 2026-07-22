@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import type { PendingRequest } from "@/lib/request-store";
 import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
@@ -12,9 +12,16 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  * 데이터 패널 — 3분할 레이아웃의 좌측 상주 컬럼.
  *
  * NotebookLM 의 소스 패널 관례를 따른다(따라 그리진 않는다): 항상 떠 있고,
- * 추가는 헤더의 [+] 하나, 항목은 체크박스로 포함/제외. 접힌 패널 뒤에 숨어
- * 있던 시절의 "등록했는데 아무 일도 안 일어남" 문제가 상주로 풀린다 —
- * 등록 결과가 항상 눈앞에 있다.
+ * 항목은 체크박스로 포함/제외. 접힌 패널 뒤에 숨어 있던 시절의 "등록했는데
+ * 아무 일도 안 일어남" 문제가 상주로 풀린다 — 등록 결과가 항상 눈앞에 있다.
+ *
+ * 등록 경로는 셋, 전부 같은 `onAdd` 로 합류한다:
+ *  1. 하단 [+ 데이터 추가] 모달 — 기본 경로.
+ *  2. **Ctrl+V 즉시 등록** — 채팅 입력창 등 텍스트 입력이 아닌 곳에서
+ *     붙여넣으면 바로 등록. SQL Developer 복사 → 앱 클릭 → Ctrl+V 로 끝.
+ *  3. **파일 드롭** — CSV/TSV/텍스트 파일을 패널에 끌어놓으면 읽어 등록
+ *     (UTF-8 기준). 실패하면 그 텍스트를 안고 모달이 열린다 — 붙여넣은
+ *     것을 잃지 않고 원인을 보여 주기 위해.
  */
 type Props = {
   snapshots: DataSnapshot[];
@@ -46,12 +53,61 @@ export function DataPanel({
   onRestore,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
+  const [seed, setSeed] = useState<{
+    text: string;
+    error: { code: string; message: string };
+  } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const includedCount = snapshots.filter((s) => s.included).length;
+
+  /** 텍스트 한 덩이를 등록한다 — 실패하면 그 텍스트를 안고 모달을 연다. */
+  const registerText = useCallback(
+    (text: string) => {
+      if (text.trim().length === 0) return;
+      const result = onAdd(text);
+      if (!result.ok) {
+        setSeed({
+          text,
+          error: { code: result.code, message: result.message },
+        });
+        setAddOpen(true);
+      }
+    },
+    [onAdd],
+  );
+
+  // Ctrl+V 즉시 등록 — 텍스트 입력 요소에 하는 붙여넣기는 건드리지 않는다
+  // (채팅 입력·모달 textarea 는 각자의 붙여넣기가 있다).
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (text.trim().length === 0) return;
+      e.preventDefault();
+      registerText(text);
+    }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [registerText]);
+
+  async function handleDroppedFiles(files: FileList) {
+    for (const file of Array.from(files)) {
+      const text = await file.text();
+      registerText(text);
+    }
+  }
 
   return (
     <aside
       aria-label="데이터 패널"
-      className="shrink-0 w-[400px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden"
+      className="relative shrink-0 w-[400px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden"
+      onDragEnter={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
     >
       <div className="flex items-center px-lg h-16 border-b border-brand-hairline">
         <h2 className="font-sans text-title-md text-brand-ink">
@@ -124,18 +180,45 @@ export function DataPanel({
       <div className="shrink-0 px-lg py-md border-t border-brand-hairline">
         <button
           type="button"
-          onClick={() => setAddOpen(true)}
+          onClick={() => {
+            setSeed(null);
+            setAddOpen(true);
+          }}
           className="w-full inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
           <PlusIcon />
           데이터 추가
         </button>
+        <p className="mt-xs text-center text-caption text-brand-muted-soft">
+          표를 복사해 Ctrl+V 하거나 파일을 끌어놓아도 등록됩니다.
+        </p>
       </div>
+
+      {/* 파일 드롭존 오버레이 — 끌어온 동안만 패널을 덮는다. */}
+      {dragOver && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-brand-primary bg-brand-primary/10"
+          onDragOver={(e) => e.preventDefault()}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer.files.length > 0) {
+              void handleDroppedFiles(e.dataTransfer.files);
+            }
+          }}
+        >
+          <p className="text-body-sm font-medium text-brand-primary">
+            여기에 놓으면 등록됩니다
+          </p>
+        </div>
+      )}
 
       <AddDataModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onAdd={onAdd}
+        seed={seed}
       />
     </aside>
   );
