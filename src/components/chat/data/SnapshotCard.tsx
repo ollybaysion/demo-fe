@@ -186,14 +186,15 @@ export function SnapshotCard({
       )}
 
       {expanded && (
-        <div className="overflow-x-auto border-t border-brand-hairline-soft pt-xxs">
-          <table className="text-caption font-mono">
+        <div className="overflow-x-auto border-t border-brand-hairline-soft pt-xs">
+          {/* 경계선이 있어야 표로 읽힌다 — 값 나열로 보이면 컬럼 정렬이 무너져 보인다. */}
+          <table className="w-full text-caption font-mono border-collapse">
             <thead>
               <tr>
                 {snapshot.columns.map((c) => (
                   <th
                     key={c}
-                    className="text-left text-brand-muted font-normal px-xxs whitespace-nowrap"
+                    className="border border-brand-hairline bg-brand-canvas text-left text-brand-muted font-medium px-xs py-xxs whitespace-nowrap"
                   >
                     {c}
                   </th>
@@ -206,7 +207,7 @@ export function SnapshotCard({
                   {row.map((cell, j) => (
                     <td
                       key={j}
-                      className="text-brand-ink px-xxs whitespace-nowrap"
+                      className="border border-brand-hairline-soft text-brand-ink px-xs py-xxs whitespace-nowrap"
                     >
                       {/* NULL 과 빈 문자열은 다른 것이다 — 엔진이 구별해 담았으니
                           화면에서도 접지 않는다. */}
