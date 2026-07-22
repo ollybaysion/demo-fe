@@ -1,13 +1,13 @@
 /**
  * dev 전용 스냅샷 시드 — URL 에 `?seed=20` 을 붙여 열면 다양한 모양의
- * 스냅샷 N개를 localStorage 에 채우고 param 을 지운다. `?seed=0` 은 비움.
+ * 스냅샷 N개를 저장소(IndexedDB)에 채우고 param 을 지운다. `?seed=0` 은 비움.
  *
  * 카드가 스무 장쯤 쌓였을 때 목록이 어떻게 보이는지(밀도·스크롤·정렬 욕구)를
  * 손으로 스무 번 등록하지 않고 확인하기 위한 것. production 빌드에서는
  * 통째로 꺼진다.
  */
 
-import { SNAPSHOTS_STORAGE_KEY } from "@/lib/snapshot-store";
+import { replaceAllSnapshots } from "@/lib/snapshot-idb";
 import type { DataSnapshot } from "@/lib/types";
 
 const KINDS: { name: string; cols: string[] }[] = [
@@ -59,7 +59,7 @@ function buildSeed(count: number): DataSnapshot[] {
 }
 
 /** 스토리지를 읽기 전에 호출 — seed param 이 있으면 쓰고 URL 에서 지운다. */
-export function maybeApplyDevSeed(): void {
+export async function maybeApplyDevSeed(): Promise<void> {
   if (process.env.NODE_ENV === "production") return;
   if (typeof window === "undefined") return;
   const params = new URLSearchParams(window.location.search);
@@ -67,14 +67,8 @@ export function maybeApplyDevSeed(): void {
   if (raw === null) return;
 
   const count = Math.min(Math.max(Number.parseInt(raw, 10) || 0, 0), 100);
-  if (count === 0) {
-    window.localStorage.removeItem(SNAPSHOTS_STORAGE_KEY);
-  } else {
-    window.localStorage.setItem(
-      SNAPSHOTS_STORAGE_KEY,
-      JSON.stringify(buildSeed(count)),
-    );
-  }
+  // seed=0 → 빈 목록으로 교체 = 전부 비움(localStorage 세대까지 같이 지운다).
+  await replaceAllSnapshots(count === 0 ? [] : buildSeed(count));
 
   params.delete("seed");
   const qs = params.toString();

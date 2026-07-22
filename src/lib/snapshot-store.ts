@@ -2,7 +2,12 @@
  * 스냅샷 목록의 상태 전이 — React 밖의 순수 함수들.
  *
  * 훅에서 분리해 둔 이유는 테스트다. 중복 판정·토글 규칙 같은 규칙은 렌더러 없이
- * 검증되어야 하고, 훅은 이 함수들에 localStorage 와 `useState` 를 두른 얇은 껍데기다.
+ * 검증되어야 하고, 훅은 이 함수들에 IndexedDB 와 `useState` 를 두른 얇은 껍데기다.
+ *
+ * 여기 함수들은 안 바뀐 항목의 **참조를 보존**해야 한다 — 영속화가 이전/다음
+ * 배열의 참조 비교로 바뀐 레코드만 골라 쓰기 때문이다(`snapshot-idb` 의
+ * `computePersistPlan`). 항목을 통째로 map 으로 복사하는 식의 리팩터링은
+ * 동작은 같아 보여도 모든 레코드를 매번 다시 쓰게 만든다.
  *
  * 두 가지 규칙이 여기 박혀 있다:
  *
@@ -19,6 +24,10 @@
 
 import type { ChatDataSnapshot, DataSnapshot } from "@/lib/types";
 
+/**
+ * localStorage 세대의 키. 지금은 IndexedDB 가 정본이고, 이 키는 첫 로드
+ * 이관(옛 데이터 줍기)과 IndexedDB 불가 환경의 후퇴 경로에만 쓰인다.
+ */
 export const SNAPSHOTS_STORAGE_KEY = "fdc-agent:data-snapshots";
 
 /**
@@ -130,7 +139,7 @@ export function toChatPayload(
 }
 
 /**
- * localStorage 에서 읽은 값을 현재 모양으로 접는다.
+ * 저장소(IndexedDB 레코드 또는 localStorage 세대)에서 읽은 값을 현재 모양으로 접는다.
  *
  * 저장된 값은 사용자 브라우저에 남아 있어 코드보다 오래 산다 — 모양이 어긋난
  * 항목은 통째로 버리는 대신 조용히 건너뛰어, 한 항목의 손상이 목록 전체를
