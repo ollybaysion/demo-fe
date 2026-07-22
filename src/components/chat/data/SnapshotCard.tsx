@@ -1,6 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import {
+  buildCsv,
+  buildFullViewHtml,
+  csvFileName,
+} from "@/lib/snapshot-export";
 import type { DataSnapshot } from "@/lib/types";
 
 /**
@@ -11,10 +16,11 @@ import type { DataSnapshot } from "@/lib/types";
  * 읽지 못해 접었다.)
  *
  * 표를 다 보여주지 않는다 — 좁은 패널에서 수천 행을 그리면 패널이 쓸모없어진다.
- * 접힌 상태에서는 머리말(컬럼 수·행 수·시각)만 보이고, 펼치면 앞 몇 행만 미리보기로
- * 보여준다. "전부 보기"는 이 패널의 일이 아니다.
+ * 접힌 상태에서는 머리말(컬럼 수·행 수·시각)만 보이고, 펼치면 **예시 몇 줄**만
+ * 미리보기로 보여준다. 전체가 필요하면 펼친 자리의 [전체 보기(새 창)] 또는
+ * [CSV 다운로드]로 나간다 — "전부 보기"는 이 패널의 일이 아니다.
  */
-const PREVIEW_ROWS = 5;
+const PREVIEW_ROWS = 3;
 
 type Props = {
   snapshot: DataSnapshot;
@@ -50,6 +56,30 @@ export function SnapshotCard({
   }
 
   const meta = `${snapshot.columns.length}열 · ${snapshot.rows.length}행 · ${formatCapturedAt(snapshot.capturedAt)}`;
+
+  /** CSV 파일 다운로드 — blob 을 만들어 한 번 클릭시키고 정리한다. */
+  function downloadCsv() {
+    const blob = new Blob([buildCsv(snapshot.columns, snapshot.rows)], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = csvFileName(snapshot.label);
+    a.click();
+    // 클릭이 소비된 뒤 해제 — 즉시 해제하면 일부 브라우저에서 다운로드가 끊긴다.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  /** 전체 데이터를 자급자족 HTML 로 새 창에 띄운다 — 라우트·서버 불필요. */
+  function openFullView() {
+    const blob = new Blob([buildFullViewHtml(snapshot)], {
+      type: "text/html;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 
   return (
     <div className="rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs flex flex-col gap-xxs">
@@ -198,6 +228,22 @@ export function SnapshotCard({
               … 외 {hidden}행
             </p>
           )}
+          <div className="flex items-center gap-md px-xxs pt-xs">
+            <button
+              type="button"
+              onClick={openFullView}
+              className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+            >
+              전체 보기(새 창)
+            </button>
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+            >
+              CSV 다운로드
+            </button>
+          </div>
         </div>
       )}
     </div>
