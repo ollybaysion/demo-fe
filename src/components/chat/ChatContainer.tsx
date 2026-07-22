@@ -661,7 +661,7 @@ export function ChatContainer() {
         {/* 중앙 — 채팅 카드 */}
         <div className="flex flex-1 min-w-0 flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto scrollbar-none">
           {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
               풍선 자체는 항상 중앙(`[1fr | 768 | 1fr]`)에 두어 표 유무에
               따라 움직이지 않음. 풍선이 오른쪽으로 슬라이드되는 더 적극

@@ -309,3 +309,14 @@
   --color-brand-ink-translucent-04: rgba(0, 0, 0, 0.08);
 }
 }
+
+/* 스크롤은 되되 바는 그리지 않는다 — 카드 레이아웃에서 상시 스크롤바는
+   경계선만큼 답답하다. 패널·채팅의 주 스크롤 영역에 붙인다. */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none; /* Firefox */
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none; /* Chromium·Safari */
+  }
+}

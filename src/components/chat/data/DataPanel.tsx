@@ -120,7 +120,7 @@ export function DataPanel({
         </h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-none">
         {/* 요청이 있으면 무엇보다 먼저 — 모델이 "이게 있어야 답한다"고 세운
             요구라, 보관 목록보다 위에 둔다. */}
         {requests.length > 0 && (

@@ -78,7 +78,7 @@ export function ConversationsSidebar({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto scrollbar-none">
           {conversations.length === 0 ? (
             <Empty>아직 저장된 대화가 없습니다.</Empty>
           ) : (

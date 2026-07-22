@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { maybeApplyDevSeed } from "@/lib/dev-seed";
 import { readJson, writeJson } from "@/lib/storage";
 import { parseSnapshot, toQueryKey } from "@/lib/snapshot-parse";
 import type { SnapshotParseError } from "@/lib/snapshot-parse";
@@ -47,6 +48,8 @@ export function useDataSnapshots() {
   const [lastRemoved, setLastRemoved] = useState<DataSnapshot | null>(null);
 
   useEffect(() => {
+    // dev 전용: ?seed=20 으로 열면 스토리지를 시드로 채운 뒤 읽는다.
+    maybeApplyDevSeed();
     const stored = readJson<unknown>(SNAPSHOTS_STORAGE_KEY, null);
     const migrated = migrateSnapshots(stored);
     if (migrated.length > 0) {

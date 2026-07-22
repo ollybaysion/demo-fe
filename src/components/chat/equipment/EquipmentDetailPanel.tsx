@@ -145,7 +145,7 @@ export function EquipmentDetailPanel({
       </div>
 
       <div
-        className="flex-1 overflow-y-auto px-lg py-lg flex flex-col gap-xl"
+        className="flex-1 overflow-y-auto scrollbar-none px-lg py-lg flex flex-col gap-xl"
         // 패널 영역에서 포인터가 빠져나가면 호버 강조 해제.
         onMouseLeave={() => setHoveredCol(null)}
       >

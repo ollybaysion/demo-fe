@@ -94,7 +94,7 @@ export function ContextPanel({
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto scrollbar-none">
           <Section title="설비 정보">
             <ContextTable
               rows={rows}

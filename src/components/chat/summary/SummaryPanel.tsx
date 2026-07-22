@@ -63,7 +63,7 @@ export function SummaryPanel({ open, rows, timeRange, compareDigest }: Props) {
           </p>
         </header>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto scrollbar-none">
           <div className="px-lg py-lg flex flex-col gap-lg">
             <Section title="설비 정보">
               <EquipmentList rows={rows} />
