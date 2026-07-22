@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { DataRequest } from "@/lib/types";
+import { sampleResultFor } from "./request-samples";
 import type { AddSnapshotResult } from "./useDataSnapshots";
 
 /**
@@ -14,8 +15,10 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  * 있는 할 일이라, 대화를 스크롤해 지나가도 남아 있어야 하고 채워 넣는 폼도
  * 스냅샷 등록과 같은 자리에 있어야 한다.
  *
- * 채운 스냅샷은 **동봉 ON 으로 등록**된다. 이미 "이 데이터가 필요하다"는 요구에
- * 대한 응답이라 꺼진 상태로 시작할 이유가 없다.
+ * 채운 스냅샷은 **📌 고정(내용 푸시)으로 등록**된다. "이 데이터가 필요하다"는
+ * 요구에 대한 응답이라, 표가 있다는 알림(카탈로그)만으로는 부족하고 값이 실려야
+ * 한다. 등록 뒤에는 별도 버튼 없이 — 사용자가 채팅에 "등록 완료"라고 말하면
+ * 보통의 발화로 이어서 분석한다(히스토리 보존).
  */
 type Props = {
   request: DataRequest;
@@ -32,6 +35,8 @@ export function RequestCard({ request, onFulfill }: Props) {
     null,
   );
   const [copied, setCopied] = useState(false);
+  // DB 없이 왕복을 걸어볼 수 있게 하는 예시 — 있는 queryKey 에만 버튼이 뜬다.
+  const sample = sampleResultFor(request.queryKey);
 
   function submit() {
     if (text.trim().length === 0) return;
@@ -100,6 +105,18 @@ export function RequestCard({ request, onFulfill }: Props) {
         </div>
       )}
 
+      {sample !== null && (
+        <button
+          type="button"
+          onClick={() => {
+            setText(sample);
+            if (error) setError(null);
+          }}
+          className="self-end text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm transition-colors"
+        >
+          예시 결과 채우기
+        </button>
+      )}
       <textarea
         value={text}
         onChange={(e) => {
@@ -119,14 +136,19 @@ export function RequestCard({ request, onFulfill }: Props) {
           <span className="font-semibold">{error.code}</span> — {error.message}
         </p>
       )}
-      <button
-        type="button"
-        onClick={submit}
-        disabled={text.trim().length === 0}
-        className="self-end inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
-      >
-        등록
-      </button>
+      <div className="flex items-center justify-between gap-xs">
+        <p className="text-caption text-brand-muted-soft min-w-0">
+          등록 후 채팅에 “등록 완료”라고 입력하면 이어서 분석합니다.
+        </p>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={text.trim().length === 0}
+          className="shrink-0 inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
+        >
+          등록
+        </button>
+      </div>
     </div>
   );
 }

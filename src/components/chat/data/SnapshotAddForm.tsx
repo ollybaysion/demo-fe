@@ -4,17 +4,19 @@ import { useState } from "react";
 import type { AddSnapshotResult } from "./useDataSnapshots";
 
 /**
- * 스냅샷 등록 폼 — 이름 + 붙여넣기.
+ * 스냅샷 등록 폼 — 붙여넣기가 전부다.
+ *
+ * 이름을 묻지 않는다. 쿼리 결과를 등록할 때마다 이름을 짓게 하는 건 마찰이라,
+ * 라벨은 내용(선두 컬럼·규모)에서 자동으로 만들고 필요하면 카드에서 바꾼다.
  *
  * 파싱 실패는 폼 안에 남긴다. 붙여넣은 텍스트를 지우지 않는 것이 중요한데,
  * 실패하는 입력일수록 사용자가 다시 만들기 번거롭기 때문이다(SQL 재실행).
  */
 type Props = {
-  onAdd: (input: string, label: string) => AddSnapshotResult;
+  onAdd: (input: string) => AddSnapshotResult;
 };
 
 export function SnapshotAddForm({ onAdd }: Props) {
-  const [label, setLabel] = useState("");
   const [text, setText] = useState("");
   const [error, setError] = useState<{ code: string; message: string } | null>(
     null,
@@ -22,29 +24,17 @@ export function SnapshotAddForm({ onAdd }: Props) {
 
   function submit() {
     if (text.trim().length === 0) return;
-    const result = onAdd(text, label);
+    const result = onAdd(text);
     if (!result.ok) {
       setError({ code: result.code, message: result.message });
       return;
     }
     setError(null);
-    setLabel("");
     setText("");
   }
 
   return (
     <div className="flex flex-col gap-sm">
-      <label className="block">
-        <span className="block text-caption text-brand-muted mb-xxs">이름</span>
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="예: 챔버A 센서 목록"
-          className="w-full min-w-0 bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-        />
-      </label>
-
       <label className="block">
         <span className="block text-caption text-brand-muted mb-xxs">
           조회 결과 붙여넣기

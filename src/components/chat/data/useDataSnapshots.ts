@@ -6,6 +6,7 @@ import { parseSnapshot, toQueryKey } from "@/lib/snapshot-parse";
 import type { SnapshotParseError } from "@/lib/snapshot-parse";
 import {
   SNAPSHOTS_STORAGE_KEY,
+  autoLabel,
   findByContentHash,
   includedSnapshots,
   migrateSnapshots,
@@ -39,6 +40,13 @@ export type AddSnapshotResult =
 
 export function useDataSnapshots() {
   const [snapshots, setSnapshots] = useState<DataSnapshot[]>([]);
+  /**
+   * 마지막으로 삭제된 스냅샷 — 실수로 지운 것을 한 번 되돌릴 수 있게 붙잡아 둔다.
+   * 스냅샷은 SQL 재실행 없이는 다시 만들기 번거로운 데이터라, 삭제가 즉시
+   * 확정되면 오클릭 한 번의 비용이 너무 크다. 메모리에만 든다(새로고침이면
+   * 사라진다) — 휴지통을 만들 일은 아니고, 직후의 "앗" 을 구제하면 된다.
+   */
+  const [lastRemoved, setLastRemoved] = useState<DataSnapshot | null>(null);
 
   useEffect(() => {
     const stored = readJson<unknown>(SNAPSHOTS_STORAGE_KEY, null);
@@ -88,13 +96,20 @@ export function useDataSnapshots() {
       const snapshot: DataSnapshot = {
         id,
         queryKey,
-        label: label.trim() || queryKey,
+        // 이름이 비면 내용에서 만든다 — 등록을 붙여넣기만으로 끝내기 위해.
+        label:
+          label.trim() ||
+          (parsed.columns.length > 0
+            ? autoLabel(parsed.columns, parsed.rowCount)
+            : queryKey),
         capturedAt: new Date().toISOString(),
         columns: parsed.columns,
         rows: parsed.rows,
         contentHash: parsed.contentHash,
         included: opts?.include === true,
-        pinned: false,
+        // 요청 충족은 "내용을 달라"는 요구에 대한 응답이라 📌 내용 푸시로 등록한다 —
+        // 카탈로그만 실리면 모델은 표가 있다는 것만 알고 값은 보지 못한다.
+        pinned: opts?.include === true,
         warnings: parsed.warnings,
       };
 
@@ -112,9 +127,21 @@ export function useDataSnapshots() {
     [snapshots],
   );
 
-  const remove = useCallback((id: string) => {
-    setSnapshots((prev) => removeSnapshot(prev, id));
-  }, []);
+  const remove = useCallback(
+    (id: string) => {
+      const removed = snapshots.find((s) => s.id === id);
+      if (removed) setLastRemoved(removed);
+      setSnapshots((prev) => removeSnapshot(prev, id));
+    },
+    [snapshots],
+  );
+
+  /** 마지막 삭제를 되돌린다 — 토글 상태(동봉·📌)까지 지웠던 그대로. */
+  const restoreLastRemoved = useCallback(() => {
+    if (!lastRemoved) return;
+    setSnapshots((prev) => upsertSnapshot(prev, lastRemoved));
+    setLastRemoved(null);
+  }, [lastRemoved]);
 
   const toggleIncluded = useCallback((id: string) => {
     setSnapshots((prev) => toggleIncludedIn(prev, id));
@@ -136,8 +163,10 @@ export function useDataSnapshots() {
     snapshots,
     included: includedSnapshots(snapshots),
     pinned: pinnedSnapshots(snapshots),
+    lastRemoved,
     addSnapshot,
     remove,
+    restoreLastRemoved,
     toggleIncluded,
     togglePinned,
     setLabel,

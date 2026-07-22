@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  autoLabel,
   includedSnapshots,
   migrateSnapshots,
   pinnedSnapshots,
@@ -27,6 +28,19 @@ function snap(over: Partial<DataSnapshot> = {}): DataSnapshot {
     ...over,
   };
 }
+
+describe("autoLabel", () => {
+  it("선두 컬럼과 규모로 알아볼 수 있는 라벨을 만든다", () => {
+    expect(autoLabel(["CHAMBER", "SENSOR_ID", "SENSOR_NAME"], 6)).toBe(
+      "CHAMBER·SENSOR_ID 외 1컬럼 · 6행",
+    );
+  });
+
+  it("컬럼이 둘 이하면 전부 표기한다", () => {
+    expect(autoLabel(["A", "B"], 1)).toBe("A·B · 1행");
+    expect(autoLabel(["A"], 0)).toBe("A · 0행");
+  });
+});
 
 describe("upsertSnapshot", () => {
   it("새 내용은 뒤에 붙인다", () => {
@@ -77,19 +91,21 @@ describe("upsertSnapshot", () => {
 });
 
 describe("upsertFulfilling — 요청 카드를 채우는 경로", () => {
-  it("새 스냅샷은 동봉된 채로 들어온다", () => {
+  it("새 스냅샷은 동봉 + 📌 로 들어온다 — 충족은 내용 푸시다", () => {
     const out = upsertFulfilling([], snap({ included: false }));
     expect(out[0].included).toBe(true);
+    expect(out[0].pinned).toBe(true);
   });
 
-  it("이미 동봉 OFF 로 있던 같은 내용도 동봉으로 바꾼다", () => {
+  it("이미 동봉 OFF 로 있던 같은 내용도 동봉 + 📌 로 바꾼다", () => {
     // 평소엔 사용자 토글을 보존하지만, 여기선 그게 함정이다 — 요청을 채웠는데도
-    // 요청에 실리지 않으면 영영 채워지지 않은 것으로 보인다.
+    // 내용이 실리지 않으면(카탈로그만 가면) 모델은 값을 영영 보지 못한다.
     const existing = [snap({ id: "snap-1", included: false })];
     const out = upsertFulfilling(existing, snap({ id: "snap-2" }));
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe("snap-1");
     expect(out[0].included).toBe(true);
+    expect(out[0].pinned).toBe(true);
   });
 
   it("다른 항목의 동봉 상태는 건드리지 않는다", () => {

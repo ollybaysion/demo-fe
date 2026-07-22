@@ -253,6 +253,7 @@ export async function POST(request: Request): Promise<Response> {
             buildMockResponse(lastUser.content, body.context, body.timeRange)
           : buildMockResponse(lastUser.content, body.context, body.timeRange);
     }
+    responseRecommend = recommendNext(lastUser.content);
   }
   const characters = [...responseText];
   const messageId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -383,11 +384,39 @@ function suppliedLabels(supplied: ChatRequestBody["dataSnapshots"]): string[] {
   return (supplied ?? []).map((s) => s.label);
 }
 
+/**
+ * 다음 걸음 추천 — 백엔드 `MockLlm.followupSuggestions` 와 같은 규칙.
+ * 데이터 요청 왕복(sensor_list ↔ recipe_steps)이 추천 클릭만으로 이어지게
+ * 반대쪽 REQUESTABLE 을 먼저 둔다.
+ */
+function recommendNext(question: string): string[] {
+  if (question.includes("센서 목록")) {
+    return [
+      "레시피 STEP 구성 알려줘",
+      "ETCH-01 상세 정보 보여줘",
+      "ETCH-01 동종 설비 알려줘",
+    ];
+  }
+  if (question.includes("레시피")) {
+    return [
+      "챔버별 센서 목록 보여줘",
+      "ETCH-01 상세 정보 보여줘",
+      "ETCH-01 셋업 이력 알려줘",
+    ];
+  }
+  return [
+    "챔버별 센서 목록 보여줘",
+    "레시피 STEP 구성 알려줘",
+    "ETCH-01 상세 정보 보여줘",
+  ];
+}
+
 function buildDataRequestResponse(missing: DataRequest[]): string {
   const names = missing.map((r) => `**${r.label}**`).join(", ");
   return (
     `이 질문에 답하려면 ${names} 이(가) 필요한데, 지금은 DB 에 직접 조회할 수 없습니다.\n\n` +
-    "아래 카드의 SQL 을 실행하고 결과를 붙여넣어 주시면 이어서 분석하겠습니다. " +
+    "데이터 패널 카드의 SQL 을 실행하고 결과를 붙여넣어 등록해 주세요. " +
+    '등록을 마치고 채팅에 "등록 완료"라고 알려주시면 그 데이터로 이어서 분석하겠습니다. ' +
     "없는 데이터를 추정해서 답하지 않겠습니다."
   );
 }

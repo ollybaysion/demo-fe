@@ -150,8 +150,11 @@ export function ChatContainer() {
     snapshots,
     addSnapshot,
     remove: removeSnapshot,
+    restoreLastRemoved: restoreSnapshot,
+    lastRemoved: lastRemovedSnapshot,
     toggleIncluded: toggleSnapshotIncluded,
     togglePinned: toggleSnapshotPinned,
+    setLabel: setSnapshotLabel,
   } = useDataSnapshots();
   const {
     open: openRequests,
@@ -469,6 +472,42 @@ export function ChatContainer() {
     ],
   );
 
+  /**
+   * 데이터 요청 왕복 체험 시작 — 질문은 실 파이프라인으로 보내되 **컨텍스트를
+   * 비우고** 출발한다. 설비 정보가 남아 있으면 [분석 대상]으로 프롬프트에
+   * 주입되고, mock 의 설비 ID 분기가 데이터 요청 분기보다 먼저 잡아채
+   * 요청 카드가 만들어지지 않는다.
+   */
+  const handleQuickStart = useCallback(
+    async (text: string) => {
+      replaceRows([]); // 화면의 설비 입력도 비운다 — 보내는 컨텍스트와 일치하게.
+      const userMessage: Message = {
+        id: newId(),
+        role: "user",
+        content: text,
+        createdAt: Date.now(),
+      };
+      const nextHistory = [...messages, userMessage];
+      setMessages(nextHistory);
+      setIsStreaming(true);
+      if (!activeId) {
+        createConversation({
+          messages: nextHistory,
+          context: { rows: [], timeRange },
+        });
+      }
+      await sendToApi(nextHistory, [], timeRange);
+    },
+    [
+      messages,
+      activeId,
+      timeRange,
+      sendToApi,
+      replaceRows,
+      createConversation,
+    ],
+  );
+
   const handleNewConversation = useCallback(() => {
     setMessages([]);
     setIsStreaming(false);
@@ -574,6 +613,12 @@ export function ChatContainer() {
     [addSnapshot, fulfillRequest],
   );
 
+  /** 수동 등록 — 이름을 묻지 않는다. 라벨은 내용에서 자동으로 만들어진다. */
+  const handleAddSnapshot = useCallback(
+    (input: string) => addSnapshot(input, ""),
+    [addSnapshot],
+  );
+
   function handleLeftToggle() {
     setLeftPanel((p) => !p);
   }
@@ -594,31 +639,12 @@ export function ChatContainer() {
   }, [messages, rows, timeRange, sendToApi]);
 
   /**
-   * 다시 분석 — 요청을 낳은 **그 질문까지** 되감아 그대로 다시 보낸다. 사용자가
-   * 질문을 다시 타이핑하지 않게 하는 게 요점이라, 마지막 질문이 아니라 요청의
-   * 출처 메시지를 기준으로 자른다.
-   *
-   * 그 질문에 매인 요청들은 여기서 걷어낸다 — 새 응답이 여전히 부족하다면 다시
-   * 요청해 올 것이고, 그때 새 카드로 뜨는 게 맞다.
+   * 충족된 요청을 가진 가장 최근 질문 — 있으면 입력창 위에 "등록 완료" chip 으로
+   * 이어가기를 안내한다. 되감기 버튼을 따로 두지 않는 이유: 등록 후 이어가기는
+   * 보통의 채팅 발화라서, 히스토리를 자르거나 특별한 UI 를 만들 이유가 없다.
+   * 등록된 데이터는 동봉으로 어차피 다음 요청에 실려 나간다.
    */
-  const handleReanalyze = useCallback(
-    (originMessageId: string) => {
-      const index = messages.findIndex((m) => m.id === originMessageId);
-      if (index === -1) return;
-      const trimmed = messages.slice(0, index + 1);
-      clearRequestsForOrigin(originMessageId);
-      setMessages(trimmed);
-      setIsStreaming(true);
-      void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
-    },
-    [messages, rows, timeRange, sendToApi, clearRequestsForOrigin],
-  );
-
-  /**
-   * 채워진 요청을 가진 가장 최근 질문 — 있으면 채팅에 "다시 분석"이 뜬다.
-   * 없으면 아직 조달 중이거나 요청 자체가 없다는 뜻이라 방아쇠를 내지 않는다.
-   */
-  const reanalyzeOrigin = useMemo(() => {
+  const ackOrigin = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.role !== "user") continue;
@@ -626,6 +652,19 @@ export function ChatContainer() {
     }
     return undefined;
   }, [messages, fulfilledRequestsFor]);
+
+  /**
+   * "등록 완료" 발화 — 보통 메시지로 보낸다(히스토리 보존). 충족된 요청은
+   * 여기서 수명이 끝난다 — 새 응답이 여전히 부족하면 다시 요청해 올 것이고,
+   * 그때 새 카드로 뜨는 게 맞다.
+   */
+  const handleAckSubmit = useCallback(
+    (text: string) => {
+      if (ackOrigin) clearRequestsForOrigin(ackOrigin.id);
+      void handleSubmit(text);
+    },
+    [ackOrigin, clearRequestsForOrigin, handleSubmit],
+  );
 
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
@@ -668,28 +707,15 @@ export function ChatContainer() {
             ].join(" ")}
           >
             {messages.length === 0 ? (
-              <ChatEmptyState onScenarioStart={handleScenarioStart} />
+              <ChatEmptyState
+                onScenarioStart={handleScenarioStart}
+                onQuickStart={handleQuickStart}
+              />
             ) : (
               <MessageList
                 messages={messages}
                 isStreaming={isStreaming}
                 onRegenerate={demoState ? undefined : handleRegenerate}
-                renderReanalyze={() => {
-                  // 요청 카드는 패널이 그린다. 여기 남는 건 "이제 답할 수 있다"는
-                  // 신호 — 채워진 요청이 하나라도 있을 때만 방아쇠를 낸다.
-                  if (!reanalyzeOrigin) return null;
-                  const origin = reanalyzeOrigin;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => handleReanalyze(origin.id)}
-                      disabled={isStreaming}
-                      className="self-start inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
-                    >
-                      ↻ 다시 분석 — “{truncate(origin.content, 24)}”
-                    </button>
-                  );
-                }}
               />
             )}
           </div>
@@ -708,8 +734,17 @@ export function ChatContainer() {
             {messages.length === 0 && !isStreaming && !demoState && (
               <SuggestedQuestions onSelect={handleSubmit} />
             )}
+            {/* 충족된 요청이 있으면 추천보다 먼저 — 다음 걸음은 이어가기 발화다. */}
+            {messages.length > 0 && !isStreaming && ackOrigin && (
+              <SuggestedQuestions
+                onSelect={handleAckSubmit}
+                questions={["등록 완료"]}
+                ariaLabel="등록 완료 안내"
+              />
+            )}
             {messages.length > 0 &&
               !isStreaming &&
+              !ackOrigin &&
               followUpRecommendations.length > 0 && (
                 <SuggestedQuestions
                   onSelect={handleSubmit}
@@ -771,11 +806,14 @@ export function ChatContainer() {
         open={rightPanel === "data"}
         snapshots={snapshots}
         requests={openRequests}
-        onAdd={addSnapshot}
+        onAdd={handleAddSnapshot}
         onFulfill={handleFulfillRequest}
         onToggleIncluded={toggleSnapshotIncluded}
         onTogglePinned={toggleSnapshotPinned}
         onRemove={removeSnapshot}
+        onRename={setSnapshotLabel}
+        lastRemoved={lastRemovedSnapshot}
+        onRestore={restoreSnapshot}
       />
 
       {/* Left-edge floating handle — mirror of right stack */}
@@ -841,12 +879,6 @@ function appendErrorMessage(
       }),
     },
   ]);
-}
-
-/** 버튼 라벨에 원 질문을 얹기 위한 축약 — 어느 질문을 다시 묻는지만 알면 된다. */
-function truncate(text: string, max: number): string {
-  const one = text.replace(/\s+/g, " ").trim();
-  return one.length <= max ? one : `${one.slice(0, max)}…`;
 }
 
 function findLastIndex<T>(

@@ -52,8 +52,11 @@ export function upsertFulfilling(
   list: DataSnapshot[],
   next: DataSnapshot,
 ): DataSnapshot[] {
+  // 충족은 내용 푸시다 — 같은 내용이 이미 보관돼 있던 경우에도 📌 까지 켠다.
   return upsertSnapshot(list, next).map((s) =>
-    s.contentHash === next.contentHash ? { ...s, included: true } : s,
+    s.contentHash === next.contentHash
+      ? { ...s, included: true, pinned: true }
+      : s,
   );
 }
 
@@ -101,6 +104,19 @@ export function findByContentHash(
   contentHash: string,
 ): DataSnapshot | undefined {
   return list.find((s) => s.contentHash === contentHash);
+}
+
+/**
+ * 이름 없이 등록된 스냅샷의 자동 라벨.
+ *
+ * 등록은 붙여넣기만으로 끝나야 한다 — 이름은 마찰이다. 대신 나중에 목록과
+ * 모델 카탈로그에서 알아볼 최소 식별 정보(선두 컬럼·규모)를 라벨에 담고,
+ * 더 좋은 이름은 카드에서 언제든 바꿀 수 있게 한다.
+ */
+export function autoLabel(columns: string[], rowCount: number): string {
+  const head = columns.slice(0, 2).join("·");
+  const rest = columns.length > 2 ? ` 외 ${columns.length - 2}컬럼` : "";
+  return `${head}${rest} · ${rowCount}행`;
 }
 
 /** 요청에 실릴 것들. 카탈로그 노출과 풀의 대상이다. */

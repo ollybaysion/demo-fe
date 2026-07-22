@@ -17,6 +17,8 @@ type Props = {
   onToggleIncluded: (id: string) => void;
   onTogglePinned: (id: string) => void;
   onRemove: (id: string) => void;
+  /** 라벨 인라인 편집 — 등록은 이름 없이 끝나므로, 식별이 필요해진 시점에 여기서 짓는다. */
+  onRename: (id: string, label: string) => void;
 };
 
 export function SnapshotCard({
@@ -24,28 +26,90 @@ export function SnapshotCard({
   onToggleIncluded,
   onTogglePinned,
   onRemove,
+  onRename,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
   const preview = snapshot.rows.slice(0, PREVIEW_ROWS);
   const hidden = snapshot.rows.length - preview.length;
+
+  function startEdit() {
+    setDraft(snapshot.label);
+    setEditing(true);
+  }
+
+  function commitEdit() {
+    const next = draft.trim();
+    if (next.length > 0 && next !== snapshot.label) {
+      onRename(snapshot.id, next);
+    }
+    setEditing(false);
+  }
 
   return (
     <div className="rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs flex flex-col gap-xxs">
       <div className="flex items-start gap-xxs">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="flex-1 min-w-0 text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs"
-        >
-          <span className="block text-body-sm text-brand-ink truncate">
-            {snapshot.label}
-          </span>
-          <span className="block text-caption text-brand-muted">
-            {snapshot.columns.length}열 · {snapshot.rows.length}행 ·{" "}
-            {formatCapturedAt(snapshot.capturedAt)}
-          </span>
-        </button>
+        {editing ? (
+          <div className="flex-1 min-w-0">
+            <input
+              autoFocus
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              onBlur={commitEdit}
+              aria-label="스냅샷 이름 편집"
+              className="w-full min-w-0 bg-brand-canvas text-brand-ink text-body-sm rounded-sm border border-brand-primary px-xs py-[2px] focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+            />
+            <span className="block text-caption text-brand-muted">
+              {snapshot.columns.length}열 · {snapshot.rows.length}행 ·{" "}
+              {formatCapturedAt(snapshot.capturedAt)}
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="flex-1 min-w-0 text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs"
+          >
+            <span className="block text-body-sm text-brand-ink truncate">
+              {snapshot.label}
+            </span>
+            <span className="block text-caption text-brand-muted">
+              {snapshot.columns.length}열 · {snapshot.rows.length}행 ·{" "}
+              {formatCapturedAt(snapshot.capturedAt)}
+            </span>
+          </button>
+        )}
+
+        {!editing && (
+          <button
+            type="button"
+            onClick={startEdit}
+            aria-label={`${snapshot.label} 이름 바꾸기`}
+            title="이름 바꾸기"
+            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+            </svg>
+          </button>
+        )}
 
         <button
           type="button"

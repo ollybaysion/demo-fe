@@ -12,13 +12,13 @@ import type { DataRequest, DataSnapshot } from "./types";
 export type PendingRequest = {
   request: DataRequest;
   /**
-   * 이 요청을 낳은 **user 메시지 id**. 채워졌을 때 "그 질문까지의 히스토리"로
-   * 되돌려 보내기 위해 붙잡아 둔다 — 사용자가 다시 타이핑하지 않게.
+   * 이 요청을 낳은 **user 메시지 id**. 충족된 요청의 수명 관리 단위다 —
+   * 이어가기 발화("등록 완료")를 보내는 순간 같은 출처의 요청을 함께 걷어낸다.
    */
   originMessageId: string;
   /**
    * 충족됨 — 같은 `queryKey` 의 스냅샷이 등록됐다. 패널에서는 사라지고
-   * (스냅샷 카드가 그 자리를 대신한다), 채팅에 "다시 분석" 버튼이 남는다.
+   * (스냅샷 카드가 그 자리를 대신한다), 입력창 위에 "등록 완료" chip 안내가 뜬다.
    */
   fulfilled: boolean;
 };
@@ -55,8 +55,8 @@ export function markFulfilled(
 }
 
 /**
- * 한 메시지에서 비롯된 요청을 전부 걷어낸다 — 그 질문을 다시 분석하는 순간
- * 이전 요구는 수명이 끝난다(새 응답이 필요한 걸 다시 요청한다).
+ * 한 메시지에서 비롯된 요청을 전부 걷어낸다 — 이어가기 발화를 보내는 순간
+ * 이전 요구는 수명이 끝난다(새 응답이 여전히 부족하면 다시 요청해 온다).
  */
 export function clearOrigin(
   prev: PendingRequest[],
@@ -71,9 +71,9 @@ export function openRequests(list: PendingRequest[]): PendingRequest[] {
 }
 
 /**
- * 이 메시지에서 비롯됐고 채워진 요청들 — 있으면 채팅에 "다시 분석" 버튼을 낸다.
- * 자동 재전송은 하지 않는다: 질문 하나가 조회 여러 건을 요청할 수 있어서, 언제
- * 쏠지는 사람이 정해야 한다.
+ * 이 메시지에서 비롯됐고 채워진 요청들 — 있으면 입력창 위에 "등록 완료" chip
+ * 안내를 낸다. 자동 재전송은 하지 않는다: 질문 하나가 조회 여러 건을 요청할 수
+ * 있어서, 언제 이어갈지는 사람이 정해야 한다.
  */
 export function fulfilledForOrigin(
   list: PendingRequest[],

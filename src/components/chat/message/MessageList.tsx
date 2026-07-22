@@ -14,24 +14,12 @@ type Props = {
    * 부착되어 노출됨.
    */
   onRegenerate?: () => void;
-  /**
-   * "다시 분석" 렌더러 — 요청받은 데이터가 채워졌을 때만 무언가를 돌려준다.
-   *
-   * 요청 카드 자체는 데이터 패널이 그린다. 채팅에 남는 건 **재전송 방아쇠**뿐이다:
-   * 자동으로 쏘지 않는 이유는 질문 하나가 조회 여러 건을 요구할 수 있어서, 언제
-   * 다시 물을지는 사람이 정해야 하기 때문.
-   *
-   * 마지막 어시스턴트 메시지에만 붙는다 — 지난 턴의 버튼까지 남겨 두면 대화가
-   * 낡은 방아쇠로 뒤덮인다.
-   */
-  renderReanalyze?: (message: Message) => React.ReactNode;
 };
 
 export function MessageList({
   messages,
   isStreaming,
   onRegenerate,
-  renderReanalyze,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -65,13 +53,6 @@ export function MessageList({
             }
             onRegenerate={i === regenerateIndex ? onRegenerate : undefined}
           />
-          {i === lastAssistantIndex && renderReanalyze?.(m) && (
-            <li className="flex justify-start">
-              <div className="max-w-[80%] flex flex-col gap-xs">
-                {renderReanalyze(m)}
-              </div>
-            </li>
-          )}
         </Fragment>
       ))}
       {showLoadingBubble && (

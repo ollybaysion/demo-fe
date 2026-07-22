@@ -22,7 +22,7 @@ type Props = {
   snapshots: DataSnapshot[];
   /** 아직 채워지지 않은 데이터 요청 — 최상단에 카드로 뜬다. */
   requests: PendingRequest[];
-  onAdd: (input: string, label: string) => AddSnapshotResult;
+  onAdd: (input: string) => AddSnapshotResult;
   onFulfill: (
     input: string,
     label: string,
@@ -31,6 +31,10 @@ type Props = {
   onToggleIncluded: (id: string) => void;
   onTogglePinned: (id: string) => void;
   onRemove: (id: string) => void;
+  onRename: (id: string, label: string) => void;
+  /** 마지막으로 삭제된 스냅샷 — 있으면 보관 목록 위에 되돌리기 스트립이 뜬다. */
+  lastRemoved: DataSnapshot | null;
+  onRestore: () => void;
 };
 
 export function DataPanel({
@@ -42,6 +46,9 @@ export function DataPanel({
   onToggleIncluded,
   onTogglePinned,
   onRemove,
+  onRename,
+  lastRemoved,
+  onRestore,
 }: Props) {
   const includedCount = snapshots.filter((s) => s.included).length;
   const pinnedCount = snapshots.filter((s) => s.included && s.pinned).length;
@@ -80,6 +87,22 @@ export function DataPanel({
           </Section>
 
           <Section title={`보관 중 (${snapshots.length})`}>
+            {/* 실수 삭제 구제 — 스냅샷은 SQL 재실행 없이 다시 만들기 번거로워,
+                삭제 직후 한 번은 그 자리에서 되돌릴 수 있어야 한다. */}
+            {lastRemoved && (
+              <div className="mb-xs flex items-center justify-between gap-xs rounded-md border border-brand-hairline bg-brand-canvas px-sm py-xs">
+                <span className="min-w-0 truncate text-caption text-brand-muted">
+                  “{lastRemoved.label}” 삭제됨
+                </span>
+                <button
+                  type="button"
+                  onClick={onRestore}
+                  className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+                >
+                  되돌리기
+                </button>
+              </div>
+            )}
             {snapshots.length === 0 ? (
               <p className="text-caption text-brand-muted-soft">
                 DB 에 붙지 못하는 상황이면, 직접 실행한 조회 결과를 붙여넣어
@@ -94,6 +117,7 @@ export function DataPanel({
                     onToggleIncluded={onToggleIncluded}
                     onTogglePinned={onTogglePinned}
                     onRemove={onRemove}
+                    onRename={onRename}
                   />
                 ))}
               </div>
