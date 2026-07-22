@@ -736,8 +736,9 @@ export function ChatContainer() {
         </div>
       </div>
 
-        {/* 우 — 설비 정보 / 요약 탭 (상주 카드) */}
-        <aside className="shrink-0 w-[440px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
+        {/* 우 — 설비 정보 / 요약 탭 (상주 카드). 주 작업면은 데이터·채팅이라
+            우측은 좁게 유지한다. */}
+        <aside className="shrink-0 w-[320px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
         <div
           role="tablist"
           aria-label="우측 패널 탭"

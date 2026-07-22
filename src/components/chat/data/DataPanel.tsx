@@ -51,9 +51,9 @@ export function DataPanel({
   return (
     <aside
       aria-label="데이터 패널"
-      className="shrink-0 w-[340px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden"
+      className="shrink-0 w-[400px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden"
     >
-      <div className="flex items-center justify-between px-lg h-16 border-b border-brand-hairline">
+      <div className="flex items-center px-lg h-16 border-b border-brand-hairline">
         <h2 className="font-sans text-title-md text-brand-ink">
           데이터
           {includedCount > 0 && (
@@ -62,16 +62,6 @@ export function DataPanel({
             </span>
           )}
         </h2>
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          aria-label="데이터 추가"
-          title="데이터 추가"
-          className="shrink-0 inline-flex items-center gap-xxs h-8 px-sm rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-        >
-          <PlusIcon />
-          추가
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -111,8 +101,8 @@ export function DataPanel({
 
           {snapshots.length === 0 ? (
             <p className="text-caption text-brand-muted-soft">
-              DB 에 붙지 못하는 상황이면, 직접 실행한 조회 결과를 [+ 추가]로
-              붙여넣어 두세요. 체크된 데이터만 질문에 함께 나갑니다.
+              DB 에 붙지 못하는 상황이면, 직접 실행한 조회 결과를 아래 [+ 데이터
+              추가]로 붙여넣어 두세요. 체크된 데이터만 질문에 함께 나갑니다.
             </p>
           ) : (
             <div className="flex flex-col gap-xs">
@@ -128,6 +118,18 @@ export function DataPanel({
             </div>
           )}
         </div>
+      </div>
+
+      {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
+      <div className="shrink-0 px-lg py-md border-t border-brand-hairline">
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="w-full inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+        >
+          <PlusIcon />
+          데이터 추가
+        </button>
       </div>
 
       <AddDataModal
