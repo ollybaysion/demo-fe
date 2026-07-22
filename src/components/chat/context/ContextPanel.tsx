@@ -57,14 +57,11 @@ export function ContextPanel({
     <aside
       aria-label="설비 정보 입력 패널"
       aria-hidden={!open}
-      className={[
-        "shrink-0 overflow-hidden",
-        "transition-[width] duration-200 ease-out",
-        open ? "w-[320px]" : "w-0",
-        "border-l border-brand-hairline bg-brand-canvas",
-      ].join(" ")}
+      // 폭·테두리는 우측 탭 호스트(ChatContainer)가 소유한다 — 탭 전환 시
+      // 숨김/표시만 담당.
+      className={open ? "h-full overflow-hidden" : "hidden"}
     >
-      <div className="w-[320px] h-full flex flex-col">
+      <div className="w-full h-full flex flex-col">
         {onExpandDetail && (
           <div className="px-lg pt-md flex justify-end">
             <button
@@ -97,7 +94,7 @@ export function ContextPanel({
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto scrollbar-none">
           <Section title="설비 정보">
             <ContextTable
               rows={rows}
@@ -244,7 +241,7 @@ function TimeField({
           onChange={(e) => onChange(e.target.value)}
           // min-w-0 lets the flex item shrink below the browser's
           // intrinsic min-width for datetime-local, keeping the
-          // clear (×) button in view inside a 320px-wide panel.
+          // clear (×) button in view inside a 440px-wide panel.
           className="flex-1 min-w-0 bg-brand-canvas text-brand-ink font-sans text-body-sm rounded-md border border-brand-hairline px-sm py-[6px] focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         />
         {value && (

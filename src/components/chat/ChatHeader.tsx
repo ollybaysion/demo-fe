@@ -5,15 +5,31 @@ import { SettingsModal } from "@/components/settings/SettingsModal";
 
 type Props = {
   onNewConversation?: () => void;
+  /** 대화 이력 드로어 열기 — 3분할 상주 컬럼에서 밀려난 이력의 진입점. */
+  onOpenHistory?: () => void;
 };
 
-export function ChatHeader({ onNewConversation }: Props) {
+export function ChatHeader({ onNewConversation, onOpenHistory }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
-    <header className="h-16 border-b border-brand-hairline bg-brand-canvas">
-      <div className="mx-auto flex h-full max-w-chat-narrow items-center justify-between px-lg">
-        <h1 className="font-sans text-title-lg text-brand-ink">FDC Agent</h1>
+    // 카드 레이아웃의 상단 바 — 옅은 캔버스 위에 그대로 얹힌다(경계선 없음).
+    <header className="h-14 shrink-0">
+      <div className="flex h-full w-full items-center justify-between px-lg">
+        <div className="flex items-center gap-xs">
+          {onOpenHistory && (
+            <button
+              type="button"
+              onClick={onOpenHistory}
+              aria-label="이전 대화 열기"
+              title="이전 대화"
+              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-md text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              <MenuIcon />
+            </button>
+          )}
+          <h1 className="font-sans text-title-lg text-brand-ink">FDC Agent</h1>
+        </div>
         <div className="flex items-center gap-xs">
           {onNewConversation && (
             <button
@@ -40,6 +56,26 @@ export function ChatHeader({ onNewConversation }: Props) {
       </div>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </header>
+  );
+}
+
+function MenuIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
   );
 }
 

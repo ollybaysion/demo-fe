@@ -8,11 +8,13 @@
  *
  *  - **중복 = 같은 내용.** 판정 기준은 엔진 `provenance.sha256`(정규화된 columns+rows
  *    의 해시)이라, 같은 표를 다른 라벨로 두 번 붙여넣어도 한 항목으로 접힌다. 이때
- *    새 항목을 만들지 않고 기존 항목을 **갱신**한다 — 사용자가 쥔 토글 상태
- *    (`included`/`pinned`)는 보존하고 라벨·시각만 새 것으로 덮는다. 다시 붙여넣는
+ *    새 항목을 만들지 않고 기존 항목을 **갱신**한다 — 사용자가 쥔 체크 상태
+ *    (`included`)는 보존하고 라벨·시각만 새 것으로 덮는다. 다시 붙여넣는
  *    행위의 의도는 "이게 최신"이지 "하나 더"가 아니기 때문이다.
- *  - **📌 는 동봉을 전제한다.** 내용 푸시는 요청에 실려야 성립하므로 `pinned` 를
- *    켜면 `included` 도 켜지고, `included` 를 끄면 `pinned` 도 풀린다.
+ *  - **체크 = 내용까지 실린다.** 상태 축은 하나다(포함/제외) — 체크된 스냅샷은
+ *    rows 전문이 요청에 실리고, 해제하면 아예 실리지 않는다. 카탈로그-온리 중간
+ *    상태는 두지 않는다: "표가 있다"만 알리는 상태는 모델이 값을 못 보는데 사용자는
+ *    줬다고 믿는, 서로 속는 상태였다.
  */
 
 import type { ChatDataSnapshot, DataSnapshot } from "@/lib/types";
@@ -36,7 +38,6 @@ export function upsertSnapshot(
     // 사용자가 쥔 상태와 항목 정체성은 기존 것을 잇는다.
     id: existing.id,
     included: existing.included,
-    pinned: existing.pinned,
   };
   return list.map((s, i) => (i === dupIndex ? merged : s));
 }
@@ -44,8 +45,8 @@ export function upsertSnapshot(
 /**
  * 요청 카드를 채우는 경로의 등록.
  *
- * `upsertSnapshot` 과 달리 동봉을 못박는다. 갱신 경로가 사용자 토글을 보존하는 건
- * 평소엔 맞지만 여기선 함정이 된다 — 예전에 동봉 OFF 로 등록해 둔 것과 내용이
+ * `upsertSnapshot` 과 달리 포함을 못박는다. 갱신 경로가 사용자 체크를 보존하는 건
+ * 평소엔 맞지만 여기선 함정이 된다 — 예전에 체크 해제로 등록해 둔 것과 내용이
  * 같으면, 요청을 채웠는데도 요청에 실리지 않아 채워지지 않은 채로 남는다.
  */
 export function upsertFulfilling(
@@ -64,28 +65,12 @@ export function removeSnapshot(
   return list.filter((s) => s.id !== id);
 }
 
-/** 동봉 토글. 끄면 📌 도 함께 풀린다. */
+/** 포함 체크 토글. */
 export function toggleIncluded(
   list: DataSnapshot[],
   id: string,
 ): DataSnapshot[] {
-  return list.map((s) => {
-    if (s.id !== id) return s;
-    const included = !s.included;
-    return { ...s, included, pinned: included ? s.pinned : false };
-  });
-}
-
-/** 📌 토글. 켜면 동봉도 함께 켜진다. */
-export function togglePinned(
-  list: DataSnapshot[],
-  id: string,
-): DataSnapshot[] {
-  return list.map((s) => {
-    if (s.id !== id) return s;
-    const pinned = !s.pinned;
-    return { ...s, pinned, included: pinned ? true : s.included };
-  });
+  return list.map((s) => (s.id === id ? { ...s, included: !s.included } : s));
 }
 
 export function setLabel(
@@ -103,21 +88,29 @@ export function findByContentHash(
   return list.find((s) => s.contentHash === contentHash);
 }
 
-/** 요청에 실릴 것들. 카탈로그 노출과 풀의 대상이다. */
-export function includedSnapshots(list: DataSnapshot[]): DataSnapshot[] {
-  return list.filter((s) => s.included);
+/**
+ * 이름 없이 등록된 스냅샷의 자동 라벨.
+ *
+ * 등록은 붙여넣기만으로 끝나야 한다 — 이름은 마찰이다. 대신 나중에 목록과
+ * 모델 카탈로그에서 알아볼 최소 식별 정보(선두 컬럼·규모)를 라벨에 담고,
+ * 더 좋은 이름은 카드에서 언제든 바꿀 수 있게 한다.
+ */
+export function autoLabel(columns: string[], rowCount: number): string {
+  const head = columns.slice(0, 2).join("·");
+  const rest = columns.length > 2 ? ` 외 ${columns.length - 2}컬럼` : "";
+  return `${head}${rest} · ${rowCount}행`;
 }
 
-/** 그중 전문이 주입되는 것들(📌). */
-export function pinnedSnapshots(list: DataSnapshot[]): DataSnapshot[] {
-  return list.filter((s) => s.included && s.pinned);
+/** 요청에 실릴 것들 — 체크된 스냅샷. */
+export function includedSnapshots(list: DataSnapshot[]): DataSnapshot[] {
+  return list.filter((s) => s.included);
 }
 
 /**
  * 채팅 요청에 실을 모양으로 접는다.
  *
- * 동봉된 것만 나가고, 그중 📌 만 `rows` 를 달고 나간다 — 나머지는 카탈로그 항목이라
- * 내용 없이 "이런 표가 있다"만 알린다. 동봉이 하나도 없으면 빈 배열이 아니라
+ * 체크된 것만 나가고, 전부 `rows` 를 달고 나간다 — 체크했다는 건 근거로 쓰라는
+ * 뜻이니 내용이 함께 가야 한다. 체크가 하나도 없으면 빈 배열이 아니라
  * `undefined` 를 준다: 요청 본문에서 필드 자체를 빼기 위한 것이고, 그래야 이 기능을
  * 안 쓰는 요청이 지금과 똑같은 모양으로 나간다.
  */
@@ -132,7 +125,7 @@ export function toChatPayload(
     capturedAt: s.capturedAt,
     columns: s.columns,
     rowCount: s.rows.length,
-    ...(s.pinned ? { rows: s.rows } : {}),
+    rows: s.rows,
   }));
 }
 
@@ -141,7 +134,8 @@ export function toChatPayload(
  *
  * 저장된 값은 사용자 브라우저에 남아 있어 코드보다 오래 산다 — 모양이 어긋난
  * 항목은 통째로 버리는 대신 조용히 건너뛰어, 한 항목의 손상이 목록 전체를
- * 날리지 않게 한다.
+ * 날리지 않게 한다. (구버전이 남긴 `pinned` 필드는 조용히 버린다 — 상태 축이
+ * 하나로 줄면서 체크가 그 역할까지 흡수했다.)
  */
 export function migrateSnapshots(input: unknown): DataSnapshot[] {
   if (!Array.isArray(input)) return [];
@@ -178,7 +172,6 @@ function coerceSnapshot(raw: unknown): DataSnapshot | null {
     rows.push(cells);
   }
 
-  const included = r.included === true;
   return {
     id: r.id,
     queryKey: r.queryKey,
@@ -187,9 +180,7 @@ function coerceSnapshot(raw: unknown): DataSnapshot | null {
     columns,
     rows,
     contentHash: r.contentHash,
-    included,
-    // 저장된 값이 규칙을 어겼더라도(수기 편집 등) 읽는 쪽에서 바로잡는다.
-    pinned: included && r.pinned === true,
+    included: r.included === true,
     warnings: Array.isArray(r.warnings)
       ? r.warnings.filter((w): w is string => typeof w === "string")
       : [],

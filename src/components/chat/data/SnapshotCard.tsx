@@ -1,51 +1,167 @@
 "use client";
 
 import { useState } from "react";
+import {
+  buildCsv,
+  buildFullViewHtml,
+  csvFileName,
+} from "@/lib/snapshot-export";
 import type { DataSnapshot } from "@/lib/types";
 
 /**
  * 스냅샷 한 장.
  *
- * 표를 다 보여주지 않는다 — 320px 패널에서 수천 행을 그리면 패널이 쓸모없어진다.
- * 접힌 상태에서는 머리말(컬럼 수·행 수·시각)만 보이고, 펼치면 앞 몇 행만 미리보기로
- * 보여준다. "전부 보기"는 이 패널의 일이 아니다.
+ * 상태 축은 체크박스 하나다 — 체크된 스냅샷은 내용까지 요청에 실리고, 해제하면
+ * 아예 실리지 않는다. (NotebookLM 소스 선택과 같은 관례. 동봉/고정 2축은 사용자가
+ * 읽지 못해 접었다.)
+ *
+ * 표를 다 보여주지 않는다 — 좁은 패널에서 수천 행을 그리면 패널이 쓸모없어진다.
+ * 접힌 상태에서는 머리말(컬럼 수·행 수·시각)만 보이고, 펼치면 **예시 몇 줄 ×
+ * 앞 몇 컬럼**만 미리보기로 보여준다(넓은 표를 가로 스크롤로 밀면 어색하다 —
+ * 행을 "… 외 N행"으로 접듯 컬럼도 "+N"으로 접는다). 전체가 필요하면 펼친
+ * 자리의 [전체 보기(새 창)] 또는 [CSV 다운로드]로 나간다.
  */
-const PREVIEW_ROWS = 5;
+const PREVIEW_ROWS = 3;
+const PREVIEW_COLS = 4;
+/** 셀 하나가 미리보기 폭을 다 먹지 않게 — 전문은 title 로. */
+const CELL_MAX_W = "max-w-[120px]";
 
 type Props = {
   snapshot: DataSnapshot;
   onToggleIncluded: (id: string) => void;
-  onTogglePinned: (id: string) => void;
   onRemove: (id: string) => void;
+  /** 라벨 인라인 편집 — 등록은 이름 없이 끝나므로, 식별이 필요해진 시점에 여기서 짓는다. */
+  onRename: (id: string, label: string) => void;
 };
 
 export function SnapshotCard({
   snapshot,
   onToggleIncluded,
-  onTogglePinned,
   onRemove,
+  onRename,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
   const preview = snapshot.rows.slice(0, PREVIEW_ROWS);
   const hidden = snapshot.rows.length - preview.length;
+  const previewCols = snapshot.columns.slice(0, PREVIEW_COLS);
+  const hiddenCols = snapshot.columns.length - previewCols.length;
+
+  function startEdit() {
+    setDraft(snapshot.label);
+    setEditing(true);
+  }
+
+  function commitEdit() {
+    const next = draft.trim();
+    if (next.length > 0 && next !== snapshot.label) {
+      onRename(snapshot.id, next);
+    }
+    setEditing(false);
+  }
+
+  const meta = `${snapshot.columns.length}열 · ${snapshot.rows.length}행 · ${formatCapturedAt(snapshot.capturedAt)}`;
+
+  /** CSV 파일 다운로드 — blob 을 만들어 한 번 클릭시키고 정리한다. */
+  function downloadCsv() {
+    const blob = new Blob([buildCsv(snapshot.columns, snapshot.rows)], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = csvFileName(snapshot.label);
+    a.click();
+    // 클릭이 소비된 뒤 해제 — 즉시 해제하면 일부 브라우저에서 다운로드가 끊긴다.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  /** 전체 데이터를 자급자족 HTML 로 새 창에 띄운다 — 라우트·서버 불필요. */
+  function openFullView() {
+    const blob = new Blob([buildFullViewHtml(snapshot)], {
+      type: "text/html;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 
   return (
     <div className="rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs flex flex-col gap-xxs">
-      <div className="flex items-start gap-xxs">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="flex-1 min-w-0 text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs"
-        >
-          <span className="block text-body-sm text-brand-ink truncate">
-            {snapshot.label}
-          </span>
-          <span className="block text-caption text-brand-muted">
-            {snapshot.columns.length}열 · {snapshot.rows.length}행 ·{" "}
-            {formatCapturedAt(snapshot.capturedAt)}
-          </span>
-        </button>
+      <div className="flex items-start gap-xs">
+        <input
+          type="checkbox"
+          checked={snapshot.included}
+          onChange={() => onToggleIncluded(snapshot.id)}
+          aria-label={`${snapshot.label} 요청에 포함`}
+          title={
+            snapshot.included
+              ? "요청에서 빼기"
+              : "요청에 포함 — 내용까지 함께 나갑니다"
+          }
+          className="mt-[3px] shrink-0 w-4 h-4 accent-brand-primary cursor-pointer"
+        />
+
+        {editing ? (
+          <div className="flex-1 min-w-0">
+            <input
+              autoFocus
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              onBlur={commitEdit}
+              aria-label="스냅샷 이름 편집"
+              className="w-full min-w-0 bg-brand-canvas text-brand-ink text-body-sm rounded-sm border border-brand-primary px-xs py-[2px] focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+            />
+            <span className="block text-caption text-brand-muted">{meta}</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="flex-1 min-w-0 text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs"
+          >
+            <span
+              className={[
+                "block text-body-sm truncate",
+                snapshot.included ? "text-brand-ink" : "text-brand-muted",
+              ].join(" ")}
+            >
+              {snapshot.label}
+            </span>
+            <span className="block text-caption text-brand-muted">{meta}</span>
+          </button>
+        )}
+
+        {!editing && (
+          <button
+            type="button"
+            onClick={startEdit}
+            aria-label={`${snapshot.label} 이름 바꾸기`}
+            title="이름 바꾸기"
+            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+            </svg>
+          </button>
+        )}
 
         <button
           type="button"
@@ -71,56 +187,43 @@ export function SnapshotCard({
         </button>
       </div>
 
-      <div className="flex items-center gap-xxs flex-wrap">
-        <Chip
-          active={snapshot.included}
-          onClick={() => onToggleIncluded(snapshot.id)}
-          title={
-            snapshot.included
-              ? "요청에서 빼기"
-              : "요청에 동봉 — 모델이 이 표를 가져갈 수 있게"
-          }
-        >
-          동봉
-        </Chip>
-        <Chip
-          active={snapshot.pinned}
-          onClick={() => onTogglePinned(snapshot.id)}
-          title={
-            snapshot.pinned
-              ? "고정 해제 — 내용은 필요할 때만 전달"
-              : "고정 — 표 전문을 요청에 실어 반드시 보게 한다"
-          }
-        >
-          📌 고정
-        </Chip>
-        {snapshot.warnings.includes("ZERO_ROWS") && (
-          <span className="text-caption text-brand-muted-soft">행 없음</span>
-        )}
-      </div>
+      {snapshot.warnings.includes("ZERO_ROWS") && (
+        <span className="text-caption text-brand-muted-soft">행 없음</span>
+      )}
 
       {expanded && (
-        <div className="overflow-x-auto border-t border-brand-hairline-soft pt-xxs">
-          <table className="text-caption font-mono">
+        <div className="overflow-x-auto border-t border-brand-hairline-soft pt-xs">
+          {/* 경계선이 있어야 표로 읽힌다 — 값 나열로 보이면 컬럼 정렬이 무너져 보인다. */}
+          <table className="w-full text-caption font-mono border-collapse">
             <thead>
               <tr>
-                {snapshot.columns.map((c) => (
+                {previewCols.map((c) => (
                   <th
                     key={c}
-                    className="text-left text-brand-muted font-normal px-xxs whitespace-nowrap"
+                    className="border border-brand-hairline bg-brand-surface-cream-strong text-left text-brand-muted font-medium px-xs py-xxs whitespace-nowrap"
                   >
-                    {c}
+                    <span className={`block truncate ${CELL_MAX_W}`} title={c}>
+                      {c}
+                    </span>
                   </th>
                 ))}
+                {hiddenCols > 0 && (
+                  <th
+                    className="border border-brand-hairline bg-brand-surface-cream-strong text-left text-brand-muted-soft font-normal px-xs py-xxs whitespace-nowrap"
+                    title={snapshot.columns.slice(PREVIEW_COLS).join(", ")}
+                  >
+                    +{hiddenCols}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {preview.map((row, i) => (
                 <tr key={i}>
-                  {row.map((cell, j) => (
+                  {row.slice(0, PREVIEW_COLS).map((cell, j) => (
                     <td
                       key={j}
-                      className="text-brand-ink px-xxs whitespace-nowrap"
+                      className="border border-brand-hairline-soft bg-brand-canvas text-brand-ink px-xs py-xxs whitespace-nowrap"
                     >
                       {/* NULL 과 빈 문자열은 다른 것이다 — 엔진이 구별해 담았으니
                           화면에서도 접지 않는다. */}
@@ -129,10 +232,20 @@ export function SnapshotCard({
                           NULL
                         </span>
                       ) : (
-                        cell
+                        <span
+                          className={`block truncate ${CELL_MAX_W}`}
+                          title={cell}
+                        >
+                          {cell}
+                        </span>
                       )}
                     </td>
                   ))}
+                  {hiddenCols > 0 && (
+                    <td className="border border-brand-hairline-soft bg-brand-canvas text-brand-muted-soft px-xs py-xxs">
+                      …
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -142,39 +255,25 @@ export function SnapshotCard({
               … 외 {hidden}행
             </p>
           )}
+          <div className="flex items-center gap-md px-xxs pt-xs">
+            <button
+              type="button"
+              onClick={openFullView}
+              className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+            >
+              전체 보기(새 창)
+            </button>
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+            >
+              CSV 다운로드
+            </button>
+          </div>
         </div>
       )}
     </div>
-  );
-}
-
-function Chip({
-  active,
-  onClick,
-  title,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      title={title}
-      className={[
-        "text-caption rounded-pill px-sm py-xxs transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
-        active
-          ? "bg-brand-primary text-brand-on-primary"
-          : "bg-brand-canvas text-brand-muted hover:text-brand-ink",
-      ].join(" ")}
-    >
-      {children}
-    </button>
   );
 }
 

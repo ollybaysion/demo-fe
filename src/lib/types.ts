@@ -234,10 +234,8 @@ export type DataSnapshot = {
   rows: (string | null)[][];
   /** 엔진 `provenance.sha256`. 중복 감지 전용. */
   contentHash: string;
-  /** 요청에 동봉할지 — 카탈로그 노출 + 풀 가능. */
+  /** 요청에 실을지 — 체크된 스냅샷은 내용(rows)까지 함께 나간다. */
   included: boolean;
-  /** 📌 내용 푸시 보장. `included` 없이는 성립하지 않는다. */
-  pinned: boolean;
   /** 등록 시점의 비치명 경고 코드들. 자유형은 `INTEGRITY_ABSENT` 가 정상. */
   warnings: string[];
 };
@@ -266,11 +264,9 @@ export type DataRequest = {
 /**
  * 채팅 요청에 실리는 스냅샷 — `POST /api/fdc/v1/chat` 의 `dataSnapshots[]`.
  *
- * 브라우저에 보관된 `DataSnapshot` 을 그대로 보내지 않는다. 표 하나가 수천 행일 수
- * 있어 전부 실으면 요청이 감당이 안 되기 때문에, 기본은 **카탈로그 항목**(어떤 표가
- * 있는지 알리는 머리말)만 보내고 내용은 모델이 필요할 때 가져가게 한다.
- *
- * `rows` 가 있는 것은 📌 로 지정된 것뿐이다 — "이건 반드시 보고 답해라"에 해당한다.
+ * 체크된 스냅샷이 내용(rows)까지 담아 나간다 — 체크했다는 건 근거로 쓰라는
+ * 뜻이다. `rows` 가 optional 인 것은 BE 계약 호환 때문이다(BE 는 rows 없는
+ * 항목을 카탈로그 알림으로 처리한다). FE 는 항상 채워 보낸다.
  */
 export type ChatDataSnapshot = {
   queryKey: string;
@@ -278,6 +274,6 @@ export type ChatDataSnapshot = {
   capturedAt: string;
   columns: string[];
   rowCount: number;
-  /** 📌 인 것만 채워진다. 없으면 내용은 pull 대상. */
+  /** 표 내용. BE 계약상 optional 이지만 FE 는 체크된 것을 항상 채워 보낸다. */
   rows?: (string | null)[][];
 };

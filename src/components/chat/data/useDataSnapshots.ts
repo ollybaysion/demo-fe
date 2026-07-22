@@ -1,19 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { maybeApplyDevSeed } from "@/lib/dev-seed";
 import { readJson, writeJson } from "@/lib/storage";
 import { parseSnapshot, toQueryKey } from "@/lib/snapshot-parse";
 import type { SnapshotParseError } from "@/lib/snapshot-parse";
 import {
   SNAPSHOTS_STORAGE_KEY,
+  autoLabel,
   findByContentHash,
   includedSnapshots,
   migrateSnapshots,
-  pinnedSnapshots,
   removeSnapshot,
   setLabel as setLabelIn,
   toggleIncluded as toggleIncludedIn,
-  togglePinned as togglePinnedIn,
   upsertFulfilling,
   upsertSnapshot,
 } from "@/lib/snapshot-store";
@@ -39,8 +39,17 @@ export type AddSnapshotResult =
 
 export function useDataSnapshots() {
   const [snapshots, setSnapshots] = useState<DataSnapshot[]>([]);
+  /**
+   * 마지막으로 삭제된 스냅샷 — 실수로 지운 것을 한 번 되돌릴 수 있게 붙잡아 둔다.
+   * 스냅샷은 SQL 재실행 없이는 다시 만들기 번거로운 데이터라, 삭제가 즉시
+   * 확정되면 오클릭 한 번의 비용이 너무 크다. 메모리에만 든다(새로고침이면
+   * 사라진다) — 휴지통을 만들 일은 아니고, 직후의 "앗" 을 구제하면 된다.
+   */
+  const [lastRemoved, setLastRemoved] = useState<DataSnapshot | null>(null);
 
   useEffect(() => {
+    // dev 전용: ?seed=20 으로 열면 스토리지를 시드로 채운 뒤 읽는다.
+    maybeApplyDevSeed();
     const stored = readJson<unknown>(SNAPSHOTS_STORAGE_KEY, null);
     const migrated = migrateSnapshots(stored);
     if (migrated.length > 0) {
@@ -60,9 +69,8 @@ export function useDataSnapshots() {
    * 호출부가 사용자에게 보여줄 수 있게. 같은 내용이 이미 있으면 새 항목을
    * 만들지 않고 기존 항목을 갱신한다(`replacedExisting`).
    *
-   * 기본 포함값은 OFF 다. 등록만으로 요청이 무거워지지 않게, 동봉은 사용자가
-   * 명시적으로 켠다. 예외는 요청 카드로 채운 경우인데(`opts.include`), 그건
-   * 이미 "이 데이터가 필요하다"는 요구에 대한 응답이라 끄고 시작할 이유가 없다.
+   * 기본 포함값은 ON 이다 — 등록했다는 건 쓰겠다는 뜻이다(NotebookLM 이 소스를
+   * 추가하면 기본 선택하는 것과 같은 관례). 무겁다 싶으면 체크를 해제한다.
    *
    * `opts.queryKey` 를 주면 라벨에서 만들지 않고 그 값을 쓴다 — 요청 카드가 지정한
    * 키로 등록해야 백엔드가 충족 여부를 알아본다.
@@ -88,13 +96,17 @@ export function useDataSnapshots() {
       const snapshot: DataSnapshot = {
         id,
         queryKey,
-        label: label.trim() || queryKey,
+        // 이름이 비면 내용에서 만든다 — 등록을 붙여넣기만으로 끝내기 위해.
+        label:
+          label.trim() ||
+          (parsed.columns.length > 0
+            ? autoLabel(parsed.columns, parsed.rowCount)
+            : queryKey),
         capturedAt: new Date().toISOString(),
         columns: parsed.columns,
         rows: parsed.rows,
         contentHash: parsed.contentHash,
-        included: opts?.include === true,
-        pinned: false,
+        included: true,
         warnings: parsed.warnings,
       };
 
@@ -112,16 +124,24 @@ export function useDataSnapshots() {
     [snapshots],
   );
 
-  const remove = useCallback((id: string) => {
-    setSnapshots((prev) => removeSnapshot(prev, id));
-  }, []);
+  const remove = useCallback(
+    (id: string) => {
+      const removed = snapshots.find((s) => s.id === id);
+      if (removed) setLastRemoved(removed);
+      setSnapshots((prev) => removeSnapshot(prev, id));
+    },
+    [snapshots],
+  );
+
+  /** 마지막 삭제를 되돌린다 — 토글 상태(동봉·📌)까지 지웠던 그대로. */
+  const restoreLastRemoved = useCallback(() => {
+    if (!lastRemoved) return;
+    setSnapshots((prev) => upsertSnapshot(prev, lastRemoved));
+    setLastRemoved(null);
+  }, [lastRemoved]);
 
   const toggleIncluded = useCallback((id: string) => {
     setSnapshots((prev) => toggleIncludedIn(prev, id));
-  }, []);
-
-  const togglePinned = useCallback((id: string) => {
-    setSnapshots((prev) => togglePinnedIn(prev, id));
   }, []);
 
   const setLabel = useCallback((id: string, label: string) => {
@@ -135,11 +155,11 @@ export function useDataSnapshots() {
   return {
     snapshots,
     included: includedSnapshots(snapshots),
-    pinned: pinnedSnapshots(snapshots),
+    lastRemoved,
     addSnapshot,
     remove,
+    restoreLastRemoved,
     toggleIncluded,
-    togglePinned,
     setLabel,
     clear,
   };

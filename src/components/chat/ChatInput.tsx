@@ -97,6 +97,11 @@ export function ChatInput({
     const el = e.currentTarget;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
+    // 스크롤바는 자동 늘림이 상한에 막힌 뒤에만 — 그 전엔 높이가 내용을
+    // 따라가므로 스크롤할 것이 없다(항상 보이는 스크롤바는 1px 오버플로에도
+    // 나타나 어색하다).
+    el.style.overflowY =
+      el.scrollHeight > TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
   }
 
   async function ingestFiles(files: FileList | File[]): Promise<void> {
@@ -264,6 +269,9 @@ export function ChatInput({
           aria-label="채팅 메시지 입력"
           className={[
             "flex-1 resize-none bg-transparent",
+            // 기본은 스크롤 숨김 — rows=1 상태에서 패딩 몇 px 차이로 상시
+            // 스크롤바가 뜨는 것을 막는다. 상한 도달 시 handleInput 이 켠다.
+            "overflow-y-hidden",
             "placeholder:text-brand-muted-soft font-sans text-body-md",
             "py-[10px] px-xs",
             "focus:outline-none",

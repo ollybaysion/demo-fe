@@ -14,19 +14,12 @@ type Props = {
    * 부착되어 노출됨.
    */
   onRegenerate?: () => void;
-  /**
-   * 데이터 요청 카드 렌더러. 요청은 **마지막 어시스턴트 메시지에만** 붙는다 —
-   * 지난 턴의 요청은 이미 채워졌거나 사용자가 지나간 것이라, 그대로 남겨 두면
-   * 대화가 낡은 요구로 뒤덮인다.
-   */
-  renderDataRequests?: (message: Message) => React.ReactNode;
 };
 
 export function MessageList({
   messages,
   isStreaming,
   onRegenerate,
-  renderDataRequests,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -60,15 +53,6 @@ export function MessageList({
             }
             onRegenerate={i === regenerateIndex ? onRegenerate : undefined}
           />
-          {i === lastAssistantIndex &&
-            m.dataRequests &&
-            m.dataRequests.length > 0 && (
-              <li className="flex justify-start">
-                <div className="max-w-[80%] flex flex-col gap-xs">
-                  {renderDataRequests?.(m)}
-                </div>
-              </li>
-            )}
         </Fragment>
       ))}
       {showLoadingBubble && (

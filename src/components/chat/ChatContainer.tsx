@@ -30,23 +30,9 @@ import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
-import { SummaryToggleHandle } from "./summary/SummaryToggleHandle";
-import {
-  ContextPanel,
-  ContextToggleHandle,
-  useContextRows,
-} from "./context";
-import {
-  ConversationsSidebar,
-  ConversationToggleHandle,
-  useConversations,
-} from "./history";
-import {
-  DataPanel,
-  DataToggleHandle,
-  RequestCard,
-  useDataSnapshots,
-} from "./data";
+import { ContextPanel, useContextRows } from "./context";
+import { ConversationsSidebar, useConversations } from "./history";
+import { DataPanel, useDataRequests, useDataSnapshots } from "./data";
 import { toChatPayload } from "@/lib/snapshot-store";
 
 type TokenPayload = { content: string };
@@ -110,12 +96,10 @@ function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  // Single source of truth for the right-side slot — at most one panel
-  // is shown at a time; flipping flips both visually.
-  const [rightPanel, setRightPanel] = useState<
-    "context" | "summary" | "data" | null
-  >(null);
-  const [leftPanel, setLeftPanel] = useState(false);
+  // 3분할 상주 레이아웃 — 좌 데이터·중앙 채팅은 항상, 우측은 설비/요약 탭.
+  const [rightTab, setRightTab] = useState<"context" | "summary">("context");
+  // 대화 이력은 상주 컬럼에서 밀려나 헤더 ≡ 로 여는 오버레이 드로어.
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
@@ -150,9 +134,19 @@ export function ChatContainer() {
     snapshots,
     addSnapshot,
     remove: removeSnapshot,
+    restoreLastRemoved: restoreSnapshot,
+    lastRemoved: lastRemovedSnapshot,
     toggleIncluded: toggleSnapshotIncluded,
-    togglePinned: toggleSnapshotPinned,
+    setLabel: setSnapshotLabel,
   } = useDataSnapshots();
+  const {
+    open: openRequests,
+    receive: receiveRequests,
+    fulfill: fulfillRequest,
+    clearFulfilled: clearFulfilledRequests,
+    clear: clearRequests,
+    fulfilledFor: fulfilledRequestsFor,
+  } = useDataRequests();
 
   // ── Conversation ↔ local state sync ─────────────────────────
   // Load: when activeId transitions to a real id, hydrate local chat state
@@ -229,8 +223,10 @@ export function ChatContainer() {
             timeRange: hasRange ? timeRangeSnapshot : undefined,
             demo: demoMeta,
             // 동봉이 없으면 undefined 라 필드 자체가 빠진다 — 이 기능을 안 쓰는
-            // 요청은 지금까지와 똑같은 본문으로 나간다.
-            dataSnapshots: toChatPayload(snapshots),
+            // 요청은 지금까지와 똑같은 본문으로 나간다. 데모 재생 중에는 아예
+            // 싣지 않는다: 시나리오는 정해진 답을 내야 하는데, 사용자가 보관해 둔
+            // 스냅샷이 끼어들면 재생이 결정론을 잃는다.
+            dataSnapshots: demoMeta ? undefined : toChatPayload(snapshots),
           }),
           signal: controller.signal,
         });
@@ -301,6 +297,20 @@ export function ChatContainer() {
                 }),
               );
             }
+            // 요청 카드는 데이터 패널이 안는다. 어느 질문에서 비롯됐는지 함께
+            // 넘겨야, 채워졌을 때 이어가기 안내의 수명을 관리할 수 있다.
+            // 데모 재생 중에는 만들지 않는다(시나리오 결정론 보존).
+            // 패널은 상주라 따로 열 필요가 없다 — 카드가 최상단에 바로 뜬다.
+            if (hasDataRequests && !demoMeta) {
+              const originIndex = findLastIndex(
+                history,
+                (m) => m.role === "user",
+              );
+              const origin = originIndex === -1 ? undefined : history[originIndex];
+              if (origin) {
+                receiveRequests(payload.dataRequests!, origin.id);
+              }
+            }
             // 비-데모 모드에서만 extractedContext 적용. 데모는
             // turn.contextPanel 흐름이 우선이라 스킵.
             if (!demoMeta && payload.extractedContext) {
@@ -337,7 +347,7 @@ export function ChatContainer() {
         setIsStreaming(false);
       }
     },
-    [appendRows, replaceRows, replaceTimeRange, snapshots],
+    [appendRows, replaceRows, replaceTimeRange, snapshots, receiveRequests],
   );
 
   const handleScenarioStart = useCallback(
@@ -407,7 +417,7 @@ export function ChatContainer() {
         let effectiveTimeRange = timeRange;
         if (currentTurn?.contextPanel) {
           replaceRows(currentTurn.contextPanel);
-          setRightPanel("context");
+          setRightTab("context");
         }
         if (currentTurn?.timeRange) {
           replaceTimeRange(currentTurn.timeRange);
@@ -427,6 +437,9 @@ export function ChatContainer() {
           ended: !scenario || nextIdx >= scenario.turns.length,
         });
       } else {
+        // 어떤 발화든 나가는 순간 충족된 요청의 소임이 끝난다 — 등록된
+        // 스냅샷은 이 요청에 함께 실려 나간다. ("등록 완료" chip 도 사라진다.)
+        clearFulfilledRequests();
         await sendToApi(nextHistory, nonEmptyRows(rows), timeRange);
       }
     },
@@ -440,6 +453,43 @@ export function ChatContainer() {
       replaceRows,
       replaceTimeRange,
       createConversation,
+      clearFulfilledRequests,
+    ],
+  );
+
+  /**
+   * 데이터 요청 왕복 체험 시작 — 질문은 실 파이프라인으로 보내되 **컨텍스트를
+   * 비우고** 출발한다. 설비 정보가 남아 있으면 [분석 대상]으로 프롬프트에
+   * 주입되고, mock 의 설비 ID 분기가 데이터 요청 분기보다 먼저 잡아채
+   * 요청 카드가 만들어지지 않는다.
+   */
+  const handleQuickStart = useCallback(
+    async (text: string) => {
+      replaceRows([]); // 화면의 설비 입력도 비운다 — 보내는 컨텍스트와 일치하게.
+      const userMessage: Message = {
+        id: newId(),
+        role: "user",
+        content: text,
+        createdAt: Date.now(),
+      };
+      const nextHistory = [...messages, userMessage];
+      setMessages(nextHistory);
+      setIsStreaming(true);
+      if (!activeId) {
+        createConversation({
+          messages: nextHistory,
+          context: { rows: [], timeRange },
+        });
+      }
+      await sendToApi(nextHistory, [], timeRange);
+    },
+    [
+      messages,
+      activeId,
+      timeRange,
+      sendToApi,
+      replaceRows,
+      createConversation,
     ],
   );
 
@@ -449,8 +499,11 @@ export function ChatContainer() {
     setDemoState(null);
     setDetailOpen(false);
     resetContext();
+    // 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라져야 한다.
+    // 스냅샷은 반대로 남는다(대화와 독립된 보관물).
+    clearRequests();
     startNewConversation();
-  }, [resetContext, startNewConversation]);
+  }, [resetContext, startNewConversation, clearRequests]);
 
   const handleSidebarSelect = useCallback(
     (id: string) => {
@@ -459,9 +512,11 @@ export function ChatContainer() {
       if (isStreaming) return;
       setDemoState(null);
       setDetailOpen(false);
+      setHistoryOpen(false);
+      clearRequests();
       selectConversation(id);
     },
-    [isStreaming, selectConversation],
+    [isStreaming, selectConversation, clearRequests],
   );
 
   const equipmentNames = useMemo(
@@ -508,36 +563,35 @@ export function ChatContainer() {
     return scenario?.turns[demoState.turnIndex]?.user;
   }, [demoState]);
 
-  function handleContextToggle() {
-    setRightPanel((prev) => {
-      const next = prev === "context" ? null : "context";
-      if (next !== "context") setDetailOpen(false);
-      return next;
-    });
-  }
-
-  function handleSummaryToggle() {
-    setRightPanel((prev) => (prev === "summary" ? null : "summary"));
-    setDetailOpen(false);
-  }
-
-  function handleDataToggle() {
-    setRightPanel((prev) => (prev === "data" ? null : "data"));
-    setDetailOpen(false);
+  /** 우측 탭 전환. 설비 상세 확장은 설비 탭에 매인 것이라 떠날 때 접는다. */
+  function handleRightTab(next: "context" | "summary") {
+    setRightTab(next);
+    if (next !== "context") setDetailOpen(false);
   }
 
   /**
-   * 요청이 채워졌는가 — 같은 `queryKey` 의 스냅샷이 **동봉된 채로** 있는지.
-   *
-   * 보관만 하고 동봉을 꺼두면 요청에 실리지 않으므로 채워진 것이 아니다.
+   * 요청 카드에서 결과를 등록한다 — 스냅샷으로 보관하고, 그 요청을 충족으로
+   * 표시한다. 충족된 요청은 패널에서 스냅샷 카드에 자리를 내주고, 입력창 위에
+   * "등록 완료" 안내 chip 이 뜬다.
    */
-  function isRequestFulfilled(req: DataRequest): boolean {
-    return snapshots.some((s) => s.queryKey === req.queryKey && s.included);
-  }
+  const handleFulfillRequest = useCallback(
+    (
+      input: string,
+      label: string,
+      opts: { include: boolean; queryKey: string },
+    ) => {
+      const result = addSnapshot(input, label, opts);
+      if (result.ok) fulfillRequest(opts.queryKey);
+      return result;
+    },
+    [addSnapshot, fulfillRequest],
+  );
 
-  function handleLeftToggle() {
-    setLeftPanel((p) => !p);
-  }
+  /** 수동 등록 — 이름을 묻지 않는다. 라벨은 내용에서 자동으로 만들어진다. */
+  const handleAddSnapshot = useCallback(
+    (input: string) => addSnapshot(input, ""),
+    [addSnapshot],
+  );
 
   // 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지 잘라낸 뒤
   // 같은 컨텍스트로 다시 API 호출. 데모 시나리오 진행 중엔 호출되지
@@ -554,6 +608,21 @@ export function ChatContainer() {
     void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
   }, [messages, rows, timeRange, sendToApi]);
 
+  /**
+   * 충족된 요청을 가진 가장 최근 질문 — 있으면 입력창 위에 "등록 완료" chip 으로
+   * 이어가기를 안내한다. 되감기 버튼을 따로 두지 않는 이유: 등록 후 이어가기는
+   * 보통의 채팅 발화라서, 히스토리를 자르거나 특별한 UI 를 만들 이유가 없다.
+   * 등록된 데이터는 동봉으로 어차피 다음 요청에 실려 나간다.
+   */
+  const ackOrigin = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== "user") continue;
+      if (fulfilledRequestsFor(m.id).length > 0) return m;
+    }
+    return undefined;
+  }, [messages, fulfilledRequestsFor]);
+
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
   if (demoState) {
@@ -567,21 +636,32 @@ export function ChatContainer() {
   }
 
   return (
-    <div className="flex h-dvh bg-brand-canvas text-brand-ink">
-      {/* Left — conversation history sidebar. Push layout: chat
-          column shrinks when this opens. */}
-      <ConversationsSidebar
-        open={leftPanel}
-        conversations={conversations}
-        activeId={activeId}
-        onSelect={handleSidebarSelect}
+    // NotebookLM 관례의 카드 레이아웃 — 옅은 캔버스 위에 세 컬럼이 라운드
+    // 카드로 떠 있다. 전면을 경계선으로 빈틈없이 채우면 답답해진다.
+    <div className="h-dvh flex flex-col bg-brand-surface-soft text-brand-ink">
+      <ChatHeader
+        onNewConversation={handleNewConversation}
+        onOpenHistory={() => setHistoryOpen(true)}
       />
 
-      {/* Chat column */}
-      <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader onNewConversation={handleNewConversation} />
+      <div className="flex flex-1 min-h-0 gap-md px-md pb-md">
+        {/* 좌 — 데이터 패널 (상주). 등록 결과와 요청 카드가 항상 눈앞에 있다. */}
+        <DataPanel
+          snapshots={snapshots}
+          requests={openRequests}
+          onAdd={handleAddSnapshot}
+          onFulfill={handleFulfillRequest}
+          onToggleIncluded={toggleSnapshotIncluded}
+          onRemove={removeSnapshot}
+          onRename={setSnapshotLabel}
+          lastRemoved={lastRemovedSnapshot}
+          onRestore={restoreSnapshot}
+        />
 
-        <main className="flex-1 overflow-y-auto">
+        {/* 중앙 — 채팅 카드 */}
+        <div className="flex flex-1 min-w-0 flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
+
+        <main className="flex-1 overflow-y-auto scrollbar-none">
           {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
               풍선 자체는 항상 중앙(`[1fr | 768 | 1fr]`)에 두어 표 유무에
               따라 움직이지 않음. 풍선이 오른쪽으로 슬라이드되는 더 적극
@@ -595,26 +675,15 @@ export function ChatContainer() {
             ].join(" ")}
           >
             {messages.length === 0 ? (
-              <ChatEmptyState onScenarioStart={handleScenarioStart} />
+              <ChatEmptyState
+                onScenarioStart={handleScenarioStart}
+                onQuickStart={handleQuickStart}
+              />
             ) : (
               <MessageList
                 messages={messages}
                 isStreaming={isStreaming}
                 onRegenerate={demoState ? undefined : handleRegenerate}
-                renderDataRequests={(m) =>
-                  m.dataRequests?.map((req) => (
-                    <RequestCard
-                      key={req.queryKey}
-                      request={req}
-                      fulfilled={isRequestFulfilled(req)}
-                      onFulfill={addSnapshot}
-                      // 다시 분석 = 마지막 user 메시지로 재요청. 이제 요청 본문에
-                      // 새로 등록된 스냅샷이 실리므로 같은 질문이 다른 답을 얻는다.
-                      onReanalyze={handleRegenerate}
-                      canReanalyze={!isStreaming}
-                    />
-                  ))
-                }
               />
             )}
           </div>
@@ -633,8 +702,22 @@ export function ChatContainer() {
             {messages.length === 0 && !isStreaming && !demoState && (
               <SuggestedQuestions onSelect={handleSubmit} />
             )}
+            {/* 충족된 요청이 있으면 추천보다 먼저 — 다음 걸음은 이어가기 발화다.
+                열린 요청이 남아 있으면 안내하지 않는다 — 아직 채울 카드가 있다.
+                (충족 요청의 정리는 handleSubmit 이 모든 발화에 대해 한다.) */}
             {messages.length > 0 &&
               !isStreaming &&
+              ackOrigin &&
+              openRequests.length === 0 && (
+                <SuggestedQuestions
+                  onSelect={handleSubmit}
+                  questions={["등록 완료"]}
+                  ariaLabel="등록 완료 안내"
+                />
+              )}
+            {messages.length > 0 &&
+              !isStreaming &&
+              !ackOrigin &&
               followUpRecommendations.length > 0 && (
                 <SuggestedQuestions
                   onSelect={handleSubmit}
@@ -653,30 +736,58 @@ export function ChatContainer() {
         </div>
       </div>
 
-      {/* Right-side context panel (push layout) — mutex with summary */}
-      <ContextPanel
-        open={rightPanel === "context"}
-        rows={rows}
-        timeRange={timeRange}
-        onStartChange={setStart}
-        onEndChange={setEnd}
-        onEquipmentChange={setEquipment}
-        onAddRow={addRow}
-        onDeleteRow={deleteRow}
-        onAddChamber={addChamber}
-        onSetChamberName={setChamberName}
-        onDeleteChamber={deleteChamber}
-        onAddSensor={addSensor}
-        onSetSensorName={setSensorName}
-        onDeleteSensor={deleteSensor}
-        onReset={resetContext}
-        onExpandDetail={() => setDetailOpen(true)}
-        detailOpen={detailOpen}
-        canExpandDetail={equipmentNames.length > 0}
-      />
+        {/* 우 — 설비 정보 / 요약 탭 (상주 카드). 주 작업면은 데이터·채팅이라
+            우측은 좁게 유지한다. */}
+        <aside className="shrink-0 w-[320px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
+        <div
+          role="tablist"
+          aria-label="우측 패널 탭"
+          className="flex items-center h-16 px-lg gap-xs border-b border-brand-hairline"
+        >
+          <RightTabButton
+            label="설비 정보"
+            active={rightTab === "context"}
+            onClick={() => handleRightTab("context")}
+          />
+          <RightTabButton
+            label="요약"
+            active={rightTab === "summary"}
+            onClick={() => handleRightTab("summary")}
+          />
+        </div>
+        <div className="flex-1 min-h-0">
+          <ContextPanel
+            open={rightTab === "context"}
+            rows={rows}
+            timeRange={timeRange}
+            onStartChange={setStart}
+            onEndChange={setEnd}
+            onEquipmentChange={setEquipment}
+            onAddRow={addRow}
+            onDeleteRow={deleteRow}
+            onAddChamber={addChamber}
+            onSetChamberName={setChamberName}
+            onDeleteChamber={deleteChamber}
+            onAddSensor={addSensor}
+            onSetSensorName={setSensorName}
+            onDeleteSensor={deleteSensor}
+            onReset={resetContext}
+            onExpandDetail={() => setDetailOpen(true)}
+            detailOpen={detailOpen}
+            canExpandDetail={equipmentNames.length > 0}
+          />
+          <SummaryPanel
+            open={rightTab === "summary"}
+            rows={rows}
+            timeRange={timeRange}
+            compareDigest={lastCompareDigest}
+          />
+        </div>
+        </aside>
+      </div>
 
       <EquipmentDetailPanel
-        open={rightPanel === "context" && detailOpen}
+        open={rightTab === "context" && detailOpen}
         equipmentNames={equipmentNames}
         onClose={() => setDetailOpen(false)}
         onImportToChat={(msg) => {
@@ -685,61 +796,42 @@ export function ChatContainer() {
         }}
       />
 
-      <SummaryPanel
-        open={rightPanel === "summary"}
-        rows={rows}
-        timeRange={timeRange}
-        compareDigest={lastCompareDigest}
+      <ConversationsSidebar
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        conversations={conversations}
+        activeId={activeId}
+        onSelect={handleSidebarSelect}
       />
-
-      <DataPanel
-        open={rightPanel === "data"}
-        snapshots={snapshots}
-        onAdd={addSnapshot}
-        onToggleIncluded={toggleSnapshotIncluded}
-        onTogglePinned={toggleSnapshotPinned}
-        onRemove={removeSnapshot}
-      />
-
-      {/* Left-edge floating handle — mirror of right stack */}
-      <div
-        className={[
-          "fixed top-1/4 left-0 z-20 flex flex-col gap-xs",
-          "transition-transform duration-200 ease-out",
-          leftPanel ? "translate-x-[320px]" : "translate-x-0",
-        ].join(" ")}
-      >
-        <ConversationToggleHandle
-          isOpen={leftPanel}
-          onToggle={handleLeftToggle}
-        />
-      </div>
-
-      {/* Right-edge floating handle stack */}
-      <div
-        className={[
-          "fixed top-1/4 right-0 z-20 flex flex-col gap-xs",
-          "transition-transform duration-200 ease-out",
-          rightPanel !== null ? "translate-x-[-320px]" : "translate-x-0",
-        ].join(" ")}
-      >
-        <ContextToggleHandle
-          isOpen={rightPanel === "context"}
-          onToggle={handleContextToggle}
-        />
-        <DataToggleHandle
-          isOpen={rightPanel === "data"}
-          onToggle={handleDataToggle}
-          includedCount={snapshots.filter((s) => s.included).length}
-        />
-        {messages.length > 0 && (
-          <SummaryToggleHandle
-            isOpen={rightPanel === "summary"}
-            onToggle={handleSummaryToggle}
-          />
-        )}
-      </div>
     </div>
+  );
+}
+
+function RightTabButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={[
+        "inline-flex items-center h-8 px-sm rounded-md text-body-sm transition-colors",
+        "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+        active
+          ? "bg-brand-primary/10 text-brand-primary font-medium"
+          : "text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04",
+      ].join(" ")}
+    >
+      {label}
+    </button>
   );
 }
 
