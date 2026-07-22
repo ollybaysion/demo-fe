@@ -51,7 +51,7 @@ export function DataPanel({
   return (
     <aside
       aria-label="데이터 패널"
-      className="shrink-0 w-[340px] h-full flex flex-col border-r border-brand-hairline bg-brand-canvas"
+      className="shrink-0 w-[340px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden"
     >
       <div className="flex items-center justify-between px-lg h-16 border-b border-brand-hairline">
         <h2 className="font-sans text-title-md text-brand-ink">

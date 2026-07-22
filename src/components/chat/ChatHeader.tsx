@@ -13,8 +13,9 @@ export function ChatHeader({ onNewConversation, onOpenHistory }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
-    <header className="h-16 border-b border-brand-hairline bg-brand-canvas">
-      <div className="mx-auto flex h-full max-w-chat-narrow items-center justify-between px-lg">
+    // 카드 레이아웃의 상단 바 — 옅은 캔버스 위에 그대로 얹힌다(경계선 없음).
+    <header className="h-14 shrink-0">
+      <div className="flex h-full w-full items-center justify-between px-lg">
         <div className="flex items-center gap-xs">
           {onOpenHistory && (
             <button

@@ -636,26 +636,30 @@ export function ChatContainer() {
   }
 
   return (
-    <div className="flex h-dvh bg-brand-canvas text-brand-ink">
-      {/* 좌 — 데이터 패널 (상주). 등록 결과와 요청 카드가 항상 눈앞에 있다. */}
-      <DataPanel
-        snapshots={snapshots}
-        requests={openRequests}
-        onAdd={handleAddSnapshot}
-        onFulfill={handleFulfillRequest}
-        onToggleIncluded={toggleSnapshotIncluded}
-        onRemove={removeSnapshot}
-        onRename={setSnapshotLabel}
-        lastRemoved={lastRemovedSnapshot}
-        onRestore={restoreSnapshot}
+    // NotebookLM 관례의 카드 레이아웃 — 옅은 캔버스 위에 세 컬럼이 라운드
+    // 카드로 떠 있다. 전면을 경계선으로 빈틈없이 채우면 답답해진다.
+    <div className="h-dvh flex flex-col bg-brand-surface-soft text-brand-ink">
+      <ChatHeader
+        onNewConversation={handleNewConversation}
+        onOpenHistory={() => setHistoryOpen(true)}
       />
 
-      {/* 중앙 — 채팅 컬럼 */}
-      <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader
-          onNewConversation={handleNewConversation}
-          onOpenHistory={() => setHistoryOpen(true)}
+      <div className="flex flex-1 min-h-0 gap-md px-md pb-md">
+        {/* 좌 — 데이터 패널 (상주). 등록 결과와 요청 카드가 항상 눈앞에 있다. */}
+        <DataPanel
+          snapshots={snapshots}
+          requests={openRequests}
+          onAdd={handleAddSnapshot}
+          onFulfill={handleFulfillRequest}
+          onToggleIncluded={toggleSnapshotIncluded}
+          onRemove={removeSnapshot}
+          onRename={setSnapshotLabel}
+          lastRemoved={lastRemovedSnapshot}
+          onRestore={restoreSnapshot}
         />
+
+        {/* 중앙 — 채팅 카드 */}
+        <div className="flex flex-1 min-w-0 flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
 
         <main className="flex-1 overflow-y-auto">
           {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
@@ -732,8 +736,8 @@ export function ChatContainer() {
         </div>
       </div>
 
-      {/* 우 — 설비 정보 / 요약 탭 (상주) */}
-      <aside className="shrink-0 w-[440px] h-full flex flex-col border-l border-brand-hairline bg-brand-canvas">
+        {/* 우 — 설비 정보 / 요약 탭 (상주 카드) */}
+        <aside className="shrink-0 w-[440px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
         <div
           role="tablist"
           aria-label="우측 패널 탭"
@@ -778,7 +782,8 @@ export function ChatContainer() {
             compareDigest={lastCompareDigest}
           />
         </div>
-      </aside>
+        </aside>
+      </div>
 
       <EquipmentDetailPanel
         open={rightTab === "context" && detailOpen}
