@@ -194,7 +194,7 @@ export function SnapshotCard({
                 {snapshot.columns.map((c) => (
                   <th
                     key={c}
-                    className="border border-brand-hairline bg-brand-canvas text-left text-brand-muted font-medium px-xs py-xxs whitespace-nowrap"
+                    className="border border-brand-hairline bg-brand-surface-cream-strong text-left text-brand-muted font-medium px-xs py-xxs whitespace-nowrap"
                   >
                     {c}
                   </th>
@@ -207,7 +207,7 @@ export function SnapshotCard({
                   {row.map((cell, j) => (
                     <td
                       key={j}
-                      className="border border-brand-hairline-soft text-brand-ink px-xs py-xxs whitespace-nowrap"
+                      className="border border-brand-hairline-soft bg-brand-canvas text-brand-ink px-xs py-xxs whitespace-nowrap"
                     >
                       {/* NULL 과 빈 문자열은 다른 것이다 — 엔진이 구별해 담았으니
                           화면에서도 접지 않는다. */}
