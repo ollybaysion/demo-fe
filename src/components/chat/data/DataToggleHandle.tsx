@@ -19,7 +19,7 @@ export function DataToggleHandle({ isOpen, onToggle, includedCount }: Props) {
       type="button"
       onClick={onToggle}
       aria-expanded={isOpen}
-      aria-label={isOpen ? "데이터 패널 닫기" : "데이터 스냅샷"}
+      aria-label={isOpen ? "데이터 패널 닫기" : "데이터 패널 열기"}
       className={[
         "relative h-24 w-16 rounded-l-lg",
         "bg-brand-primary hover:bg-brand-primary-active active:bg-brand-primary-active",
@@ -35,8 +35,6 @@ export function DataToggleHandle({ isOpen, onToggle, includedCount }: Props) {
         style={{ fontSize: "11px" }}
       >
         데이터
-        <br />
-        스냅샷
       </span>
       {includedCount > 0 && (
         // 패널이 닫혀 있어도 몇 개가 요청에 실리는지 보이게 한다 — 동봉은

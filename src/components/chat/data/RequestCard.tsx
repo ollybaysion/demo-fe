@@ -81,18 +81,21 @@ export function RequestCard({ request, onFulfill }: Props) {
       )}
 
       {request.sql && (
-        <div className="flex flex-col gap-xxs">
+        <div className="relative">
           {/* whitespace-pre-wrap: 패널 폭(440px)을 넘는 SQL 줄도 스크롤에
-              숨기지 않고 줄바꿈해 전문이 보이게 — 폭은 안전망일 뿐이다. */}
-          <pre className="text-caption font-mono text-brand-ink bg-brand-canvas rounded-sm px-sm py-xs whitespace-pre-wrap">
+              숨기지 않고 줄바꿈해 전문이 보이게 — 폭은 안전망일 뿐이다.
+              pr-xl 은 우상단 복사 아이콘 밑으로 첫 줄이 깔리지 않게. */}
+          <pre className="text-caption font-mono text-brand-ink bg-brand-canvas rounded-sm px-sm py-xs pr-xl whitespace-pre-wrap">
             {request.sql}
           </pre>
           <button
             type="button"
             onClick={copySql}
-            className="self-start text-caption text-brand-primary hover:text-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs px-xxs"
+            aria-label={copied ? "복사됨" : "SQL 복사"}
+            title={copied ? "복사됨" : "SQL 복사"}
+            className="absolute top-xxs right-xxs p-xxs rounded-sm text-brand-muted hover:text-brand-primary hover:bg-brand-primary/10 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
-            {copied ? "복사됨" : "SQL 복사"}
+            {copied ? <CheckIcon /> : <CopyIcon />}
           </button>
         </div>
       )}
@@ -125,5 +128,43 @@ export function RequestCard({ request, onFulfill }: Props) {
         등록
       </button>
     </div>
+  );
+}
+
+// 복사 아이콘 한 쌍 — `ChatMessage` 의 메시지 액션과 같은 14px 인라인 SVG 관례.
+function CopyIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }

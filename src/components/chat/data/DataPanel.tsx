@@ -48,7 +48,7 @@ export function DataPanel({
 
   return (
     <aside
-      aria-label="데이터 스냅샷 패널"
+      aria-label="데이터 패널"
       aria-hidden={!open}
       className={[
         "shrink-0 overflow-hidden",
@@ -75,7 +75,7 @@ export function DataPanel({
             </Section>
           )}
 
-          <Section title="스냅샷 등록">
+          <Section title="데이터 등록">
             <SnapshotAddForm onAdd={onAdd} />
           </Section>
 
