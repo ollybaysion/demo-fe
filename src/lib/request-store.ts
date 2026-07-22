@@ -71,6 +71,16 @@ export function openRequests(list: PendingRequest[]): PendingRequest[] {
 }
 
 /**
+ * 충족된 요청을 전부 걷어낸다 — 사용자가 **어떤 발화든** 보내는 순간 호출된다.
+ * 등록된 스냅샷은 발화에 함께 실려 나가므로 그 시점에 요청의 소임이 끝난다.
+ * "등록 완료" chip 클릭만 특별 취급하면, 안내대로 직접 타이핑한 사용자의
+ * chip 이 영영 남는 자기모순이 생긴다.
+ */
+export function clearFulfilled(list: PendingRequest[]): PendingRequest[] {
+  return list.filter((p) => !p.fulfilled);
+}
+
+/**
  * 이 메시지에서 비롯됐고 채워진 요청들 — 있으면 입력창 위에 "등록 완료" chip
  * 안내를 낸다. 자동 재전송은 하지 않는다: 질문 하나가 조회 여러 건을 요청할 수
  * 있어서, 언제 이어갈지는 사람이 정해야 한다.

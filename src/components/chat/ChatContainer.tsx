@@ -30,23 +30,9 @@ import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
-import { SummaryToggleHandle } from "./summary/SummaryToggleHandle";
-import {
-  ContextPanel,
-  ContextToggleHandle,
-  useContextRows,
-} from "./context";
-import {
-  ConversationsSidebar,
-  ConversationToggleHandle,
-  useConversations,
-} from "./history";
-import {
-  DataPanel,
-  DataToggleHandle,
-  useDataRequests,
-  useDataSnapshots,
-} from "./data";
+import { ContextPanel, useContextRows } from "./context";
+import { ConversationsSidebar, useConversations } from "./history";
+import { DataPanel, useDataRequests, useDataSnapshots } from "./data";
 import { toChatPayload } from "@/lib/snapshot-store";
 
 type TokenPayload = { content: string };
@@ -110,12 +96,10 @@ function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  // Single source of truth for the right-side slot — at most one panel
-  // is shown at a time; flipping flips both visually.
-  const [rightPanel, setRightPanel] = useState<
-    "context" | "summary" | "data" | null
-  >(null);
-  const [leftPanel, setLeftPanel] = useState(false);
+  // 3분할 상주 레이아웃 — 좌 데이터·중앙 채팅은 항상, 우측은 설비/요약 탭.
+  const [rightTab, setRightTab] = useState<"context" | "summary">("context");
+  // 대화 이력은 상주 컬럼에서 밀려나 헤더 ≡ 로 여는 오버레이 드로어.
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
@@ -153,14 +137,13 @@ export function ChatContainer() {
     restoreLastRemoved: restoreSnapshot,
     lastRemoved: lastRemovedSnapshot,
     toggleIncluded: toggleSnapshotIncluded,
-    togglePinned: toggleSnapshotPinned,
     setLabel: setSnapshotLabel,
   } = useDataSnapshots();
   const {
     open: openRequests,
     receive: receiveRequests,
     fulfill: fulfillRequest,
-    clearForOrigin: clearRequestsForOrigin,
+    clearFulfilled: clearFulfilledRequests,
     clear: clearRequests,
     fulfilledFor: fulfilledRequestsFor,
   } = useDataRequests();
@@ -315,8 +298,9 @@ export function ChatContainer() {
               );
             }
             // 요청 카드는 데이터 패널이 안는다. 어느 질문에서 비롯됐는지 함께
-            // 넘겨야, 채워졌을 때 그 질문까지의 히스토리로 되돌려 보낼 수 있다.
+            // 넘겨야, 채워졌을 때 이어가기 안내의 수명을 관리할 수 있다.
             // 데모 재생 중에는 만들지 않는다(시나리오 결정론 보존).
+            // 패널은 상주라 따로 열 필요가 없다 — 카드가 최상단에 바로 뜬다.
             if (hasDataRequests && !demoMeta) {
               const originIndex = findLastIndex(
                 history,
@@ -325,9 +309,6 @@ export function ChatContainer() {
               const origin = originIndex === -1 ? undefined : history[originIndex];
               if (origin) {
                 receiveRequests(payload.dataRequests!, origin.id);
-                // 패널을 열어 준다 — 안 그러면 조달 요청이 접힌 패널 안에서
-                // 조용히 기다리고, 사용자는 아무 일도 안 일어난 줄 안다.
-                setRightPanel("data");
               }
             }
             // 비-데모 모드에서만 extractedContext 적용. 데모는
@@ -436,7 +417,7 @@ export function ChatContainer() {
         let effectiveTimeRange = timeRange;
         if (currentTurn?.contextPanel) {
           replaceRows(currentTurn.contextPanel);
-          setRightPanel("context");
+          setRightTab("context");
         }
         if (currentTurn?.timeRange) {
           replaceTimeRange(currentTurn.timeRange);
@@ -456,6 +437,9 @@ export function ChatContainer() {
           ended: !scenario || nextIdx >= scenario.turns.length,
         });
       } else {
+        // 어떤 발화든 나가는 순간 충족된 요청의 소임이 끝난다 — 등록된
+        // 스냅샷은 이 요청에 함께 실려 나간다. ("등록 완료" chip 도 사라진다.)
+        clearFulfilledRequests();
         await sendToApi(nextHistory, nonEmptyRows(rows), timeRange);
       }
     },
@@ -469,6 +453,7 @@ export function ChatContainer() {
       replaceRows,
       replaceTimeRange,
       createConversation,
+      clearFulfilledRequests,
     ],
   );
 
@@ -527,6 +512,7 @@ export function ChatContainer() {
       if (isStreaming) return;
       setDemoState(null);
       setDetailOpen(false);
+      setHistoryOpen(false);
       clearRequests();
       selectConversation(id);
     },
@@ -577,28 +563,16 @@ export function ChatContainer() {
     return scenario?.turns[demoState.turnIndex]?.user;
   }, [demoState]);
 
-  function handleContextToggle() {
-    setRightPanel((prev) => {
-      const next = prev === "context" ? null : "context";
-      if (next !== "context") setDetailOpen(false);
-      return next;
-    });
-  }
-
-  function handleSummaryToggle() {
-    setRightPanel((prev) => (prev === "summary" ? null : "summary"));
-    setDetailOpen(false);
-  }
-
-  function handleDataToggle() {
-    setRightPanel((prev) => (prev === "data" ? null : "data"));
-    setDetailOpen(false);
+  /** 우측 탭 전환. 설비 상세 확장은 설비 탭에 매인 것이라 떠날 때 접는다. */
+  function handleRightTab(next: "context" | "summary") {
+    setRightTab(next);
+    if (next !== "context") setDetailOpen(false);
   }
 
   /**
    * 요청 카드에서 결과를 등록한다 — 스냅샷으로 보관하고, 그 요청을 충족으로
-   * 표시한다. 충족된 요청은 패널에서 스냅샷 카드에 자리를 내주고, 채팅에는
-   * "다시 분석" 방아쇠가 나타난다.
+   * 표시한다. 충족된 요청은 패널에서 스냅샷 카드에 자리를 내주고, 입력창 위에
+   * "등록 완료" 안내 chip 이 뜬다.
    */
   const handleFulfillRequest = useCallback(
     (
@@ -618,10 +592,6 @@ export function ChatContainer() {
     (input: string) => addSnapshot(input, ""),
     [addSnapshot],
   );
-
-  function handleLeftToggle() {
-    setLeftPanel((p) => !p);
-  }
 
   // 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지 잘라낸 뒤
   // 같은 컨텍스트로 다시 API 호출. 데모 시나리오 진행 중엔 호출되지
@@ -653,19 +623,6 @@ export function ChatContainer() {
     return undefined;
   }, [messages, fulfilledRequestsFor]);
 
-  /**
-   * "등록 완료" 발화 — 보통 메시지로 보낸다(히스토리 보존). 충족된 요청은
-   * 여기서 수명이 끝난다 — 새 응답이 여전히 부족하면 다시 요청해 올 것이고,
-   * 그때 새 카드로 뜨는 게 맞다.
-   */
-  const handleAckSubmit = useCallback(
-    (text: string) => {
-      if (ackOrigin) clearRequestsForOrigin(ackOrigin.id);
-      void handleSubmit(text);
-    },
-    [ackOrigin, clearRequestsForOrigin, handleSubmit],
-  );
-
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
   if (demoState) {
@@ -680,18 +637,25 @@ export function ChatContainer() {
 
   return (
     <div className="flex h-dvh bg-brand-canvas text-brand-ink">
-      {/* Left — conversation history sidebar. Push layout: chat
-          column shrinks when this opens. */}
-      <ConversationsSidebar
-        open={leftPanel}
-        conversations={conversations}
-        activeId={activeId}
-        onSelect={handleSidebarSelect}
+      {/* 좌 — 데이터 패널 (상주). 등록 결과와 요청 카드가 항상 눈앞에 있다. */}
+      <DataPanel
+        snapshots={snapshots}
+        requests={openRequests}
+        onAdd={handleAddSnapshot}
+        onFulfill={handleFulfillRequest}
+        onToggleIncluded={toggleSnapshotIncluded}
+        onRemove={removeSnapshot}
+        onRename={setSnapshotLabel}
+        lastRemoved={lastRemovedSnapshot}
+        onRestore={restoreSnapshot}
       />
 
-      {/* Chat column */}
+      {/* 중앙 — 채팅 컬럼 */}
       <div className="flex flex-1 min-w-0 flex-col">
-        <ChatHeader onNewConversation={handleNewConversation} />
+        <ChatHeader
+          onNewConversation={handleNewConversation}
+          onOpenHistory={() => setHistoryOpen(true)}
+        />
 
         <main className="flex-1 overflow-y-auto">
           {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
@@ -734,14 +698,19 @@ export function ChatContainer() {
             {messages.length === 0 && !isStreaming && !demoState && (
               <SuggestedQuestions onSelect={handleSubmit} />
             )}
-            {/* 충족된 요청이 있으면 추천보다 먼저 — 다음 걸음은 이어가기 발화다. */}
-            {messages.length > 0 && !isStreaming && ackOrigin && (
-              <SuggestedQuestions
-                onSelect={handleAckSubmit}
-                questions={["등록 완료"]}
-                ariaLabel="등록 완료 안내"
-              />
-            )}
+            {/* 충족된 요청이 있으면 추천보다 먼저 — 다음 걸음은 이어가기 발화다.
+                열린 요청이 남아 있으면 안내하지 않는다 — 아직 채울 카드가 있다.
+                (충족 요청의 정리는 handleSubmit 이 모든 발화에 대해 한다.) */}
+            {messages.length > 0 &&
+              !isStreaming &&
+              ackOrigin &&
+              openRequests.length === 0 && (
+                <SuggestedQuestions
+                  onSelect={handleSubmit}
+                  questions={["등록 완료"]}
+                  ariaLabel="등록 완료 안내"
+                />
+              )}
             {messages.length > 0 &&
               !isStreaming &&
               !ackOrigin &&
@@ -763,30 +732,56 @@ export function ChatContainer() {
         </div>
       </div>
 
-      {/* Right-side context panel (push layout) — mutex with summary */}
-      <ContextPanel
-        open={rightPanel === "context"}
-        rows={rows}
-        timeRange={timeRange}
-        onStartChange={setStart}
-        onEndChange={setEnd}
-        onEquipmentChange={setEquipment}
-        onAddRow={addRow}
-        onDeleteRow={deleteRow}
-        onAddChamber={addChamber}
-        onSetChamberName={setChamberName}
-        onDeleteChamber={deleteChamber}
-        onAddSensor={addSensor}
-        onSetSensorName={setSensorName}
-        onDeleteSensor={deleteSensor}
-        onReset={resetContext}
-        onExpandDetail={() => setDetailOpen(true)}
-        detailOpen={detailOpen}
-        canExpandDetail={equipmentNames.length > 0}
-      />
+      {/* 우 — 설비 정보 / 요약 탭 (상주) */}
+      <aside className="shrink-0 w-[440px] h-full flex flex-col border-l border-brand-hairline bg-brand-canvas">
+        <div
+          role="tablist"
+          aria-label="우측 패널 탭"
+          className="flex items-center h-16 px-lg gap-xs border-b border-brand-hairline"
+        >
+          <RightTabButton
+            label="설비 정보"
+            active={rightTab === "context"}
+            onClick={() => handleRightTab("context")}
+          />
+          <RightTabButton
+            label="요약"
+            active={rightTab === "summary"}
+            onClick={() => handleRightTab("summary")}
+          />
+        </div>
+        <div className="flex-1 min-h-0">
+          <ContextPanel
+            open={rightTab === "context"}
+            rows={rows}
+            timeRange={timeRange}
+            onStartChange={setStart}
+            onEndChange={setEnd}
+            onEquipmentChange={setEquipment}
+            onAddRow={addRow}
+            onDeleteRow={deleteRow}
+            onAddChamber={addChamber}
+            onSetChamberName={setChamberName}
+            onDeleteChamber={deleteChamber}
+            onAddSensor={addSensor}
+            onSetSensorName={setSensorName}
+            onDeleteSensor={deleteSensor}
+            onReset={resetContext}
+            onExpandDetail={() => setDetailOpen(true)}
+            detailOpen={detailOpen}
+            canExpandDetail={equipmentNames.length > 0}
+          />
+          <SummaryPanel
+            open={rightTab === "summary"}
+            rows={rows}
+            timeRange={timeRange}
+            compareDigest={lastCompareDigest}
+          />
+        </div>
+      </aside>
 
       <EquipmentDetailPanel
-        open={rightPanel === "context" && detailOpen}
+        open={rightTab === "context" && detailOpen}
         equipmentNames={equipmentNames}
         onClose={() => setDetailOpen(false)}
         onImportToChat={(msg) => {
@@ -795,66 +790,42 @@ export function ChatContainer() {
         }}
       />
 
-      <SummaryPanel
-        open={rightPanel === "summary"}
-        rows={rows}
-        timeRange={timeRange}
-        compareDigest={lastCompareDigest}
+      <ConversationsSidebar
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        conversations={conversations}
+        activeId={activeId}
+        onSelect={handleSidebarSelect}
       />
-
-      <DataPanel
-        open={rightPanel === "data"}
-        snapshots={snapshots}
-        requests={openRequests}
-        onAdd={handleAddSnapshot}
-        onFulfill={handleFulfillRequest}
-        onToggleIncluded={toggleSnapshotIncluded}
-        onTogglePinned={toggleSnapshotPinned}
-        onRemove={removeSnapshot}
-        onRename={setSnapshotLabel}
-        lastRemoved={lastRemovedSnapshot}
-        onRestore={restoreSnapshot}
-      />
-
-      {/* Left-edge floating handle — mirror of right stack */}
-      <div
-        className={[
-          "fixed top-1/4 left-0 z-20 flex flex-col gap-xs",
-          "transition-transform duration-200 ease-out",
-          leftPanel ? "translate-x-[320px]" : "translate-x-0",
-        ].join(" ")}
-      >
-        <ConversationToggleHandle
-          isOpen={leftPanel}
-          onToggle={handleLeftToggle}
-        />
-      </div>
-
-      {/* Right-edge floating handle stack */}
-      <div
-        className={[
-          "fixed top-1/4 right-0 z-20 flex flex-col gap-xs",
-          "transition-transform duration-200 ease-out",
-          rightPanel !== null ? "translate-x-[-440px]" : "translate-x-0",
-        ].join(" ")}
-      >
-        <ContextToggleHandle
-          isOpen={rightPanel === "context"}
-          onToggle={handleContextToggle}
-        />
-        <DataToggleHandle
-          isOpen={rightPanel === "data"}
-          onToggle={handleDataToggle}
-          includedCount={snapshots.filter((s) => s.included).length}
-        />
-        {messages.length > 0 && (
-          <SummaryToggleHandle
-            isOpen={rightPanel === "summary"}
-            onToggle={handleSummaryToggle}
-          />
-        )}
-      </div>
     </div>
+  );
+}
+
+function RightTabButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={[
+        "inline-flex items-center h-8 px-sm rounded-md text-body-sm transition-colors",
+        "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+        active
+          ? "bg-brand-primary/10 text-brand-primary font-medium"
+          : "text-brand-muted hover:text-brand-ink hover:bg-brand-ink-translucent-04",
+      ].join(" ")}
+    >
+      {label}
+    </button>
   );
 }
 

@@ -6,12 +6,15 @@ import type { TimeRange } from "../context/useContextRows";
 import type { Conversation } from "./useConversations";
 
 /**
- * 좌측 320px 사이드바. 대화 이력 목록.
+ * 대화 이력 드로어 — 헤더의 ≡ 버튼이 연다.
  *
- * 우측 ContextPanel 과 같은 push-layout(`w-0 ↔ w-[320px]`) 패턴을 미러.
+ * 3분할(데이터·채팅·설비/요약)이 상주 컬럼을 다 차지하므로, 가끔 쓰는 이력은
+ * 오버레이로 강등했다. NotebookLM 이 노트북 목록을 작업 화면 밖에 두는 것과
+ * 같은 판단 — 이력 탐색은 작업이 아니라 전환이다.
  */
 type Props = {
   open: boolean;
+  onClose: () => void;
   conversations: Conversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
@@ -19,6 +22,7 @@ type Props = {
 
 export function ConversationsSidebar({
   open,
+  onClose,
   conversations,
   activeId,
   onSelect,
@@ -34,22 +38,44 @@ export function ConversationsSidebar({
     return () => clearInterval(id);
   }, []);
 
+  if (!open) return null;
+
   return (
-    <aside
-      aria-label="이전 대화 사이드바"
-      aria-hidden={!open}
-      className={[
-        "shrink-0 overflow-hidden",
-        "transition-[width] duration-200 ease-out",
-        open ? "w-[320px]" : "w-0",
-        "border-r border-brand-hairline bg-brand-canvas",
-      ].join(" ")}
-    >
-      <div className="w-[320px] h-full flex flex-col">
-        <div className="px-lg pt-lg pb-md border-b border-brand-hairline-soft">
+    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true">
+      <div
+        className="absolute inset-0 bg-brand-ink/30"
+        onClick={onClose}
+        aria-hidden
+      />
+      <aside
+        aria-label="이전 대화 드로어"
+        className="absolute left-0 top-0 h-full w-[320px] bg-brand-canvas border-r border-brand-hairline shadow-xl flex flex-col"
+      >
+        <div className="flex items-center justify-between px-lg pt-lg pb-md border-b border-brand-hairline-soft">
           <h2 className="font-sans text-title-md text-brand-ink">
             이전 대화
           </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            className="inline-flex items-center justify-center w-8 h-8 rounded-sm text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -69,8 +95,8 @@ export function ConversationsSidebar({
             </ul>
           )}
         </div>
-      </div>
-    </aside>
+      </aside>
+    </div>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import {
+  clearFulfilled as clearFulfilledIn,
   clearOrigin,
   fulfilledForOrigin,
   markFulfilled,
@@ -36,6 +37,11 @@ export function useDataRequests() {
     setRequests((prev) => clearOrigin(prev, originMessageId));
   }, []);
 
+  /** 사용자 발화가 나가는 순간 — 충족된 요청의 소임이 끝난다. */
+  const clearFulfilled = useCallback(() => {
+    setRequests((prev) => clearFulfilledIn(prev));
+  }, []);
+
   const clear = useCallback(() => {
     setRequests([]);
   }, []);
@@ -51,6 +57,7 @@ export function useDataRequests() {
     receive,
     fulfill,
     clearForOrigin,
+    clearFulfilled,
     clear,
     fulfilledFor,
   };

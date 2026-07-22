@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clearFulfilled,
   clearOrigin,
   fulfilledForOrigin,
   isFulfilledBy,
@@ -28,7 +29,6 @@ function snap(over: Partial<DataSnapshot> = {}): DataSnapshot {
     rows: [["1"]],
     contentHash: "a".repeat(64),
     included: true,
-    pinned: false,
     warnings: [],
     ...over,
   };
@@ -111,6 +111,21 @@ describe("clearOrigin", () => {
     ];
     expect(clearOrigin(list, "u1").map((p) => p.request.queryKey)).toEqual([
       "alarms",
+    ]);
+  });
+});
+
+describe("clearFulfilled", () => {
+  it("충족된 것만 걷어낸다 — 열린 요청은 발화 후에도 남는다", () => {
+    const list = [
+      pending({ fulfilled: true }),
+      pending({
+        request: req({ queryKey: "recipe_steps" }),
+        originMessageId: "u2",
+      }),
+    ];
+    expect(clearFulfilled(list).map((p) => p.request.queryKey)).toEqual([
+      "recipe_steps",
     ]);
   });
 });

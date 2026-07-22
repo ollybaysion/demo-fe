@@ -52,14 +52,10 @@ export function SummaryPanel({ open, rows, timeRange, compareDigest }: Props) {
     <aside
       aria-label="대화 요약 패널"
       aria-hidden={!open}
-      className={[
-        "shrink-0 overflow-hidden",
-        "transition-[width] duration-200 ease-out",
-        open ? "w-[440px]" : "w-0",
-        "border-l border-brand-hairline bg-brand-canvas",
-      ].join(" ")}
+      // 폭·테두리는 우측 탭 호스트(ChatContainer)가 소유한다.
+      className={open ? "h-full overflow-hidden" : "hidden"}
     >
-      <div className="w-[440px] h-full flex flex-col">
+      <div className="w-full h-full flex flex-col">
         <header className="px-lg pt-lg pb-md border-b border-brand-hairline-soft">
           <h2 className="font-sans text-title-md text-brand-ink">대화 요약</h2>
           <p className="mt-xxs text-body-sm text-brand-muted">

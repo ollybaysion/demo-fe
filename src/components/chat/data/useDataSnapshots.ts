@@ -10,11 +10,9 @@ import {
   findByContentHash,
   includedSnapshots,
   migrateSnapshots,
-  pinnedSnapshots,
   removeSnapshot,
   setLabel as setLabelIn,
   toggleIncluded as toggleIncludedIn,
-  togglePinned as togglePinnedIn,
   upsertFulfilling,
   upsertSnapshot,
 } from "@/lib/snapshot-store";
@@ -68,9 +66,8 @@ export function useDataSnapshots() {
    * 호출부가 사용자에게 보여줄 수 있게. 같은 내용이 이미 있으면 새 항목을
    * 만들지 않고 기존 항목을 갱신한다(`replacedExisting`).
    *
-   * 기본 포함값은 OFF 다. 등록만으로 요청이 무거워지지 않게, 동봉은 사용자가
-   * 명시적으로 켠다. 예외는 요청 카드로 채운 경우인데(`opts.include`), 그건
-   * 이미 "이 데이터가 필요하다"는 요구에 대한 응답이라 끄고 시작할 이유가 없다.
+   * 기본 포함값은 ON 이다 — 등록했다는 건 쓰겠다는 뜻이다(NotebookLM 이 소스를
+   * 추가하면 기본 선택하는 것과 같은 관례). 무겁다 싶으면 체크를 해제한다.
    *
    * `opts.queryKey` 를 주면 라벨에서 만들지 않고 그 값을 쓴다 — 요청 카드가 지정한
    * 키로 등록해야 백엔드가 충족 여부를 알아본다.
@@ -106,10 +103,7 @@ export function useDataSnapshots() {
         columns: parsed.columns,
         rows: parsed.rows,
         contentHash: parsed.contentHash,
-        included: opts?.include === true,
-        // 요청 충족은 "내용을 달라"는 요구에 대한 응답이라 📌 내용 푸시로 등록한다 —
-        // 카탈로그만 실리면 모델은 표가 있다는 것만 알고 값은 보지 못한다.
-        pinned: opts?.include === true,
+        included: true,
         warnings: parsed.warnings,
       };
 
@@ -147,10 +141,6 @@ export function useDataSnapshots() {
     setSnapshots((prev) => toggleIncludedIn(prev, id));
   }, []);
 
-  const togglePinned = useCallback((id: string) => {
-    setSnapshots((prev) => togglePinnedIn(prev, id));
-  }, []);
-
   const setLabel = useCallback((id: string, label: string) => {
     setSnapshots((prev) => setLabelIn(prev, id, label));
   }, []);
@@ -162,13 +152,11 @@ export function useDataSnapshots() {
   return {
     snapshots,
     included: includedSnapshots(snapshots),
-    pinned: pinnedSnapshots(snapshots),
     lastRemoved,
     addSnapshot,
     remove,
     restoreLastRemoved,
     toggleIncluded,
-    togglePinned,
     setLabel,
     clear,
   };

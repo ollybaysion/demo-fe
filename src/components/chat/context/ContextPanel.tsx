@@ -57,14 +57,11 @@ export function ContextPanel({
     <aside
       aria-label="설비 정보 입력 패널"
       aria-hidden={!open}
-      className={[
-        "shrink-0 overflow-hidden",
-        "transition-[width] duration-200 ease-out",
-        open ? "w-[440px]" : "w-0",
-        "border-l border-brand-hairline bg-brand-canvas",
-      ].join(" ")}
+      // 폭·테두리는 우측 탭 호스트(ChatContainer)가 소유한다 — 탭 전환 시
+      // 숨김/표시만 담당.
+      className={open ? "h-full overflow-hidden" : "hidden"}
     >
-      <div className="w-[440px] h-full flex flex-col">
+      <div className="w-full h-full flex flex-col">
         {onExpandDetail && (
           <div className="px-lg pt-md flex justify-end">
             <button

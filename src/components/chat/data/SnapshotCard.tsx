@@ -6,7 +6,11 @@ import type { DataSnapshot } from "@/lib/types";
 /**
  * 스냅샷 한 장.
  *
- * 표를 다 보여주지 않는다 — 320px 패널에서 수천 행을 그리면 패널이 쓸모없어진다.
+ * 상태 축은 체크박스 하나다 — 체크된 스냅샷은 내용까지 요청에 실리고, 해제하면
+ * 아예 실리지 않는다. (NotebookLM 소스 선택과 같은 관례. 동봉/고정 2축은 사용자가
+ * 읽지 못해 접었다.)
+ *
+ * 표를 다 보여주지 않는다 — 좁은 패널에서 수천 행을 그리면 패널이 쓸모없어진다.
  * 접힌 상태에서는 머리말(컬럼 수·행 수·시각)만 보이고, 펼치면 앞 몇 행만 미리보기로
  * 보여준다. "전부 보기"는 이 패널의 일이 아니다.
  */
@@ -15,7 +19,6 @@ const PREVIEW_ROWS = 5;
 type Props = {
   snapshot: DataSnapshot;
   onToggleIncluded: (id: string) => void;
-  onTogglePinned: (id: string) => void;
   onRemove: (id: string) => void;
   /** 라벨 인라인 편집 — 등록은 이름 없이 끝나므로, 식별이 필요해진 시점에 여기서 짓는다. */
   onRename: (id: string, label: string) => void;
@@ -24,7 +27,6 @@ type Props = {
 export function SnapshotCard({
   snapshot,
   onToggleIncluded,
-  onTogglePinned,
   onRemove,
   onRename,
 }: Props) {
@@ -47,9 +49,24 @@ export function SnapshotCard({
     setEditing(false);
   }
 
+  const meta = `${snapshot.columns.length}열 · ${snapshot.rows.length}행 · ${formatCapturedAt(snapshot.capturedAt)}`;
+
   return (
     <div className="rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs flex flex-col gap-xxs">
-      <div className="flex items-start gap-xxs">
+      <div className="flex items-start gap-xs">
+        <input
+          type="checkbox"
+          checked={snapshot.included}
+          onChange={() => onToggleIncluded(snapshot.id)}
+          aria-label={`${snapshot.label} 요청에 포함`}
+          title={
+            snapshot.included
+              ? "요청에서 빼기"
+              : "요청에 포함 — 내용까지 함께 나갑니다"
+          }
+          className="mt-[3px] shrink-0 w-4 h-4 accent-brand-primary cursor-pointer"
+        />
+
         {editing ? (
           <div className="flex-1 min-w-0">
             <input
@@ -65,10 +82,7 @@ export function SnapshotCard({
               aria-label="스냅샷 이름 편집"
               className="w-full min-w-0 bg-brand-canvas text-brand-ink text-body-sm rounded-sm border border-brand-primary px-xs py-[2px] focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
             />
-            <span className="block text-caption text-brand-muted">
-              {snapshot.columns.length}열 · {snapshot.rows.length}행 ·{" "}
-              {formatCapturedAt(snapshot.capturedAt)}
-            </span>
+            <span className="block text-caption text-brand-muted">{meta}</span>
           </div>
         ) : (
           <button
@@ -77,13 +91,15 @@ export function SnapshotCard({
             aria-expanded={expanded}
             className="flex-1 min-w-0 text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-xs"
           >
-            <span className="block text-body-sm text-brand-ink truncate">
+            <span
+              className={[
+                "block text-body-sm truncate",
+                snapshot.included ? "text-brand-ink" : "text-brand-muted",
+              ].join(" ")}
+            >
               {snapshot.label}
             </span>
-            <span className="block text-caption text-brand-muted">
-              {snapshot.columns.length}열 · {snapshot.rows.length}행 ·{" "}
-              {formatCapturedAt(snapshot.capturedAt)}
-            </span>
+            <span className="block text-caption text-brand-muted">{meta}</span>
           </button>
         )}
 
@@ -135,33 +151,9 @@ export function SnapshotCard({
         </button>
       </div>
 
-      <div className="flex items-center gap-xxs flex-wrap">
-        <Chip
-          active={snapshot.included}
-          onClick={() => onToggleIncluded(snapshot.id)}
-          title={
-            snapshot.included
-              ? "요청에서 빼기"
-              : "요청에 동봉 — 모델이 이 표를 가져갈 수 있게"
-          }
-        >
-          동봉
-        </Chip>
-        <Chip
-          active={snapshot.pinned}
-          onClick={() => onTogglePinned(snapshot.id)}
-          title={
-            snapshot.pinned
-              ? "고정 해제 — 내용은 필요할 때만 전달"
-              : "고정 — 표 전문을 요청에 실어 반드시 보게 한다"
-          }
-        >
-          📌 고정
-        </Chip>
-        {snapshot.warnings.includes("ZERO_ROWS") && (
-          <span className="text-caption text-brand-muted-soft">행 없음</span>
-        )}
-      </div>
+      {snapshot.warnings.includes("ZERO_ROWS") && (
+        <span className="text-caption text-brand-muted-soft">행 없음</span>
+      )}
 
       {expanded && (
         <div className="overflow-x-auto border-t border-brand-hairline-soft pt-xxs">
@@ -209,36 +201,6 @@ export function SnapshotCard({
         </div>
       )}
     </div>
-  );
-}
-
-function Chip({
-  active,
-  onClick,
-  title,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      title={title}
-      className={[
-        "text-caption rounded-pill px-sm py-xxs transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
-        active
-          ? "bg-brand-primary text-brand-on-primary"
-          : "bg-brand-canvas text-brand-muted hover:text-brand-ink",
-      ].join(" ")}
-    >
-      {children}
-    </button>
   );
 }
 
