@@ -16,11 +16,15 @@ import type { DataSnapshot } from "@/lib/types";
  * 읽지 못해 접었다.)
  *
  * 표를 다 보여주지 않는다 — 좁은 패널에서 수천 행을 그리면 패널이 쓸모없어진다.
- * 접힌 상태에서는 머리말(컬럼 수·행 수·시각)만 보이고, 펼치면 **예시 몇 줄**만
- * 미리보기로 보여준다. 전체가 필요하면 펼친 자리의 [전체 보기(새 창)] 또는
- * [CSV 다운로드]로 나간다 — "전부 보기"는 이 패널의 일이 아니다.
+ * 접힌 상태에서는 머리말(컬럼 수·행 수·시각)만 보이고, 펼치면 **예시 몇 줄 ×
+ * 앞 몇 컬럼**만 미리보기로 보여준다(넓은 표를 가로 스크롤로 밀면 어색하다 —
+ * 행을 "… 외 N행"으로 접듯 컬럼도 "+N"으로 접는다). 전체가 필요하면 펼친
+ * 자리의 [전체 보기(새 창)] 또는 [CSV 다운로드]로 나간다.
  */
 const PREVIEW_ROWS = 3;
+const PREVIEW_COLS = 4;
+/** 셀 하나가 미리보기 폭을 다 먹지 않게 — 전문은 title 로. */
+const CELL_MAX_W = "max-w-[120px]";
 
 type Props = {
   snapshot: DataSnapshot;
@@ -41,6 +45,8 @@ export function SnapshotCard({
   const [draft, setDraft] = useState("");
   const preview = snapshot.rows.slice(0, PREVIEW_ROWS);
   const hidden = snapshot.rows.length - preview.length;
+  const previewCols = snapshot.columns.slice(0, PREVIEW_COLS);
+  const hiddenCols = snapshot.columns.length - previewCols.length;
 
   function startEdit() {
     setDraft(snapshot.label);
@@ -191,20 +197,30 @@ export function SnapshotCard({
           <table className="w-full text-caption font-mono border-collapse">
             <thead>
               <tr>
-                {snapshot.columns.map((c) => (
+                {previewCols.map((c) => (
                   <th
                     key={c}
                     className="border border-brand-hairline bg-brand-surface-cream-strong text-left text-brand-muted font-medium px-xs py-xxs whitespace-nowrap"
                   >
-                    {c}
+                    <span className={`block truncate ${CELL_MAX_W}`} title={c}>
+                      {c}
+                    </span>
                   </th>
                 ))}
+                {hiddenCols > 0 && (
+                  <th
+                    className="border border-brand-hairline bg-brand-surface-cream-strong text-left text-brand-muted-soft font-normal px-xs py-xxs whitespace-nowrap"
+                    title={snapshot.columns.slice(PREVIEW_COLS).join(", ")}
+                  >
+                    +{hiddenCols}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {preview.map((row, i) => (
                 <tr key={i}>
-                  {row.map((cell, j) => (
+                  {row.slice(0, PREVIEW_COLS).map((cell, j) => (
                     <td
                       key={j}
                       className="border border-brand-hairline-soft bg-brand-canvas text-brand-ink px-xs py-xxs whitespace-nowrap"
@@ -216,10 +232,20 @@ export function SnapshotCard({
                           NULL
                         </span>
                       ) : (
-                        cell
+                        <span
+                          className={`block truncate ${CELL_MAX_W}`}
+                          title={cell}
+                        >
+                          {cell}
+                        </span>
                       )}
                     </td>
                   ))}
+                  {hiddenCols > 0 && (
+                    <td className="border border-brand-hairline-soft bg-brand-canvas text-brand-muted-soft px-xs py-xxs">
+                      …
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
