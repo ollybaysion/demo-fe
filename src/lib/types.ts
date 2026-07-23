@@ -238,6 +238,13 @@ export type DataSnapshot = {
   included: boolean;
   /** 등록 시점의 비치명 경고 코드들. 자유형은 `INTEGRITY_ABSENT` 가 정상. */
   warnings: string[];
+  /**
+   * 이 데이터를 만든 쿼리 원문 — 요청 카드를 채우면 요청 SQL 이 자동으로 담기고,
+   * 자유 붙여넣기는 카드의 [쿼리]에서 사용자가 직접 붙일 수 있다(없으면 없는 대로).
+   * 카드의 테이블 칩은 이 SQL 의 `FROM` 에서 결정론적으로 파생한다 — 추측으로
+   * 채우지 않는다. FE 전용 필드라 채팅 페이로드에는 싣지 않는다.
+   */
+  sourceSql?: string;
 };
 
 /**

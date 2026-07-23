@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { PendingRequest } from "@/lib/request-store";
 import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
@@ -31,11 +31,13 @@ type Props = {
   onFulfill: (
     input: string,
     label: string,
-    opts: { include: boolean; queryKey: string },
+    opts: { include: boolean; queryKey: string; sourceSql?: string },
   ) => AddSnapshotResult;
   onToggleIncluded: (id: string) => void;
   onRemove: (id: string) => void;
   onRename: (id: string, label: string) => void;
+  /** 출처 쿼리 달기/고치기(빈 값 = 지움) — 카드의 테이블 칩이 여기서 파생된다. */
+  onSetQuery: (id: string, sql: string | undefined) => void;
   /** 마지막으로 삭제된 스냅샷 — 있으면 목록 위에 되돌리기 스트립이 뜬다. */
   lastRemoved: DataSnapshot | null;
   onRestore: () => void;
@@ -49,6 +51,7 @@ export function DataPanel({
   onToggleIncluded,
   onRemove,
   onRename,
+  onSetQuery,
   lastRemoved,
   onRestore,
 }: Props) {
@@ -58,13 +61,58 @@ export function DataPanel({
     error: { code: string; message: string };
   } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  /**
+   * 방금 등록된 카드 — 잠깐 강조하고 화면 안으로 끌어온다. 전역 Ctrl+V 등록은
+   * 스크롤 밖(목록 끝)에서 일어날 수 있어, 피드백이 없으면 "아무 일도 안
+   * 일어났다"로 읽힌다. 등록 경로 셋(모달·Ctrl+V·드롭·요청 카드)이 전부 여길
+   * 지나므로 한 곳에서 해결된다.
+   */
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
+  const flash = useCallback((id: string) => {
+    setFlashId(id);
+    if (flashTimerRef.current !== null) {
+      window.clearTimeout(flashTimerRef.current);
+    }
+    flashTimerRef.current = window.setTimeout(() => setFlashId(null), 1800);
+  }, []);
+  useEffect(
+    () => () => {
+      if (flashTimerRef.current !== null) {
+        window.clearTimeout(flashTimerRef.current);
+      }
+    },
+    [],
+  );
   const includedCount = snapshots.filter((s) => s.included).length;
+
+  const handleAdd = useCallback(
+    (input: string) => {
+      const result = onAdd(input);
+      if (result.ok) flash(result.snapshot.id);
+      return result;
+    },
+    [onAdd, flash],
+  );
+
+  const handleFulfill = useCallback(
+    (
+      input: string,
+      label: string,
+      opts: { include: boolean; queryKey: string; sourceSql?: string },
+    ) => {
+      const result = onFulfill(input, label, opts);
+      if (result.ok) flash(result.snapshot.id);
+      return result;
+    },
+    [onFulfill, flash],
+  );
 
   /** 텍스트 한 덩이를 등록한다 — 실패하면 그 텍스트를 안고 모달을 연다. */
   const registerText = useCallback(
     (text: string) => {
       if (text.trim().length === 0) return;
-      const result = onAdd(text);
+      const result = handleAdd(text);
       if (!result.ok) {
         setSeed({
           text,
@@ -73,7 +121,7 @@ export function DataPanel({
         setAddOpen(true);
       }
     },
-    [onAdd],
+    [handleAdd],
   );
 
   // Ctrl+V 즉시 등록 — 텍스트 입력 요소에 하는 붙여넣기는 건드리지 않는다
@@ -130,7 +178,7 @@ export function DataPanel({
                 <RequestCard
                   key={p.request.queryKey}
                   request={p.request}
-                  onFulfill={onFulfill}
+                  onFulfill={handleFulfill}
                 />
               ))}
             </div>
@@ -169,6 +217,8 @@ export function DataPanel({
                   onToggleIncluded={onToggleIncluded}
                   onRemove={onRemove}
                   onRename={onRename}
+                  onSetQuery={onSetQuery}
+                  flash={s.id === flashId}
                 />
               ))}
             </div>
@@ -217,7 +267,7 @@ export function DataPanel({
       <AddDataModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onAdd={onAdd}
+        onAdd={handleAdd}
         seed={seed}
       />
     </aside>

@@ -138,6 +138,7 @@ export function ChatContainer() {
     lastRemoved: lastRemovedSnapshot,
     toggleIncluded: toggleSnapshotIncluded,
     setLabel: setSnapshotLabel,
+    setSourceSql: setSnapshotSourceSql,
   } = useDataSnapshots();
   const {
     open: openRequests,
@@ -578,7 +579,7 @@ export function ChatContainer() {
     (
       input: string,
       label: string,
-      opts: { include: boolean; queryKey: string },
+      opts: { include: boolean; queryKey: string; sourceSql?: string },
     ) => {
       const result = addSnapshot(input, label, opts);
       if (result.ok) fulfillRequest(opts.queryKey);
@@ -654,6 +655,7 @@ export function ChatContainer() {
           onToggleIncluded={toggleSnapshotIncluded}
           onRemove={removeSnapshot}
           onRename={setSnapshotLabel}
+          onSetQuery={setSnapshotSourceSql}
           lastRemoved={lastRemovedSnapshot}
           onRestore={restoreSnapshot}
         />

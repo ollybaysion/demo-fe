@@ -10,11 +10,16 @@
 import { replaceAllSnapshots } from "@/lib/snapshot-idb";
 import type { DataSnapshot } from "@/lib/types";
 
-const KINDS: { name: string; cols: string[] }[] = [
-  { name: "챔버별 센서 목록", cols: ["CHAMBER", "SENSOR_ID", "SENSOR_NAME"] },
+const KINDS: { name: string; cols: string[]; sql?: string }[] = [
+  {
+    name: "챔버별 센서 목록",
+    cols: ["CHAMBER", "SENSOR_ID", "SENSOR_NAME"],
+    sql: "SELECT chamber, sensor_id, sensor_name\n  FROM fdc_sensor_master\n WHERE equipment_id = :equipment_id",
+  },
   {
     name: "레시피 STEP 구성",
     cols: ["RECIPE_ID", "STEP_NO", "STEP_NAME", "DURATION_SEC"],
+    sql: "SELECT recipe_id, step_no, step_name, duration_sec\n  FROM fdc_recipe_step\n ORDER BY step_no",
   },
   {
     name: "지난주 알람 이력",
@@ -24,6 +29,7 @@ const KINDS: { name: string; cols: string[] }[] = [
   {
     name: "PARAM 임계값",
     cols: ["PARAM_INDEX", "PARAM_NAME", "LO", "HI", "UNIT", "REV", "OWNER", "UPDATED_AT"],
+    sql: "SELECT *\n  FROM fdc_param_threshold\n WHERE eqpid = :eqpid",
   },
   {
     name: "이벤트 타임라인",
@@ -40,10 +46,8 @@ function buildSeed(count: number): DataSnapshot[] {
         r % 7 === 3 && j === kind.cols.length - 1 ? null : `${c}_${r + 1}`,
       ),
     );
-    const autoish =
-      `${kind.cols.slice(0, 2).join("·")}` +
-      (kind.cols.length > 2 ? ` 외 ${kind.cols.length - 2}컬럼` : "") +
-      ` · ${rowCount}행`;
+    // `autoLabel` 과 같은 골격 — 자동 라벨을 단 카드가 목록에서 어떻게 보이는지 재현.
+    const autoish = kind.cols.slice(0, 2).join(" · ");
     return {
       id: `snap-seed-${i}`,
       queryKey: `snap-seed-${i}`,
@@ -54,6 +58,8 @@ function buildSeed(count: number): DataSnapshot[] {
       contentHash: String(i % 100).padStart(2, "0").repeat(32),
       included: i % 4 !== 1,
       warnings: ["INTEGRITY_ABSENT"],
+      // 쿼리를 아는 종류의 절반만 단다 — 칩 있는/없는 카드가 섞인 목록을 보기 위해.
+      ...(kind.sql && i % 2 === 0 ? { sourceSql: kind.sql } : {}),
     };
   });
 }

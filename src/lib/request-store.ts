@@ -103,3 +103,22 @@ export function isFulfilledBy(
 ): boolean {
   return snapshots.some((s) => s.queryKey === queryKey && s.included);
 }
+
+/**
+ * 요청 SQL 의 첫 `FROM` 에서 테이블명을 뽑는다 — 카드의 출처 테이블 칩용.
+ *
+ * 결정론적 추출만 한다: 식별자가 바로 오는 경우만 취하고, 서브쿼리(`FROM (`)나
+ * 못 읽는 모양이면 `undefined` 를 준다 — 추측해서 채우지 않는다. 스키마 접두사는
+ * 남긴다(`FDC.SENSOR_MASTER` 는 그대로가 정보다).
+ */
+export function tableFromSql(sql: string | undefined): string | undefined {
+  if (!sql) return undefined;
+  // 첫 FROM 만 본다 — 아무 FROM 이나 잡으면 `FROM (SELECT … FROM dual)` 의
+  // 안쪽 테이블을 바깥 출처로 오인한다.
+  const from = /\bfrom\b/i.exec(sql);
+  if (!from) return undefined;
+  const m = /^\s*([A-Za-z_][A-Za-z0-9_$#.]*)/.exec(
+    sql.slice(from.index + from[0].length),
+  );
+  return m ? m[1].toUpperCase() : undefined;
+}
