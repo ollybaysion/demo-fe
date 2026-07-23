@@ -35,16 +35,42 @@ const KINDS: { name: string; cols: string[]; sql?: string }[] = [
     name: "이벤트 타임라인",
     cols: ["TS", "EQPID", "EVENT", "DETAIL", "OPERATOR", "SHIFT", "NOTE", "CODE", "SRC", "DUR"],
   },
+  // 상세 화면 극단 케이스 — 컬럼 스무 개짜리 넓은 표(가로 스크롤·sticky 헤더).
+  {
+    name: "랏 계측 이력 (넓은 표)",
+    cols: [
+      "LOT_ID", "WAFER_ID", "SLOT_NO", "EQPID", "CHAMBER", "RECIPE_ID", "STEP_NO",
+      "PARAM_INDEX", "PARAM_NAME", "VALUE", "LO_LIMIT", "HI_LIMIT", "UNIT",
+      "RESULT", "JUDGE_CODE", "START_TS", "END_TS", "OPERATOR", "SHIFT", "REMARK",
+    ],
+    sql: "SELECT *\n  FROM fdc_lot_metrology_hist\n WHERE lot_id = :lot_id",
+  },
+  // 상세 화면 극단 케이스 — 아주 긴 컬럼명 + 자유문 장문 값(셀 truncate·title 전문).
+  {
+    name: "알람 전문 로그",
+    cols: ["ALARM_ID", "OCCURRED_AT", "SEVERITY", "FULL_MESSAGE", "PREVIOUS_MAINTENANCE_ACTION_SUMMARY_TEXT"],
+  },
 ];
+
+/** 자유문 장문 값 — 결정론(행 번호 기반)으로 만들되 셀 폭을 확실히 넘긴다. */
+function longText(c: string, r: number): string {
+  return (
+    `${c}_${r + 1} — 챔버 상부 압력 편차 감지 후 레시피 스텝 재시도, ` +
+    `히터 존 3 온도 드리프트 동반. 유지보수 이력 대조 결과 직전 PM 이후 ` +
+    `누적 랏 수 임계 초과로 예방 점검 권고. `
+  ).repeat(3).trim();
+}
 
 function buildSeed(count: number): DataSnapshot[] {
   return Array.from({ length: count }, (_, i) => {
     const kind = KINDS[i % KINDS.length];
     const rowCount = 5 + ((i * 37) % 480);
     const rows = Array.from({ length: rowCount }, (_, r) =>
-      kind.cols.map((c, j) =>
-        r % 7 === 3 && j === kind.cols.length - 1 ? null : `${c}_${r + 1}`,
-      ),
+      kind.cols.map((c, j) => {
+        if (r % 7 === 3 && j === kind.cols.length - 1) return null;
+        if (c.endsWith("MESSAGE") || c.endsWith("_TEXT")) return longText(c, r);
+        return `${c}_${r + 1}`;
+      }),
     );
     // `autoLabel` 과 같은 골격 — 자동 라벨을 단 카드가 목록에서 어떻게 보이는지 재현.
     const autoish = kind.cols.slice(0, 2).join(" · ");
