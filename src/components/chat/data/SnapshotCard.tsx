@@ -238,7 +238,7 @@ export function SnapshotCard({
           <button
             type="button"
             onClick={() => setQueryOpen(true)}
-            aria-label={`${snapshot.label} 출처 SQL ${snapshot.sourceSql ? "편집" : "입력"}`}
+            aria-label={`${snapshot.label} SQL ${snapshot.sourceSql ? "편집" : "입력"}`}
             title={snapshot.sourceSql ? "SQL 편집" : "SQL 입력"}
             className={`${alwaysAction} w-auto px-[5px] hover:text-brand-primary ${snapshot.sourceSql ? "text-brand-primary" : ""}`}
           >
@@ -375,7 +375,7 @@ function QueryModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${label} 출처 쿼리`}
+      aria-label={`${label} SQL`}
       className="fixed inset-0 z-50 flex items-center justify-center p-md"
     >
       <div
@@ -386,7 +386,7 @@ function QueryModal({
       <div className="relative w-full max-w-[32rem] bg-brand-canvas rounded-lg shadow-xl flex flex-col">
         <div className="flex items-center justify-between px-md py-sm border-b border-brand-hairline">
           <h2 className="min-w-0 truncate font-sans text-body-md text-brand-ink">
-            출처 쿼리 — {label}
+            SQL — {label}
           </h2>
           <div className="flex items-center gap-xxs">
             <button
