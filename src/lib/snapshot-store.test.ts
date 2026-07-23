@@ -4,6 +4,7 @@ import {
   includedSnapshots,
   migrateSnapshots,
   removeSnapshot,
+  setSourceSql,
   toChatPayload,
   toggleIncluded,
   upsertFulfilling,
@@ -27,15 +28,40 @@ function snap(over: Partial<DataSnapshot> = {}): DataSnapshot {
 }
 
 describe("autoLabel", () => {
-  it("선두 컬럼과 규모로 알아볼 수 있는 라벨을 만든다", () => {
-    expect(autoLabel(["CHAMBER", "SENSOR_ID", "SENSOR_NAME"], 6)).toBe(
-      "CHAMBER·SENSOR_ID 외 1컬럼 · 6행",
+  it("선두 컬럼 둘을 이름으로 쓴다 — 카운트는 칩·미리보기가 말하므로 넣지 않는다", () => {
+    expect(autoLabel(["CHAMBER", "SENSOR_ID", "SENSOR_NAME"])).toBe(
+      "CHAMBER · SENSOR_ID",
     );
   });
 
   it("컬럼이 둘 이하면 전부 표기한다", () => {
-    expect(autoLabel(["A", "B"], 1)).toBe("A·B · 1행");
-    expect(autoLabel(["A"], 0)).toBe("A · 0행");
+    expect(autoLabel(["A", "B"])).toBe("A · B");
+    expect(autoLabel(["A"])).toBe("A");
+  });
+});
+
+describe("setSourceSql", () => {
+  it("쿼리를 달고, 앞뒤 공백은 접는다", () => {
+    const list = [snap()];
+    const next = setSourceSql(list, "snap-1", "  SELECT * FROM t  ");
+    expect(next[0].sourceSql).toBe("SELECT * FROM t");
+  });
+
+  it("빈 값은 필드 자체를 지운다 — '쿼리 없음'의 표현은 부재 하나로", () => {
+    const list = setSourceSql([snap()], "snap-1", "SELECT 1 FROM t");
+    const cleared = setSourceSql(list, "snap-1", "   ");
+    expect("sourceSql" in cleared[0]).toBe(false);
+  });
+
+  it("이미 없는데 지우면 참조를 보존한다 — 헛 쓰기를 만들지 않게", () => {
+    const list = [snap()];
+    expect(setSourceSql(list, "snap-1", undefined)[0]).toBe(list[0]);
+  });
+
+  it("다른 항목은 건드리지 않는다", () => {
+    const other = snap({ id: "snap-2", contentHash: "b".repeat(64) });
+    const next = setSourceSql([snap(), other], "snap-1", "SELECT 1 FROM t");
+    expect(next[1]).toBe(other);
   });
 });
 
@@ -211,5 +237,13 @@ describe("migrateSnapshots", () => {
   it("라벨이 없으면 쿼리 키로 채운다", () => {
     const raw = { ...snap(), label: undefined };
     expect(migrateSnapshots([raw])[0].label).toBe("q1");
+  });
+
+  it("출처 쿼리는 살리고, 빈 문자열은 부재로 접는다", () => {
+    const withSql = { ...snap(), sourceSql: "SELECT 1 FROM t" };
+    const blankSql = { ...snap({ id: "snap-2" }), sourceSql: "  " };
+    const out = migrateSnapshots([withSql, blankSql]);
+    expect(out[0].sourceSql).toBe("SELECT 1 FROM t");
+    expect("sourceSql" in out[1]).toBe(false);
   });
 });

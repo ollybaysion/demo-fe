@@ -90,6 +90,28 @@ export function setLabel(
   return list.map((s) => (s.id === id ? { ...s, label } : s));
 }
 
+/**
+ * 출처 쿼리를 단다/고친다/지운다(`undefined` = 지움).
+ * 빈 문자열은 저장하지 않는다 — "쿼리 없음"의 표현은 필드 부재 하나로 통일.
+ */
+export function setSourceSql(
+  list: DataSnapshot[],
+  id: string,
+  sourceSql: string | undefined,
+): DataSnapshot[] {
+  return list.map((s) => {
+    if (s.id !== id) return s;
+    const trimmed = sourceSql?.trim();
+    if (!trimmed) {
+      if (s.sourceSql === undefined) return s;
+      const rest = { ...s };
+      delete rest.sourceSql;
+      return rest;
+    }
+    return { ...s, sourceSql: trimmed };
+  });
+}
+
 export function findByContentHash(
   list: DataSnapshot[],
   contentHash: string,
@@ -100,14 +122,13 @@ export function findByContentHash(
 /**
  * 이름 없이 등록된 스냅샷의 자동 라벨.
  *
- * 등록은 붙여넣기만으로 끝나야 한다 — 이름은 마찰이다. 대신 나중에 목록과
- * 모델 카탈로그에서 알아볼 최소 식별 정보(선두 컬럼·규모)를 라벨에 담고,
- * 더 좋은 이름은 카드에서 언제든 바꿀 수 있게 한다.
+ * 등록은 붙여넣기만으로 끝나야 한다 — 이름은 마찰이다. 선두 컬럼 두 개를
+ * 이름 삼아 두고, 더 좋은 이름은 카드에서 언제든 바꿀 수 있게 한다.
+ * 컬럼 수·행 수는 라벨에 넣지 않는다 — 컬럼은 카드의 칩이, 규모는 펼친
+ * 미리보기가 이미 보여주므로 라벨에 겹치면 소음이다.
  */
-export function autoLabel(columns: string[], rowCount: number): string {
-  const head = columns.slice(0, 2).join("·");
-  const rest = columns.length > 2 ? ` 외 ${columns.length - 2}컬럼` : "";
-  return `${head}${rest} · ${rowCount}행`;
+export function autoLabel(columns: string[]): string {
+  return columns.slice(0, 2).join(" · ");
 }
 
 /** 요청에 실릴 것들 — 체크된 스냅샷. */
@@ -193,5 +214,8 @@ function coerceSnapshot(raw: unknown): DataSnapshot | null {
     warnings: Array.isArray(r.warnings)
       ? r.warnings.filter((w): w is string => typeof w === "string")
       : [],
+    ...(typeof r.sourceSql === "string" && r.sourceSql.trim().length > 0
+      ? { sourceSql: r.sourceSql }
+      : {}),
   };
 }

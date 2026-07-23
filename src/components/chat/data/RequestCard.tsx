@@ -25,9 +25,18 @@ type Props = {
   onFulfill: (
     input: string,
     label: string,
-    opts: { include: boolean; queryKey: string },
+    opts: { include: boolean; queryKey: string; sourceSql?: string },
   ) => AddSnapshotResult;
 };
+
+/**
+ * [예시 결과 채우기]는 데모 장치다 — 실배포에서 가짜 데이터를 등록하는 경로가
+ * 되지 않게 dev 밖에서는 명시적 플래그(`NEXT_PUBLIC_DEMO_SAMPLES=1`)가 있어야
+ * 보인다. 데모 배포는 플래그를 켜고, 사내 실배포는 그냥 두면 사라진다.
+ */
+const SHOW_SAMPLES =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_DEMO_SAMPLES === "1";
 
 export function RequestCard({ request, onFulfill }: Props) {
   const [text, setText] = useState("");
@@ -36,13 +45,16 @@ export function RequestCard({ request, onFulfill }: Props) {
   );
   const [copied, setCopied] = useState(false);
   // DB 없이 왕복을 걸어볼 수 있게 하는 예시 — 있는 queryKey 에만 버튼이 뜬다.
-  const sample = sampleResultFor(request.queryKey);
+  const sample = SHOW_SAMPLES ? sampleResultFor(request.queryKey) : null;
 
   function submit() {
     if (text.trim().length === 0) return;
     const result = onFulfill(text, request.label, {
       include: true,
       queryKey: request.queryKey,
+      // 요청이 쥔 SQL 이 이 데이터의 출처다 — 스냅샷 카드의 테이블 칩·쿼리
+      // 복사가 여기서 이어진다.
+      ...(request.sql ? { sourceSql: request.sql } : {}),
     });
     if (!result.ok) {
       setError({ code: result.code, message: result.message });

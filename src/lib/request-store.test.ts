@@ -7,6 +7,7 @@ import {
   markFulfilled,
   openRequests,
   receiveRequests,
+  tableFromSql,
   type PendingRequest,
 } from "@/lib/request-store";
 import type { DataRequest, DataSnapshot } from "@/lib/types";
@@ -141,5 +142,28 @@ describe("isFulfilledBy", () => {
 
   it("다른 키는 충족이 아니다", () => {
     expect(isFulfilledBy([snap()], "recipe_steps")).toBe(false);
+  });
+});
+
+describe("tableFromSql", () => {
+  it("첫 FROM 의 테이블명을 대문자로 뽑는다", () => {
+    expect(
+      tableFromSql("SELECT a, b\n  FROM fdc_sensor_master\n WHERE x = 1"),
+    ).toBe("FDC_SENSOR_MASTER");
+  });
+
+  it("스키마 접두사는 남긴다 — 그대로가 정보다", () => {
+    expect(tableFromSql("select * from FDC.SENSOR_MASTER")).toBe(
+      "FDC.SENSOR_MASTER",
+    );
+  });
+
+  it("서브쿼리는 추측하지 않는다", () => {
+    expect(tableFromSql("SELECT * FROM (SELECT 1 FROM dual)")).toBeUndefined();
+  });
+
+  it("SQL 이 없으면 없다", () => {
+    expect(tableFromSql(undefined)).toBeUndefined();
+    expect(tableFromSql("")).toBeUndefined();
   });
 });

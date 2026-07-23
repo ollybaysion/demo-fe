@@ -11,6 +11,7 @@ import {
   includedSnapshots,
   removeSnapshot,
   setLabel as setLabelIn,
+  setSourceSql as setSourceSqlIn,
   toggleIncluded as toggleIncludedIn,
   upsertFulfilling,
   upsertSnapshot,
@@ -98,7 +99,7 @@ export function useDataSnapshots() {
     (
       input: string,
       label: string,
-      opts?: { include?: boolean; queryKey?: string },
+      opts?: { include?: boolean; queryKey?: string; sourceSql?: string },
     ): AddSnapshotResult => {
       const id = newId();
       const queryKey = opts?.queryKey ?? toQueryKey(label, id);
@@ -118,15 +119,14 @@ export function useDataSnapshots() {
         // 이름이 비면 내용에서 만든다 — 등록을 붙여넣기만으로 끝내기 위해.
         label:
           label.trim() ||
-          (parsed.columns.length > 0
-            ? autoLabel(parsed.columns, parsed.rowCount)
-            : queryKey),
+          (parsed.columns.length > 0 ? autoLabel(parsed.columns) : queryKey),
         capturedAt: new Date().toISOString(),
         columns: parsed.columns,
         rows: parsed.rows,
         contentHash: parsed.contentHash,
         included: true,
         warnings: parsed.warnings,
+        ...(opts?.sourceSql?.trim() ? { sourceSql: opts.sourceSql.trim() } : {}),
       };
 
       // 중복 여부는 업데이터 밖에서 본다 — 업데이터는 순수해야 하고, 그 안에서
@@ -167,6 +167,11 @@ export function useDataSnapshots() {
     setSnapshots((prev) => setLabelIn(prev, id, label));
   }, []);
 
+  /** 출처 쿼리 달기/고치기/지우기(`undefined` = 지움) — 테이블 칩이 여기서 파생된다. */
+  const setSourceSql = useCallback((id: string, sql: string | undefined) => {
+    setSnapshots((prev) => setSourceSqlIn(prev, id, sql));
+  }, []);
+
   const clear = useCallback(() => {
     setSnapshots([]);
   }, []);
@@ -180,6 +185,7 @@ export function useDataSnapshots() {
     restoreLastRemoved,
     toggleIncluded,
     setLabel,
+    setSourceSql,
     clear,
   };
 }
