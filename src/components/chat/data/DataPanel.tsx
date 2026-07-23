@@ -6,6 +6,7 @@ import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
 import { RequestCard } from "./RequestCard";
 import { SnapshotCard } from "./SnapshotCard";
+import { SnapshotDetail } from "./SnapshotDetail";
 import type { AddSnapshotResult } from "./useDataSnapshots";
 
 /**
@@ -14,6 +15,12 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  * NotebookLM 의 소스 패널 관례를 따른다(따라 그리진 않는다): 항상 떠 있고,
  * 항목은 체크박스로 포함/제외. 접힌 패널 뒤에 숨어 있던 시절의 "등록했는데
  * 아무 일도 안 일어남" 문제가 상주로 풀린다 — 등록 결과가 항상 눈앞에 있다.
+ *
+ * **확장 모드(#136)**: 헤더의 슬라이드 버튼으로 패널이 화면의 70% 로 넓어져
+ * 마스터-디테일이 된다 — 왼쪽은 그대로 카드 목록(요청 카드 포함), 오른쪽은
+ * 선택한 스냅샷의 전체 표(`SnapshotDetail`). 카드에서 미리보기를 걷어낸 뒤
+ * 데이터를 *읽는* 정식 자리다. 레이아웃 양보(설비 정보 패널 숨김)는 부모가
+ * `expanded` 로 처리한다.
  *
  * 등록 경로는 셋, 전부 같은 `onAdd` 로 합류한다:
  *  1. 하단 [+ 데이터 추가] 모달 — 기본 경로.
@@ -41,6 +48,9 @@ type Props = {
   /** 마지막으로 삭제된 스냅샷 — 있으면 목록 위에 되돌리기 스트립이 뜬다. */
   lastRemoved: DataSnapshot | null;
   onRestore: () => void;
+  /** 확장 모드(70% 마스터-디테일) 여부 — 레이아웃 양보가 걸려 있어 부모 소유. */
+  expanded: boolean;
+  onToggleExpanded: () => void;
 };
 
 export function DataPanel({
@@ -54,6 +64,8 @@ export function DataPanel({
   onSetQuery,
   lastRemoved,
   onRestore,
+  expanded,
+  onToggleExpanded,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [seed, setSeed] = useState<{
@@ -85,6 +97,15 @@ export function DataPanel({
     [],
   );
   const includedCount = snapshots.filter((s) => s.included).length;
+
+  /**
+   * 확장 모드의 상세 대상. 명시 선택이 사라졌으면(삭제 등) 첫 카드로
+   * 물러난다 — 빈 오른쪽 면을 사용자가 채워야 할 이유가 없다.
+   */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const detailTarget = expanded
+    ? (snapshots.find((s) => s.id === selectedId) ?? snapshots[0] ?? null)
+    : null;
 
   const handleAdd = useCallback(
     (input: string) => {
@@ -149,7 +170,12 @@ export function DataPanel({
   return (
     <aside
       aria-label="데이터 패널"
-      className="relative shrink-0 w-[400px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden"
+      className={[
+        // px↔% 폭 전환 — 모던 브라우저는 calc 보간으로 애니메이션되고,
+        // 안 되는 환경은 즉시 전환될 뿐이라 기능 손실이 없다.
+        "relative shrink-0 flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden transition-[width] duration-300",
+        expanded ? "w-[70%]" : "w-[400px]",
+      ].join(" ")}
       onDragEnter={(e) => {
         if (e.dataTransfer.types.includes("Files")) {
           e.preventDefault();
@@ -157,7 +183,7 @@ export function DataPanel({
         }
       }}
     >
-      <div className="flex items-center px-lg h-16 border-b border-brand-hairline">
+      <div className="flex items-center justify-between px-lg h-16 border-b border-brand-hairline">
         <h2 className="font-sans text-title-md text-brand-ink">
           데이터
           {includedCount > 0 && (
@@ -166,82 +192,136 @@ export function DataPanel({
             </span>
           )}
         </h2>
-      </div>
-
-      <div className="flex-1 overflow-y-auto scrollbar-none">
-        {/* 요청이 있으면 무엇보다 먼저 — 모델이 "이게 있어야 답한다"고 세운
-            요구라, 보관 목록보다 위에 둔다. */}
-        {requests.length > 0 && (
-          <Section title={`요청받은 데이터 (${requests.length})`}>
-            <div className="flex flex-col gap-xs">
-              {requests.map((p) => (
-                <RequestCard
-                  key={p.request.queryKey}
-                  request={p.request}
-                  onFulfill={handleFulfill}
-                />
-              ))}
-            </div>
-          </Section>
-        )}
-
-        <div className="px-lg pt-md pb-md">
-          {/* 실수 삭제 구제 — 스냅샷은 SQL 재실행 없이 다시 만들기 번거로워,
-              삭제 직후 한 번은 그 자리에서 되돌릴 수 있어야 한다. */}
-          {lastRemoved && (
-            <div className="mb-xs flex items-center justify-between gap-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs">
-              <span className="min-w-0 truncate text-caption text-brand-muted">
-                “{lastRemoved.label}” 삭제됨
-              </span>
-              <button
-                type="button"
-                onClick={onRestore}
-                className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
-              >
-                되돌리기
-              </button>
-            </div>
-          )}
-
-          {snapshots.length === 0 ? (
-            <p className="text-caption text-brand-muted-soft">
-              DB 에 붙지 못하는 상황이면, 직접 실행한 조회 결과를 아래 [+ 데이터
-              추가]로 붙여넣어 두세요. 체크된 데이터만 질문에 함께 나갑니다.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-xs">
-              {snapshots.map((s) => (
-                <SnapshotCard
-                  key={s.id}
-                  snapshot={s}
-                  onToggleIncluded={onToggleIncluded}
-                  onRemove={onRemove}
-                  onRename={onRename}
-                  onSetQuery={onSetQuery}
-                  flash={s.id === flashId}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
-      <div className="shrink-0 px-lg py-md border-t border-brand-hairline">
+        {/* 슬라이드 버튼(#136) — 70% 마스터-디테일 확장/복귀. */}
         <button
           type="button"
-          onClick={() => {
-            setSeed(null);
-            setAddOpen(true);
-          }}
-          className="w-full inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          aria-label={expanded ? "데이터 패널 원래대로" : "데이터 패널 넓게 보기"}
+          title={expanded ? "원래대로" : "넓게 보기"}
+          className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-sm text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
-          <PlusIcon />
-          데이터 추가
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+            className={expanded ? "rotate-180" : ""}
+          >
+            <polyline points="13 17 18 12 13 7" />
+            <polyline points="6 17 11 12 6 7" />
+          </svg>
         </button>
-        <p className="mt-xs text-center text-caption text-brand-muted-soft">
-          표를 복사해 Ctrl+V 하거나 파일을 끌어놓아도 등록됩니다.
-        </p>
+      </div>
+
+      <div className="flex-1 min-h-0 flex">
+        {/* 목록 컬럼 — 접힘 모드에선 패널 전체, 확장 모드에선 왼쪽 마스터. */}
+        <div
+          className={[
+            "flex flex-col min-h-0",
+            expanded
+              ? "w-[360px] shrink-0 border-r border-brand-hairline-soft"
+              : "flex-1 min-w-0",
+          ].join(" ")}
+        >
+          <div className="flex-1 overflow-y-auto scrollbar-none">
+            {/* 요청이 있으면 무엇보다 먼저 — 모델이 "이게 있어야 답한다"고 세운
+                요구라, 보관 목록보다 위에 둔다. */}
+            {requests.length > 0 && (
+              <Section title={`요청받은 데이터 (${requests.length})`}>
+                <div className="flex flex-col gap-xs">
+                  {requests.map((p) => (
+                    <RequestCard
+                      key={p.request.queryKey}
+                      request={p.request}
+                      onFulfill={handleFulfill}
+                    />
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            <div className="px-lg pt-md pb-md">
+              {/* 실수 삭제 구제 — 스냅샷은 SQL 재실행 없이 다시 만들기 번거로워,
+                  삭제 직후 한 번은 그 자리에서 되돌릴 수 있어야 한다. */}
+              {lastRemoved && (
+                <div className="mb-xs flex items-center justify-between gap-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs">
+                  <span className="min-w-0 truncate text-caption text-brand-muted">
+                    “{lastRemoved.label}” 삭제됨
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onRestore}
+                    className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+                  >
+                    되돌리기
+                  </button>
+                </div>
+              )}
+
+              {snapshots.length === 0 ? (
+                <p className="text-caption text-brand-muted-soft">
+                  DB 에 붙지 못하는 상황이면, 직접 실행한 조회 결과를 아래 [+
+                  데이터 추가]로 붙여넣어 두세요. 체크된 데이터만 질문에 함께
+                  나갑니다.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-xs">
+                  {snapshots.map((s) => (
+                    <SnapshotCard
+                      key={s.id}
+                      snapshot={s}
+                      onToggleIncluded={onToggleIncluded}
+                      onRemove={onRemove}
+                      onRename={onRename}
+                      onSetQuery={onSetQuery}
+                      flash={s.id === flashId}
+                      onSelect={
+                        expanded ? () => setSelectedId(s.id) : undefined
+                      }
+                      selected={expanded && s.id === detailTarget?.id}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
+          <div className="shrink-0 px-lg py-md border-t border-brand-hairline">
+            <button
+              type="button"
+              onClick={() => {
+                setSeed(null);
+                setAddOpen(true);
+              }}
+              className="w-full inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              <PlusIcon />
+              데이터 추가
+            </button>
+            <p className="mt-xs text-center text-caption text-brand-muted-soft">
+              표를 복사해 Ctrl+V 하거나 파일을 끌어놓아도 등록됩니다.
+            </p>
+          </div>
+        </div>
+
+        {/* 상세 면 — 확장 모드의 오른쪽. 카드에서 걷어낸 "읽기"가 여기 산다. */}
+        {expanded &&
+          (detailTarget ? (
+            <SnapshotDetail snapshot={detailTarget} />
+          ) : (
+            <div className="flex-1 min-w-0 flex items-center justify-center">
+              <p className="text-caption text-brand-muted-soft">
+                등록된 데이터가 없습니다 — 왼쪽 [+ 데이터 추가]로 시작하세요.
+              </p>
+            </div>
+          ))}
       </div>
 
       {/* 파일 드롭존 오버레이 — 끌어온 동안만 패널을 덮는다. */}

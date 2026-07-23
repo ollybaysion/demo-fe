@@ -44,6 +44,10 @@ type Props = {
   onSetQuery: (id: string, sql: string | undefined) => void;
   /** 방금 등록됨 — 잠깐 강조하고 화면 안으로 스크롤한다(전역 Ctrl+V 는 소리가 없다). */
   flash?: boolean;
+  /** 확장 모드에서만 — 카드 클릭이 상세 뷰의 대상을 고른다. */
+  onSelect?: () => void;
+  /** 확장 모드에서 상세 뷰가 보여주고 있는 카드. */
+  selected?: boolean;
 };
 
 export function SnapshotCard({
@@ -53,6 +57,8 @@ export function SnapshotCard({
   onRename,
   onSetQuery,
   flash = false,
+  onSelect,
+  selected = false,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -110,13 +116,19 @@ export function SnapshotCard({
     "shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors";
 
   return (
+    // 선택은 포인터 편의다 — 내부 버튼 클릭이 선택으로 번져도 "지금 만지는
+    // 카드가 상세에 뜬다"라 자연스럽다. 키보드는 카드 내 버튼 포커스로 충분.
     <div
       ref={cardRef}
+      onClick={onSelect}
       className={[
         "group rounded-lg border px-sm py-xs flex flex-col gap-xxs transition-all",
+        onSelect ? "cursor-pointer" : "",
         flash
           ? "border-brand-primary/50 ring-2 ring-brand-primary/25"
-          : "border-brand-hairline",
+          : selected
+            ? "border-brand-primary/45 bg-brand-primary/5"
+            : "border-brand-hairline",
       ].join(" ")}
     >
       <div className="flex items-start gap-xs">
@@ -238,7 +250,7 @@ export function SnapshotCard({
           <button
             type="button"
             onClick={() => setQueryOpen(true)}
-            aria-label={`${snapshot.label} 출처 SQL ${snapshot.sourceSql ? "편집" : "입력"}`}
+            aria-label={`${snapshot.label} SQL ${snapshot.sourceSql ? "편집" : "입력"}`}
             title={snapshot.sourceSql ? "SQL 편집" : "SQL 입력"}
             className={`${alwaysAction} w-auto px-[5px] hover:text-brand-primary ${snapshot.sourceSql ? "text-brand-primary" : ""}`}
           >
@@ -375,7 +387,7 @@ function QueryModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${label} 출처 SQL`}
+      aria-label={`${label} SQL`}
       className="fixed inset-0 z-50 flex items-center justify-center p-md"
     >
       <div
@@ -386,7 +398,7 @@ function QueryModal({
       <div className="relative w-full max-w-[32rem] bg-brand-canvas rounded-lg shadow-xl flex flex-col">
         <div className="flex items-center justify-between px-md py-sm border-b border-brand-hairline">
           <h2 className="min-w-0 truncate font-sans text-body-md text-brand-ink">
-            출처 SQL — {label}
+            SQL — {label}
           </h2>
           <div className="flex items-center gap-xxs">
             <button
@@ -426,14 +438,14 @@ function QueryModal({
         <div className="px-md py-sm flex flex-col gap-sm">
           <label className="block">
             <span className="block text-caption text-brand-muted mb-xxs">
-              이 데이터를 만든 SQL
+              이 데이터를 만든 쿼리
             </span>
             <textarea
               autoFocus
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={8}
-              placeholder="이 데이터를 만든 SQL 을 붙여넣으세요."
+              placeholder="이 데이터를 만든 쿼리를 붙여넣으세요."
               className="w-full min-w-0 bg-brand-canvas text-brand-ink font-mono text-caption rounded-md border border-brand-hairline px-sm py-xs resize-y focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
             />
           </label>
@@ -442,10 +454,10 @@ function QueryModal({
               안 되면 안 된다고 정직하게. */}
           <p className="text-caption text-brand-muted-soft">
             {text.trim().length === 0
-              ? "빈 채로 저장하면 SQL 을 지웁니다."
+              ? "빈 채로 저장하면 쿼리를 지웁니다."
               : detected
                 ? `인식된 테이블: ${detected} — 카드에 칩으로 붙습니다.`
-                : "테이블을 인식하지 못했습니다 — SQL 은 저장되지만 칩은 붙지 않습니다."}
+                : "테이블을 인식하지 못했습니다 — 쿼리는 저장되지만 칩은 붙지 않습니다."}
           </p>
 
           <div className="flex items-center justify-end gap-xs">
@@ -474,12 +486,16 @@ function QueryModal({
  * 카드 얼굴의 칩들 — 이 데이터가 무엇인지 말하는 키워드만.
  *
  * 출처 테이블은 SQL 에서 결정론적으로 아는 경우에만 붙는다(추측 금지).
- * 컬럼은 앞 몇 개만 칩으로, 나머지는 "+N" 칩의 툴팁으로. 행이 없는 스냅샷은
- * 값이 안 실린다는 사실을 카드에서 바로 말한다 — "모델이 왜 내 데이터를
- * 못 보지?"의 원인을 회색 캡션 뒤에 숨기지 않는다.
+ * 컬럼은 앞 몇 개만 칩으로, 나머지는 "+N" 버튼 — 누르면 카드가 늘어나며
+ * 전체 컬럼이 펼쳐지고, 다시 누르면 접힌다(툴팁은 hover 미리보기로 유지).
+ * 행이 없는 스냅샷은 값이 안 실린다는 사실을 카드에서 바로 말한다 —
+ * "모델이 왜 내 데이터를 못 보지?"의 원인을 회색 캡션 뒤에 숨기지 않는다.
  */
 function Chips({ snapshot }: { snapshot: DataSnapshot }) {
-  const chipCols = snapshot.columns.slice(0, CHIP_COLS);
+  const [expanded, setExpanded] = useState(false);
+  const chipCols = expanded
+    ? snapshot.columns
+    : snapshot.columns.slice(0, CHIP_COLS);
   const restCols = snapshot.columns.slice(CHIP_COLS);
   const zeroRows = snapshot.warnings.includes("ZERO_ROWS");
   const sourceTable = tableFromSql(snapshot.sourceSql);
@@ -493,14 +509,15 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
       {sourceTable && (
         <span
           className="inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[6px] py-[3px] font-mono text-[11px] leading-none font-medium text-brand-primary max-w-[160px]"
-          title="출처 테이블 — SQL 의 FROM 에서 인식됨"
+          title="출처 테이블 — 쿼리의 FROM 에서 인식됨"
         >
           <span className="truncate">{sourceTable}</span>
         </span>
       )}
-      {chipCols.map((c) => (
+      {chipCols.map((c, i) => (
+        // 실데이터엔 중복 컬럼명이 온다(조인 SELECT 등) — key 는 위치가 정체성.
         <span
-          key={c}
+          key={`${i}-${c}`}
           className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft bg-brand-ink-translucent-04 px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted max-w-[140px]"
           title={c}
         >
@@ -508,12 +525,22 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
         </span>
       ))}
       {restCols.length > 0 && (
-        <span
-          className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted-soft"
-          title={restCols.join(", ")}
+        <button
+          type="button"
+          onClick={(e) => {
+            // 카드가 클릭을 갖게 되어도(확장 모드의 선택 등) 칩 펼침은 새지 않게.
+            e.stopPropagation();
+            setExpanded((v) => !v);
+          }}
+          aria-expanded={expanded}
+          aria-label={
+            expanded ? "컬럼 접기" : `컬럼 ${restCols.length}개 더 보기`
+          }
+          title={expanded ? "접기" : restCols.join(", ")}
+          className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted-soft hover:text-brand-primary hover:border-brand-primary/40 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
-          +{restCols.length}
-        </span>
+          {expanded ? "접기" : `+${restCols.length}`}
+        </button>
       )}
       {zeroRows && (
         <span
@@ -569,7 +596,7 @@ function CheckIcon() {
 }
 
 /** 등록 시각을 짧게. 오늘이면 시:분만, 아니면 월/일. */
-function formatCapturedAt(iso: string): string {
+export function formatCapturedAt(iso: string): string {
   if (!iso) return "시각 미상";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "시각 미상";
