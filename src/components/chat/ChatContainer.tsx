@@ -101,6 +101,12 @@ export function ChatContainer() {
   // 대화 이력은 상주 컬럼에서 밀려나 헤더 ≡ 로 여는 오버레이 드로어.
   const [historyOpen, setHistoryOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  /**
+   * 데이터 패널 확장 모드(#136) — 패널이 70% 마스터-디테일이 되고 우측(설비
+   * 정보/요약) 패널이 자리를 양보한다. 우측 패널의 탭·detailOpen 상태는 이
+   * 컴포넌트가 쥐고 있으므로 숨겼다 복귀해도 그대로다.
+   */
+  const [dataExpanded, setDataExpanded] = useState(false);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
     rows,
@@ -658,6 +664,8 @@ export function ChatContainer() {
           onSetQuery={setSnapshotSourceSql}
           lastRemoved={lastRemovedSnapshot}
           onRestore={restoreSnapshot}
+          expanded={dataExpanded}
+          onToggleExpanded={() => setDataExpanded((v) => !v)}
         />
 
         {/* 중앙 — 채팅 카드 */}
@@ -739,7 +747,9 @@ export function ChatContainer() {
       </div>
 
         {/* 우 — 설비 정보 / 요약 탭 (상주 카드). 주 작업면은 데이터·채팅이라
-            우측은 좁게 유지한다. */}
+            우측은 좁게 유지한다. 데이터 패널 확장(#136) 동안은 자리를 양보 —
+            탭·상세 상태는 위에서 쥐고 있어 복귀하면 그대로다. */}
+        {!dataExpanded && (
         <aside className="shrink-0 w-[320px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
         <div
           role="tablist"
@@ -786,10 +796,11 @@ export function ChatContainer() {
           />
         </div>
         </aside>
+        )}
       </div>
 
       <EquipmentDetailPanel
-        open={rightTab === "context" && detailOpen}
+        open={!dataExpanded && rightTab === "context" && detailOpen}
         equipmentNames={equipmentNames}
         onClose={() => setDetailOpen(false)}
         onImportToChat={(msg) => {

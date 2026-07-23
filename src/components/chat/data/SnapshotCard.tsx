@@ -44,6 +44,10 @@ type Props = {
   onSetQuery: (id: string, sql: string | undefined) => void;
   /** 방금 등록됨 — 잠깐 강조하고 화면 안으로 스크롤한다(전역 Ctrl+V 는 소리가 없다). */
   flash?: boolean;
+  /** 확장 모드에서만 — 카드 클릭이 상세 뷰의 대상을 고른다. */
+  onSelect?: () => void;
+  /** 확장 모드에서 상세 뷰가 보여주고 있는 카드. */
+  selected?: boolean;
 };
 
 export function SnapshotCard({
@@ -53,6 +57,8 @@ export function SnapshotCard({
   onRename,
   onSetQuery,
   flash = false,
+  onSelect,
+  selected = false,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -110,13 +116,19 @@ export function SnapshotCard({
     "shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors";
 
   return (
+    // 선택은 포인터 편의다 — 내부 버튼 클릭이 선택으로 번져도 "지금 만지는
+    // 카드가 상세에 뜬다"라 자연스럽다. 키보드는 카드 내 버튼 포커스로 충분.
     <div
       ref={cardRef}
+      onClick={onSelect}
       className={[
         "group rounded-lg border px-sm py-xs flex flex-col gap-xxs transition-all",
+        onSelect ? "cursor-pointer" : "",
         flash
           ? "border-brand-primary/50 ring-2 ring-brand-primary/25"
-          : "border-brand-hairline",
+          : selected
+            ? "border-brand-primary/45 bg-brand-primary/5"
+            : "border-brand-hairline",
       ].join(" ")}
     >
       <div className="flex items-start gap-xs">
@@ -569,7 +581,7 @@ function CheckIcon() {
 }
 
 /** 등록 시각을 짧게. 오늘이면 시:분만, 아니면 월/일. */
-function formatCapturedAt(iso: string): string {
+export function formatCapturedAt(iso: string): string {
   if (!iso) return "시각 미상";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "시각 미상";
