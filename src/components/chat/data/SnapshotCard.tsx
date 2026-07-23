@@ -181,87 +181,65 @@ export function SnapshotCard({
           </div>
         )}
 
-        {/* 상시 아이콘 셋 — 열람(전체 보기·CSV)과 출처 쿼리는 이 카드의 본업이라
-            hover 뒤에 숨기지 않는다. */}
-        <button
-          type="button"
-          onClick={() => setQueryOpen(true)}
-          aria-label={`${snapshot.label} 출처 쿼리 ${snapshot.sourceSql ? "편집" : "입력"}`}
-          title={snapshot.sourceSql ? "쿼리 편집" : "쿼리 입력"}
-          className={`${alwaysAction} hover:text-brand-primary ${snapshot.sourceSql ? "text-brand-primary" : ""}`}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <ellipse cx="12" cy="5" rx="9" ry="3" />
-            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-          </svg>
-        </button>
+        {/* 액션 클러스터 — 카드 우측 끝에 붙는다. hover 전용(이름·삭제)은 상시
+            아이콘 **왼쪽**에 둔다: 안 보일 때도 자리는 차지하므로(레이아웃 점프
+            방지), 오른쪽에 두면 상시 아이콘이 가장자리에서 떠 보인다. */}
+        <span className="flex items-center gap-[2px] -mr-[4px] -mt-[2px] shrink-0">
+          {!editing && (
+            <button
+              type="button"
+              onClick={startEdit}
+              aria-label={`${snapshot.label} 이름 바꾸기`}
+              title="이름 바꾸기"
+              className={`${hoverAction} hover:text-brand-primary`}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+              </svg>
+            </button>
+          )}
 
-        <button
-          type="button"
-          onClick={openFullView}
-          aria-label={`${snapshot.label} 전체 보기(새 창)`}
-          title="전체 보기(새 창)"
-          className={`${alwaysAction} hover:text-brand-primary`}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-            <polyline points="15 3 21 3 21 9" />
-            <line x1="10" y1="14" x2="21" y2="3" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          onClick={downloadCsv}
-          aria-label={`${snapshot.label} CSV 다운로드`}
-          title="CSV 다운로드"
-          className={`${alwaysAction} hover:text-brand-primary`}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-        </button>
-
-        {!editing && (
           <button
             type="button"
-            onClick={startEdit}
-            aria-label={`${snapshot.label} 이름 바꾸기`}
-            title="이름 바꾸기"
-            className={`${hoverAction} hover:text-brand-primary`}
+            onClick={() => onRemove(snapshot.id)}
+            aria-label={`${snapshot.label} 삭제`}
+            title="삭제"
+            className={`${hoverAction} hover:text-brand-error`}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+
+          {/* 상시 아이콘 셋 — 열람(전체 보기·CSV)과 출처 쿼리는 이 카드의 본업이라
+              hover 뒤에 숨기지 않는다. */}
+          <button
+            type="button"
+            onClick={() => setQueryOpen(true)}
+            aria-label={`${snapshot.label} 출처 쿼리 ${snapshot.sourceSql ? "편집" : "입력"}`}
+            title={snapshot.sourceSql ? "쿼리 편집" : "쿼리 입력"}
+            className={`${alwaysAction} hover:text-brand-primary ${snapshot.sourceSql ? "text-brand-primary" : ""}`}
           >
             <svg
               width="12"
@@ -274,33 +252,60 @@ export function SnapshotCard({
               strokeLinejoin="round"
               aria-hidden
             >
-              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+              <ellipse cx="12" cy="5" rx="9" ry="3" />
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
             </svg>
           </button>
-        )}
 
-        <button
-          type="button"
-          onClick={() => onRemove(snapshot.id)}
-          aria-label={`${snapshot.label} 삭제`}
-          title="삭제"
-          className={`${hoverAction} hover:text-brand-error`}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
+          <button
+            type="button"
+            onClick={openFullView}
+            aria-label={`${snapshot.label} 전체 보기(새 창)`}
+            title="전체 보기(새 창)"
+            className={`${alwaysAction} hover:text-brand-primary`}
           >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={downloadCsv}
+            aria-label={`${snapshot.label} CSV 다운로드`}
+            title="CSV 다운로드"
+            className={`${alwaysAction} hover:text-brand-primary`}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+        </span>
       </div>
 
       <QueryModal
