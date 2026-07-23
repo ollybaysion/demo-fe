@@ -1,16 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { maybeApplyDevSeed } from "@/lib/dev-seed";
-import { readJson, writeJson } from "@/lib/storage";
+import { loadSnapshots, persistSnapshots } from "@/lib/snapshot-idb";
 import { parseSnapshot, toQueryKey } from "@/lib/snapshot-parse";
 import type { SnapshotParseError } from "@/lib/snapshot-parse";
 import {
-  SNAPSHOTS_STORAGE_KEY,
   autoLabel,
   findByContentHash,
   includedSnapshots,
-  migrateSnapshots,
   removeSnapshot,
   setLabel as setLabelIn,
   toggleIncluded as toggleIncludedIn,
@@ -23,8 +21,8 @@ import type { DataSnapshot } from "@/lib/types";
  * 데이터 스냅샷 패널의 상태.
  *
  * 규칙은 전부 `@/lib/snapshot-store` 의 순수 함수에 있고, 여기는 그것들에
- * `useState` 와 localStorage 를 두른 껍데기다. 서버는 관여하지 않는다 —
- * 등록·토글·삭제는 브라우저 안에서 끝난다.
+ * `useState` 와 IndexedDB(`@/lib/snapshot-idb`)를 두른 껍데기다. 서버는
+ * 관여하지 않는다 — 등록·토글·삭제는 브라우저 안에서 끝난다.
  */
 
 function newId(): string {
@@ -47,19 +45,40 @@ export function useDataSnapshots() {
    */
   const [lastRemoved, setLastRemoved] = useState<DataSnapshot | null>(null);
 
+  /**
+   * 저장소에 반영된 마지막 상태 — 쓰기 diff 의 기준점.
+   * `null` 은 아직 로드 전이라는 뜻이고, 그동안의 쓰기는 미룬다(로드가
+   * 끝나면 그 시점 상태와의 diff 로 한꺼번에 따라잡는다).
+   */
+  const persistedRef = useRef<DataSnapshot[] | null>(null);
+
   useEffect(() => {
-    // dev 전용: ?seed=20 으로 열면 스토리지를 시드로 채운 뒤 읽는다.
-    maybeApplyDevSeed();
-    const stored = readJson<unknown>(SNAPSHOTS_STORAGE_KEY, null);
-    const migrated = migrateSnapshots(stored);
-    if (migrated.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSnapshots(migrated);
-    }
+    let cancelled = false;
+    void (async () => {
+      // dev 전용: ?seed=20 으로 열면 스토리지를 시드로 채운 뒤 읽는다.
+      await maybeApplyDevSeed();
+      const stored = await loadSnapshots();
+      if (cancelled) return;
+      persistedRef.current = stored;
+      // 로드가 비동기라 그 사이 사용자가 이미 등록했을 수 있다 — 덮지 말고
+      // 저장분 위에 얹는다(사용자 쪽이 최신). 다음 쓰기 diff 가 얹힌 것을
+      // 저장소로 따라잡는다.
+      setSnapshots((current) =>
+        current.length === 0
+          ? stored
+          : current.reduce((acc, s) => upsertSnapshot(acc, s), stored),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    writeJson(SNAPSHOTS_STORAGE_KEY, snapshots);
+    const prev = persistedRef.current;
+    if (prev === null || prev === snapshots) return;
+    persistedRef.current = snapshots;
+    void persistSnapshots(prev, snapshots);
   }, [snapshots]);
 
   /**
