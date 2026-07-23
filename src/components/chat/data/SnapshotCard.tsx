@@ -375,7 +375,7 @@ function QueryModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${label} 출처 SQL`}
+      aria-label={`${label} 출처 쿼리`}
       className="fixed inset-0 z-50 flex items-center justify-center p-md"
     >
       <div
@@ -386,7 +386,7 @@ function QueryModal({
       <div className="relative w-full max-w-[32rem] bg-brand-canvas rounded-lg shadow-xl flex flex-col">
         <div className="flex items-center justify-between px-md py-sm border-b border-brand-hairline">
           <h2 className="min-w-0 truncate font-sans text-body-md text-brand-ink">
-            출처 SQL — {label}
+            출처 쿼리 — {label}
           </h2>
           <div className="flex items-center gap-xxs">
             <button
@@ -426,14 +426,14 @@ function QueryModal({
         <div className="px-md py-sm flex flex-col gap-sm">
           <label className="block">
             <span className="block text-caption text-brand-muted mb-xxs">
-              이 데이터를 만든 SQL
+              이 데이터를 만든 쿼리
             </span>
             <textarea
               autoFocus
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={8}
-              placeholder="이 데이터를 만든 SQL 을 붙여넣으세요."
+              placeholder="이 데이터를 만든 쿼리를 붙여넣으세요."
               className="w-full min-w-0 bg-brand-canvas text-brand-ink font-mono text-caption rounded-md border border-brand-hairline px-sm py-xs resize-y focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
             />
           </label>
@@ -442,10 +442,10 @@ function QueryModal({
               안 되면 안 된다고 정직하게. */}
           <p className="text-caption text-brand-muted-soft">
             {text.trim().length === 0
-              ? "빈 채로 저장하면 SQL 을 지웁니다."
+              ? "빈 채로 저장하면 쿼리를 지웁니다."
               : detected
                 ? `인식된 테이블: ${detected} — 카드에 칩으로 붙습니다.`
-                : "테이블을 인식하지 못했습니다 — SQL 은 저장되지만 칩은 붙지 않습니다."}
+                : "테이블을 인식하지 못했습니다 — 쿼리는 저장되지만 칩은 붙지 않습니다."}
           </p>
 
           <div className="flex items-center justify-end gap-xs">
@@ -493,7 +493,7 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
       {sourceTable && (
         <span
           className="inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[6px] py-[3px] font-mono text-[11px] leading-none font-medium text-brand-primary max-w-[160px]"
-          title="출처 테이블 — SQL 의 FROM 에서 인식됨"
+          title="출처 테이블 — 쿼리의 FROM 에서 인식됨"
         >
           <span className="truncate">{sourceTable}</span>
         </span>
