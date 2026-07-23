@@ -23,12 +23,12 @@ import type { DataSnapshot } from "@/lib/types";
  * 읽기에도 어중간했다. 데이터 열람은 상시 아이콘 [전체 보기(새 창)] 와
  * [CSV 다운로드]로 나간다(패널 확장 상세 뷰는 #136).
  *
- * 출처 쿼리는 알 때만 안다: 요청 카드를 채우면 요청 SQL 이 자동으로 붙고,
- * 자유 붙여넣기는 상시 아이콘 [쿼리]가 여는 **모달**에서 직접 붙인다. 붙어
+ * 출처 SQL 은 알 때만 안다: 요청 카드를 채우면 요청 SQL 이 자동으로 붙고,
+ * 자유 붙여넣기는 상시 버튼 [SQL]이 여는 **모달**에서 직접 붙인다. 붙어
  * 있으면 `FROM` 에서 테이블 칩을 파생하고 모달에서 복사할 수 있다 — 없으면
  * 아무것도 지어내지 않는다.
  *
- * 이름 바꾸기·삭제는 hover 에만 보인다 — 열람·쿼리와 달리 매일 쓰는 동작이
+ * 이름 바꾸기·삭제는 hover 에만 보인다 — 열람·SQL 과 달리 매일 쓰는 동작이
  * 아니라서다(키보드 포커스에는 나타난다).
  */
 /** 카드 얼굴에 나열할 컬럼 칩 수 — 나머지는 "+N" 칩의 툴팁으로. */
@@ -40,7 +40,7 @@ type Props = {
   onRemove: (id: string) => void;
   /** 라벨 인라인 편집 — 등록은 이름 없이 끝나므로, 식별이 필요해진 시점에 여기서 짓는다. */
   onRename: (id: string, label: string) => void;
-  /** 출처 쿼리 달기/고치기(빈 값 = 지움) — 테이블 칩이 여기서 파생된다. */
+  /** 출처 SQL 달기/고치기(빈 값 = 지움) — 테이블 칩이 여기서 파생된다. */
   onSetQuery: (id: string, sql: string | undefined) => void;
   /** 방금 등록됨 — 잠깐 강조하고 화면 안으로 스크롤한다(전역 Ctrl+V 는 소리가 없다). */
   flash?: boolean;
@@ -232,30 +232,19 @@ export function SnapshotCard({
             </svg>
           </button>
 
-          {/* 상시 아이콘 셋 — 열람(전체 보기·CSV)과 출처 쿼리는 이 카드의 본업이라
-              hover 뒤에 숨기지 않는다. */}
+          {/* 상시 아이콘 셋 — 열람(전체 보기·CSV)과 출처 SQL 은 이 카드의 본업이라
+              hover 뒤에 숨기지 않는다. SQL 버튼은 아이콘 대신 글자다 — DB 실린더
+              그림은 아무도 "쿼리 입력"으로 읽지 못했다. */}
           <button
             type="button"
             onClick={() => setQueryOpen(true)}
-            aria-label={`${snapshot.label} 출처 쿼리 ${snapshot.sourceSql ? "편집" : "입력"}`}
-            title={snapshot.sourceSql ? "쿼리 편집" : "쿼리 입력"}
-            className={`${alwaysAction} hover:text-brand-primary ${snapshot.sourceSql ? "text-brand-primary" : ""}`}
+            aria-label={`${snapshot.label} 출처 SQL ${snapshot.sourceSql ? "편집" : "입력"}`}
+            title={snapshot.sourceSql ? "SQL 편집" : "SQL 입력"}
+            className={`${alwaysAction} w-auto px-[5px] hover:text-brand-primary ${snapshot.sourceSql ? "text-brand-primary" : ""}`}
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <ellipse cx="12" cy="5" rx="9" ry="3" />
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-            </svg>
+            <span className="font-mono text-[10px] leading-none font-semibold tracking-[0.4px]">
+              SQL
+            </span>
           </button>
 
           <button
@@ -323,7 +312,7 @@ export function SnapshotCard({
 }
 
 /**
- * 출처 쿼리 모달 — 카드의 [쿼리] 아이콘이 연다.
+ * 출처 SQL 모달 — 카드의 [SQL] 버튼이 연다.
  *
  * 카드 안 슬라이드 대신 모달인 이유: 좁은 패널에서 SQL 여러 줄을 편집하기엔
  * 카드 폭이 모자라고, 카드가 늘었다 줄었다 하며 목록이 출렁인다.
@@ -386,7 +375,7 @@ function QueryModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${label} 출처 쿼리`}
+      aria-label={`${label} 출처 SQL`}
       className="fixed inset-0 z-50 flex items-center justify-center p-md"
     >
       <div
@@ -397,15 +386,15 @@ function QueryModal({
       <div className="relative w-full max-w-[32rem] bg-brand-canvas rounded-lg shadow-xl flex flex-col">
         <div className="flex items-center justify-between px-md py-sm border-b border-brand-hairline">
           <h2 className="min-w-0 truncate font-sans text-body-md text-brand-ink">
-            출처 쿼리 — {label}
+            출처 SQL — {label}
           </h2>
           <div className="flex items-center gap-xxs">
             <button
               type="button"
               onClick={copySql}
               disabled={text.trim().length === 0}
-              aria-label={copied ? "복사됨" : "쿼리 복사"}
-              title={copied ? "복사됨" : "쿼리 복사"}
+              aria-label={copied ? "복사됨" : "SQL 복사"}
+              title={copied ? "복사됨" : "SQL 복사"}
               className="inline-flex items-center justify-center w-8 h-8 rounded-sm text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-primary disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
             >
               {copied ? <CheckIcon /> : <CopyIcon />}
@@ -437,14 +426,14 @@ function QueryModal({
         <div className="px-md py-sm flex flex-col gap-sm">
           <label className="block">
             <span className="block text-caption text-brand-muted mb-xxs">
-              이 데이터를 만든 쿼리
+              이 데이터를 만든 SQL
             </span>
             <textarea
               autoFocus
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={8}
-              placeholder="이 데이터를 만든 쿼리를 붙여넣으세요."
+              placeholder="이 데이터를 만든 SQL 을 붙여넣으세요."
               className="w-full min-w-0 bg-brand-canvas text-brand-ink font-mono text-caption rounded-md border border-brand-hairline px-sm py-xs resize-y focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
             />
           </label>
@@ -453,10 +442,10 @@ function QueryModal({
               안 되면 안 된다고 정직하게. */}
           <p className="text-caption text-brand-muted-soft">
             {text.trim().length === 0
-              ? "빈 채로 저장하면 쿼리를 지웁니다."
+              ? "빈 채로 저장하면 SQL 을 지웁니다."
               : detected
                 ? `인식된 테이블: ${detected} — 카드에 칩으로 붙습니다.`
-                : "테이블을 인식하지 못했습니다 — 쿼리는 저장되지만 칩은 붙지 않습니다."}
+                : "테이블을 인식하지 못했습니다 — SQL 은 저장되지만 칩은 붙지 않습니다."}
           </p>
 
           <div className="flex items-center justify-end gap-xs">
@@ -484,7 +473,7 @@ function QueryModal({
 /**
  * 카드 얼굴의 칩들 — 이 데이터가 무엇인지 말하는 키워드만.
  *
- * 출처 테이블은 쿼리에서 결정론적으로 아는 경우에만 붙는다(추측 금지).
+ * 출처 테이블은 SQL 에서 결정론적으로 아는 경우에만 붙는다(추측 금지).
  * 컬럼은 앞 몇 개만 칩으로, 나머지는 "+N" 칩의 툴팁으로. 행이 없는 스냅샷은
  * 값이 안 실린다는 사실을 카드에서 바로 말한다 — "모델이 왜 내 데이터를
  * 못 보지?"의 원인을 회색 캡션 뒤에 숨기지 않는다.
@@ -504,7 +493,7 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
       {sourceTable && (
         <span
           className="inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[6px] py-[3px] font-mono text-[11px] leading-none font-medium text-brand-primary max-w-[160px]"
-          title="출처 테이블 — 쿼리의 FROM 에서 인식됨"
+          title="출처 테이블 — SQL 의 FROM 에서 인식됨"
         >
           <span className="truncate">{sourceTable}</span>
         </span>
