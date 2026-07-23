@@ -23,6 +23,9 @@ const CELL_MAX_W = "max-w-[360px]";
 export function SnapshotDetail({ snapshot }: { snapshot: DataSnapshot }) {
   const [limit, setLimit] = useState(PAGE_ROWS);
   const [copied, setCopied] = useState(false);
+  // 클릭으로 펼친 셀("행:열"). truncate 로 잘린 장문을 그 자리에서 여러 줄로 —
+  // hover title 은 스치면 사라지지만 펼침은 읽는 동안 고정된다.
+  const [openCells, setOpenCells] = useState<Set<string>>(new Set());
 
   // 스냅샷이 바뀌면 렌더 한도·복사 상태를 처음으로 — effect 대신 렌더 중
   // 상태 조정 관례(AddDataModal 의 seed 적용과 같은 패턴).
@@ -31,6 +34,16 @@ export function SnapshotDetail({ snapshot }: { snapshot: DataSnapshot }) {
     setPrevId(snapshot.id);
     setLimit(PAGE_ROWS);
     setCopied(false);
+    setOpenCells(new Set());
+  }
+
+  function toggleCell(k: string) {
+    setOpenCells((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
   }
 
   const rows = snapshot.rows.slice(0, limit);
@@ -127,10 +140,18 @@ export function SnapshotDetail({ snapshot }: { snapshot: DataSnapshot }) {
                         <span className="text-brand-muted-soft italic">
                           NULL
                         </span>
+                      ) : openCells.has(`${i}:${j}`) ? (
+                        <span
+                          className={`block whitespace-pre-wrap break-words cursor-pointer ${CELL_MAX_W}`}
+                          onClick={() => toggleCell(`${i}:${j}`)}
+                        >
+                          {cell}
+                        </span>
                       ) : (
                         <span
-                          className={`block truncate ${CELL_MAX_W}`}
+                          className={`block truncate cursor-pointer ${CELL_MAX_W}`}
                           title={cell}
+                          onClick={() => toggleCell(`${i}:${j}`)}
                         >
                           {cell}
                         </span>
