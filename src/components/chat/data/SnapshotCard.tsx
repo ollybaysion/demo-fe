@@ -18,28 +18,21 @@ import type { DataSnapshot } from "@/lib/types";
  *
  * 카드 얼굴은 **이름 + 칩**이다. "3열 · 5행" 같은 카운트 대신 이 데이터가
  * 무엇인지 말해주는 키워드 — 출처 테이블과 컬럼명 — 를 칩으로 나열한다.
- * 규모는 펼친 미리보기("… 외 N행")가 말한다.
+ *
+ * 좁은 패널에서는 **미리보기를 그리지 않는다** — 3행×4컬럼 발췌는 훑기에도
+ * 읽기에도 어중간했다. 데이터 열람은 상시 아이콘 [전체 보기(새 창)] 와
+ * [CSV 다운로드]로 나간다(패널 확장 상세 뷰는 #136).
  *
  * 출처 쿼리는 알 때만 안다: 요청 카드를 채우면 요청 SQL 이 자동으로 붙고,
- * 자유 붙여넣기는 [쿼리]에서 직접 붙일 수 있다. 붙어 있으면 `FROM` 에서
- * 테이블 칩을 파생하고 펼친 자리에서 복사할 수 있다 — 없으면 아무것도
- * 지어내지 않는다.
+ * 자유 붙여넣기는 상시 아이콘 [쿼리]가 여는 **모달**에서 직접 붙인다. 붙어
+ * 있으면 `FROM` 에서 테이블 칩을 파생하고 모달에서 복사할 수 있다 — 없으면
+ * 아무것도 지어내지 않는다.
  *
- * 표를 다 보여주지 않는다 — 좁은 패널에서 수천 행을 그리면 패널이 쓸모없어진다.
- * 카드 본문을 누르면(쉐브런이 그 신호다) **예시 몇 줄 × 앞 몇 컬럼**만 미리보기로
- * 펼친다(넓은 표를 가로 스크롤로 밀면 어색하다 — 행을 "… 외 N행"으로 접듯 컬럼도
- * "+N"으로 접는다). 전체가 필요하면 펼친 자리의 [전체 보기(새 창)] 또는
- * [CSV 다운로드]로 나간다.
- *
- * 이름 바꾸기·삭제는 hover 에만 보인다 — 카드마다 상시 아이콘 두 개는 목록
- * 전체를 소음으로 만든다(키보드 포커스에는 나타난다).
+ * 이름 바꾸기·삭제는 hover 에만 보인다 — 열람·쿼리와 달리 매일 쓰는 동작이
+ * 아니라서다(키보드 포커스에는 나타난다).
  */
-const PREVIEW_ROWS = 3;
-const PREVIEW_COLS = 4;
 /** 카드 얼굴에 나열할 컬럼 칩 수 — 나머지는 "+N" 칩의 툴팁으로. */
 const CHIP_COLS = 4;
-/** 셀 하나가 미리보기 폭을 다 먹지 않게 — 전문은 title 로. */
-const CELL_MAX_W = "max-w-[120px]";
 
 type Props = {
   snapshot: DataSnapshot;
@@ -61,17 +54,10 @@ export function SnapshotCard({
   onSetQuery,
   flash = false,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [queryOpen, setQueryOpen] = useState(false);
-  const [queryDraft, setQueryDraft] = useState("");
-  const [copied, setCopied] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const preview = snapshot.rows.slice(0, PREVIEW_ROWS);
-  const hidden = snapshot.rows.length - preview.length;
-  const previewCols = snapshot.columns.slice(0, PREVIEW_COLS);
-  const hiddenCols = snapshot.columns.length - previewCols.length;
 
   // 등록 직후의 강조 — 목록 밖(스크롤 아래)에서 조용히 등록되면 "아무 일도
   // 안 일어났다"로 읽힌다. 새 카드가 제 발로 화면에 들어온다.
@@ -92,29 +78,6 @@ export function SnapshotCard({
       onRename(snapshot.id, next);
     }
     setEditing(false);
-  }
-
-  function startQueryEdit() {
-    setQueryDraft(snapshot.sourceSql ?? "");
-    setQueryOpen(true);
-  }
-
-  /** 빈 값 저장 = 쿼리 지움 — 삭제 버튼을 따로 두지 않는다. */
-  function commitQuery() {
-    onSetQuery(snapshot.id, queryDraft);
-    setQueryOpen(false);
-  }
-
-  async function copySql() {
-    if (!snapshot.sourceSql) return;
-    try {
-      await navigator.clipboard.writeText(snapshot.sourceSql);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // 클립보드 권한이 없어도 SQL 은 화면에 그대로 있다 — 복사만 실패한다.
-      setCopied(false);
-    }
   }
 
   /** CSV 파일 다운로드 — blob 을 만들어 한 번 클릭시키고 정리한다. */
@@ -140,6 +103,11 @@ export function SnapshotCard({
     window.open(url, "_blank", "noopener");
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
+
+  const hoverAction =
+    "shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-opacity";
+  const alwaysAction =
+    "shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors";
 
   return (
     <div
@@ -199,69 +167,93 @@ export function SnapshotCard({
             <Chips snapshot={snapshot} />
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            className="flex-1 min-w-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/15 rounded-xs"
-          >
-            <span className="flex items-center gap-xxs">
-              <span
-                className={[
-                  "min-w-0 truncate text-body-sm",
-                  snapshot.included ? "text-brand-ink" : "text-brand-muted",
-                ].join(" ")}
-              >
-                {snapshot.label}
-              </span>
-              {/* 펼침 어포던스 — 이 카드가 열린다는 유일한 시각 신호. */}
-              <svg
-                className={[
-                  "shrink-0 text-brand-muted-soft transition-transform",
-                  expanded ? "rotate-180" : "",
-                ].join(" ")}
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+          <div className="flex-1 min-w-0">
+            <span
+              className={[
+                "block min-w-0 truncate text-body-sm",
+                snapshot.included ? "text-brand-ink" : "text-brand-muted",
+              ].join(" ")}
+              title={snapshot.label}
+            >
+              {snapshot.label}
             </span>
             <Chips snapshot={snapshot} />
-          </button>
+          </div>
         )}
 
-        {!editing && (
-          <button
-            type="button"
-            onClick={startQueryEdit}
-            aria-label={`${snapshot.label} 출처 쿼리 ${snapshot.sourceSql ? "편집" : "입력"}`}
-            title={snapshot.sourceSql ? "쿼리 편집" : "쿼리 입력"}
-            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-opacity"
+        {/* 상시 아이콘 셋 — 열람(전체 보기·CSV)과 출처 쿼리는 이 카드의 본업이라
+            hover 뒤에 숨기지 않는다. */}
+        <button
+          type="button"
+          onClick={() => setQueryOpen(true)}
+          aria-label={`${snapshot.label} 출처 쿼리 ${snapshot.sourceSql ? "편집" : "입력"}`}
+          title={snapshot.sourceSql ? "쿼리 편집" : "쿼리 입력"}
+          className={`${alwaysAction} hover:text-brand-primary ${snapshot.sourceSql ? "text-brand-primary" : ""}`}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <ellipse cx="12" cy="5" rx="9" ry="3" />
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-            </svg>
-          </button>
-        )}
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          onClick={openFullView}
+          aria-label={`${snapshot.label} 전체 보기(새 창)`}
+          title="전체 보기(새 창)"
+          className={`${alwaysAction} hover:text-brand-primary`}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          onClick={downloadCsv}
+          aria-label={`${snapshot.label} CSV 다운로드`}
+          title="CSV 다운로드"
+          className={`${alwaysAction} hover:text-brand-primary`}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
 
         {!editing && (
           <button
@@ -269,7 +261,7 @@ export function SnapshotCard({
             onClick={startEdit}
             aria-label={`${snapshot.label} 이름 바꾸기`}
             title="이름 바꾸기"
-            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-opacity"
+            className={`${hoverAction} hover:text-brand-primary`}
           >
             <svg
               width="12"
@@ -292,7 +284,7 @@ export function SnapshotCard({
           onClick={() => onRemove(snapshot.id)}
           aria-label={`${snapshot.label} 삭제`}
           title="삭제"
-          className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-brand-error hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-opacity"
+          className={`${hoverAction} hover:text-brand-error`}
         >
           <svg
             width="12"
@@ -311,141 +303,175 @@ export function SnapshotCard({
         </button>
       </div>
 
-      {queryOpen && (
-        <div className="border-t border-brand-hairline-soft pt-xs flex flex-col gap-xxs">
-          <textarea
-            autoFocus
-            value={queryDraft}
-            onChange={(e) => setQueryDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setQueryOpen(false);
-            }}
-            rows={3}
-            aria-label={`${snapshot.label} 출처 쿼리`}
-            placeholder="이 데이터를 만든 쿼리를 붙여넣으세요 — FROM 의 테이블이 칩으로 붙습니다."
-            className="w-full min-w-0 bg-brand-canvas text-brand-ink font-mono text-[12px] rounded-md border border-brand-hairline px-xs py-xxs resize-y focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          />
+      <QueryModal
+        open={queryOpen}
+        onClose={() => setQueryOpen(false)}
+        label={snapshot.label}
+        initialSql={snapshot.sourceSql ?? ""}
+        onSave={(sql) => {
+          onSetQuery(snapshot.id, sql);
+          setQueryOpen(false);
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * 출처 쿼리 모달 — 카드의 [쿼리] 아이콘이 연다.
+ *
+ * 카드 안 슬라이드 대신 모달인 이유: 좁은 패널에서 SQL 여러 줄을 편집하기엔
+ * 카드 폭이 모자라고, 카드가 늘었다 줄었다 하며 목록이 출렁인다.
+ * 인식된 테이블을 입력 즉시 보여준다 — 저장 전에 칩에 뭐가 붙을지 알게.
+ */
+function QueryModal({
+  open,
+  onClose,
+  label,
+  initialSql,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  label: string;
+  initialSql: string;
+  onSave: (sql: string) => void;
+}) {
+  const [text, setText] = useState(initialSql);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  // 열릴 때마다 저장분으로 되돌린다 — 지난번에 닫으며 버린 초안이 남지 않게.
+  const [appliedInitial, setAppliedInitial] = useState(initialSql);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen || initialSql !== appliedInitial) {
+    setWasOpen(open);
+    setAppliedInitial(initialSql);
+    if (open) {
+      setText(initialSql);
+      setCopied(false);
+    }
+  }
+
+  if (!open) return null;
+
+  const detected = tableFromSql(text);
+
+  async function copySql() {
+    if (text.trim().length === 0) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 클립보드 권한이 없어도 SQL 은 화면에 그대로 있다 — 복사만 실패한다.
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${label} 출처 쿼리`}
+      className="fixed inset-0 z-50 flex items-center justify-center p-md"
+    >
+      <div
+        className="absolute inset-0 bg-brand-ink/40"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="relative w-full max-w-[32rem] bg-brand-canvas rounded-lg shadow-xl flex flex-col">
+        <div className="flex items-center justify-between px-md py-sm border-b border-brand-hairline">
+          <h2 className="min-w-0 truncate font-sans text-body-md text-brand-ink">
+            출처 쿼리 — {label}
+          </h2>
+          <div className="flex items-center gap-xxs">
+            <button
+              type="button"
+              onClick={copySql}
+              disabled={text.trim().length === 0}
+              aria-label={copied ? "복사됨" : "쿼리 복사"}
+              title={copied ? "복사됨" : "쿼리 복사"}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-sm text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-primary disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              {copied ? <CheckIcon /> : <CopyIcon />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="닫기"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-sm text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="px-md py-sm flex flex-col gap-sm">
+          <label className="block">
+            <span className="block text-caption text-brand-muted mb-xxs">
+              이 데이터를 만든 쿼리
+            </span>
+            <textarea
+              autoFocus
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={8}
+              placeholder="이 데이터를 만든 쿼리를 붙여넣으세요."
+              className="w-full min-w-0 bg-brand-canvas text-brand-ink font-mono text-caption rounded-md border border-brand-hairline px-sm py-xs resize-y focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            />
+          </label>
+
+          {/* 저장 전에 결과를 미리 말한다 — 테이블 인식은 FROM 파싱뿐이라
+              안 되면 안 된다고 정직하게. */}
+          <p className="text-caption text-brand-muted-soft">
+            {text.trim().length === 0
+              ? "빈 채로 저장하면 쿼리를 지웁니다."
+              : detected
+                ? `인식된 테이블: ${detected} — 카드에 칩으로 붙습니다.`
+                : "테이블을 인식하지 못했습니다 — 쿼리는 저장되지만 칩은 붙지 않습니다."}
+          </p>
+
           <div className="flex items-center justify-end gap-xs">
             <button
               type="button"
-              onClick={() => setQueryOpen(false)}
-              className="text-caption text-brand-muted hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+              onClick={onClose}
+              className="inline-flex items-center h-8 px-md rounded-md text-brand-muted text-body-sm hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
             >
               취소
             </button>
             <button
               type="button"
-              onClick={commitQuery}
-              className="text-caption text-brand-primary font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+              onClick={() => onSave(text)}
+              className="inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
             >
               저장
             </button>
           </div>
         </div>
-      )}
-
-      {expanded && (
-        <div className="overflow-x-auto border-t border-brand-hairline-soft pt-xs">
-          {snapshot.sourceSql && (
-            <div className="relative mb-xs">
-              <pre className="text-[12px] font-mono text-brand-body bg-brand-ink-translucent-04 rounded-sm px-xs py-xxs pr-xl whitespace-pre-wrap">
-                {snapshot.sourceSql}
-              </pre>
-              <button
-                type="button"
-                onClick={copySql}
-                aria-label={copied ? "복사됨" : "쿼리 복사"}
-                title={copied ? "복사됨" : "쿼리 복사"}
-                className="absolute top-xxs right-xxs p-xxs rounded-sm text-brand-muted hover:text-brand-primary hover:bg-brand-primary/10 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-              >
-                {copied ? <CheckIcon /> : <CopyIcon />}
-              </button>
-            </div>
-          )}
-          {/* 상하 괘선만 긋는다 — 세로선·배경 채움까지 더하면 좁은 패널에서
-              표가 카드보다 무거워진다. */}
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                {previewCols.map((c) => (
-                  <th
-                    key={c}
-                    className="text-left font-sans font-medium text-[11px] tracking-[0.4px] text-brand-muted-soft border-b border-brand-hairline px-xs pb-[4px] whitespace-nowrap"
-                  >
-                    <span className={`block truncate ${CELL_MAX_W}`} title={c}>
-                      {c}
-                    </span>
-                  </th>
-                ))}
-                {hiddenCols > 0 && (
-                  <th
-                    className="text-left font-sans font-normal text-[11px] text-brand-muted-soft border-b border-brand-hairline px-xs pb-[4px] whitespace-nowrap"
-                    title={snapshot.columns.slice(PREVIEW_COLS).join(", ")}
-                  >
-                    +{hiddenCols}
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {preview.map((row, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-brand-hairline-soft last:border-b-0"
-                >
-                  {row.slice(0, PREVIEW_COLS).map((cell, j) => (
-                    <td
-                      key={j}
-                      className="font-mono text-[12px] text-brand-body px-xs py-[5px] whitespace-nowrap"
-                    >
-                      {/* NULL 과 빈 문자열은 다른 것이다 — 엔진이 구별해 담았으니
-                          화면에서도 접지 않는다. */}
-                      {cell === null ? (
-                        <span className="text-brand-muted-soft italic">
-                          NULL
-                        </span>
-                      ) : (
-                        <span
-                          className={`block truncate ${CELL_MAX_W}`}
-                          title={cell}
-                        >
-                          {cell}
-                        </span>
-                      )}
-                    </td>
-                  ))}
-                  {hiddenCols > 0 && (
-                    <td className="font-mono text-[12px] text-brand-muted-soft px-xs py-[5px]">
-                      …
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {hidden > 0 && (
-            <p className="text-caption text-brand-muted-soft px-xxs pt-xxs">
-              … 외 {hidden}행
-            </p>
-          )}
-          <div className="flex items-center gap-md px-xxs pt-xs">
-            <button
-              type="button"
-              onClick={openFullView}
-              className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
-            >
-              전체 보기(새 창)
-            </button>
-            <button
-              type="button"
-              onClick={downloadCsv}
-              className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
-            >
-              CSV 다운로드
-            </button>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -453,7 +479,7 @@ export function SnapshotCard({
 /**
  * 카드 얼굴의 칩들 — 이 데이터가 무엇인지 말하는 키워드만.
  *
- * 출처 테이블은 요청 SQL 에서 결정론적으로 아는 경우에만 붙는다(추측 금지).
+ * 출처 테이블은 쿼리에서 결정론적으로 아는 경우에만 붙는다(추측 금지).
  * 컬럼은 앞 몇 개만 칩으로, 나머지는 "+N" 칩의 툴팁으로. 행이 없는 스냅샷은
  * 값이 안 실린다는 사실을 카드에서 바로 말한다 — "모델이 왜 내 데이터를
  * 못 보지?"의 원인을 회색 캡션 뒤에 숨기지 않는다.
@@ -473,7 +499,7 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
       {sourceTable && (
         <span
           className="inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[6px] py-[3px] font-mono text-[11px] leading-none font-medium text-brand-primary max-w-[160px]"
-          title={`출처 테이블 — 쿼리의 FROM 에서 인식됨`}
+          title="출처 테이블 — 쿼리의 FROM 에서 인식됨"
         >
           <span className="truncate">{sourceTable}</span>
         </span>
