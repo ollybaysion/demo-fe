@@ -100,9 +100,10 @@ export function SnapshotDetail({ snapshot }: { snapshot: DataSnapshot }) {
           <table className="border-collapse min-w-full">
             <thead>
               <tr>
-                {snapshot.columns.map((c) => (
+                {snapshot.columns.map((c, i) => (
+                  // 실데이터엔 중복 컬럼명이 온다(조인 SELECT 등) — key 는 위치가 정체성.
                   <th
-                    key={c}
+                    key={`${i}-${c}`}
                     className="sticky top-0 z-10 bg-brand-canvas text-left font-sans font-medium text-[11px] tracking-[0.4px] text-brand-muted-soft border-b border-brand-hairline px-sm py-xs whitespace-nowrap"
                   >
                     {c}
