@@ -486,12 +486,16 @@ function QueryModal({
  * 카드 얼굴의 칩들 — 이 데이터가 무엇인지 말하는 키워드만.
  *
  * 출처 테이블은 SQL 에서 결정론적으로 아는 경우에만 붙는다(추측 금지).
- * 컬럼은 앞 몇 개만 칩으로, 나머지는 "+N" 칩의 툴팁으로. 행이 없는 스냅샷은
- * 값이 안 실린다는 사실을 카드에서 바로 말한다 — "모델이 왜 내 데이터를
- * 못 보지?"의 원인을 회색 캡션 뒤에 숨기지 않는다.
+ * 컬럼은 앞 몇 개만 칩으로, 나머지는 "+N" 버튼 — 누르면 카드가 늘어나며
+ * 전체 컬럼이 펼쳐지고, 다시 누르면 접힌다(툴팁은 hover 미리보기로 유지).
+ * 행이 없는 스냅샷은 값이 안 실린다는 사실을 카드에서 바로 말한다 —
+ * "모델이 왜 내 데이터를 못 보지?"의 원인을 회색 캡션 뒤에 숨기지 않는다.
  */
 function Chips({ snapshot }: { snapshot: DataSnapshot }) {
-  const chipCols = snapshot.columns.slice(0, CHIP_COLS);
+  const [expanded, setExpanded] = useState(false);
+  const chipCols = expanded
+    ? snapshot.columns
+    : snapshot.columns.slice(0, CHIP_COLS);
   const restCols = snapshot.columns.slice(CHIP_COLS);
   const zeroRows = snapshot.warnings.includes("ZERO_ROWS");
   const sourceTable = tableFromSql(snapshot.sourceSql);
@@ -510,9 +514,10 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
           <span className="truncate">{sourceTable}</span>
         </span>
       )}
-      {chipCols.map((c) => (
+      {chipCols.map((c, i) => (
+        // 실데이터엔 중복 컬럼명이 온다(조인 SELECT 등) — key 는 위치가 정체성.
         <span
-          key={c}
+          key={`${i}-${c}`}
           className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft bg-brand-ink-translucent-04 px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted max-w-[140px]"
           title={c}
         >
@@ -520,12 +525,22 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
         </span>
       ))}
       {restCols.length > 0 && (
-        <span
-          className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted-soft"
-          title={restCols.join(", ")}
+        <button
+          type="button"
+          onClick={(e) => {
+            // 카드가 클릭을 갖게 되어도(확장 모드의 선택 등) 칩 펼침은 새지 않게.
+            e.stopPropagation();
+            setExpanded((v) => !v);
+          }}
+          aria-expanded={expanded}
+          aria-label={
+            expanded ? "컬럼 접기" : `컬럼 ${restCols.length}개 더 보기`
+          }
+          title={expanded ? "접기" : restCols.join(", ")}
+          className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted-soft hover:text-brand-primary hover:border-brand-primary/40 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
-          +{restCols.length}
-        </span>
+          {expanded ? "접기" : `+${restCols.length}`}
+        </button>
       )}
       {zeroRows && (
         <span
