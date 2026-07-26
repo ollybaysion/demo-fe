@@ -30,7 +30,15 @@ import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
-import { ContextPanel, useContextRows } from "./context";
+import { EquipmentPanel, useContextRows } from "./context";
+import { EquipmentDetailDrawer } from "./context/EquipmentDetailDrawer";
+import {
+  findMockLineByKey,
+  groupKeyForLine,
+  MOCK_EQUIPMENT_CARDS,
+  MOCK_GROUPS,
+  MOCK_REQUESTS,
+} from "./context/equipment-cards.mock";
 import { ConversationsSidebar, useConversations } from "./history";
 import { DataPanel, useDataRequests, useDataSnapshots } from "./data";
 import { toChatPayload } from "@/lib/snapshot-store";
@@ -107,6 +115,76 @@ export function ChatContainer() {
    * 컴포넌트가 쥐고 있으므로 숨겼다 복귀해도 그대로다.
    */
   const [dataExpanded, setDataExpanded] = useState(false);
+  /**
+   * 확장 모드의 **내부 레이아웃**(마스터-디테일) 전환은 폭 애니메이션이 끝난
+   * 뒤에 한다. 폭이 400px 인 채로 360px 마스터 + 상세 면을 요구하면 남는 40px
+   * 안에서 카드가 찌그러져 "깨진" 화면이 300ms 동안 보인다. 접을 때는 반대로
+   * 즉시 되돌린다 — 좁아지기 전에 요구 폭을 먼저 줄여야 한다.
+   */
+  const [dataExpandedInner, setDataExpandedInner] = useState(false);
+  /**
+   * 전환 중에는 **목록 폭이 변하지 않아야** 한다. 목록이 "패널 전체 폭"인
+   * 상태(비확장)와 "마스터 360px"인 상태(확장)를 애니메이션 도중에 오가면,
+   * 카드가 패널 최종 폭까지 늘어났다가 되돌아오는 게 눈에 보인다.
+   *
+   * 그래서 내부 레이아웃은 **두 상태의 합집합**으로 잡는다 — 펼치기는 시작할
+   * 때 켜고, 접기는 끝난 뒤에 끈다. 그동안 목록은 360px 로 고정된다.
+   * 우측 패널 역시 위상을 맞춘다(폭이 늘기 전에 비우고, 줄어든 뒤에 채운다) —
+   * 안 그러면 총 폭이 100% 를 넘어 세 칸이 함께 찌그러진다.
+   *
+   * 펼침: 우측 비움 + 내부 전환(즉시) → 폭 확대
+   * 접힘: 폭 축소 → (끝난 뒤) 내부 되돌림 + 우측 복귀
+   */
+  const [asideVisible, setAsideVisible] = useState(true);
+  /** 상세 면 — 폭이 변하는 동안에는 지워 둔다(글자가 다시 흐르며 깨진다). */
+  const [dataDetailVisible, setDataDetailVisible] = useState(false);
+  const expandTimerRef = useRef<number | null>(null);
+  const SLIDE_MS = 320;
+  const toggleDataExpanded = useCallback(() => {
+    if (expandTimerRef.current !== null) {
+      window.clearTimeout(expandTimerRef.current);
+      expandTimerRef.current = null;
+    }
+    setDataExpanded((prev) => {
+      if (prev) {
+        // 접기 — 상세 면을 **먼저 지우고** 폭을 줄인 뒤, 끝나면 목록을 푼다.
+        setDataDetailVisible(false);
+        expandTimerRef.current = window.setTimeout(() => {
+          setDataExpandedInner(false);
+          setAsideVisible(true);
+          expandTimerRef.current = null;
+        }, SLIDE_MS);
+        return false;
+      }
+      // 펼치기 — 목록 폭을 먼저 고정하고 폭을 늘린 뒤, 끝나면 상세 면을 켠다.
+      setAsideVisible(false);
+      setDataExpandedInner(true);
+      expandTimerRef.current = window.setTimeout(() => {
+        setDataDetailVisible(true);
+        expandTimerRef.current = null;
+      }, SLIDE_MS);
+      return true;
+    });
+  }, []);
+  // 오른쪽 줄 클릭 = 왼쪽에서 그 그룹을 한 번 안내(스크롤 + 깜빡임). 지속
+  // 선택이 아니라 신호라, 같은 줄을 다시 눌러도 반응하도록 nonce 를 올린다.
+  const [groupFocus, setGroupFocus] = useState<{ key: string; n: number }>({
+    key: "",
+    n: 0,
+  });
+  // 왼쪽 그룹의 펼침 상태 — null = 전부 펼침. 줄을 누르면 그 그룹만 남기고
+  // 접는다(다른 게 펼쳐져 있으면 대상이 화면 밖으로 밀려 안 보인다).
+  const [openGroupKeys, setOpenGroupKeys] = useState<string[] | null>(null);
+  // 대기 줄이 가리키는 요청 카드로의 안내 — 그룹 안내와 같은 일회성 신호.
+  const [requestFocus, setRequestFocus] = useState<{ key: string; n: number }>({
+    key: "",
+    n: 0,
+  });
+  // [자세히]로 연 설비 확장 패널 — 내용은 미정, 지금은 껍데기만.
+  const [detailCardId, setDetailCardId] = useState<string | null>(null);
+  const detailCard =
+    MOCK_EQUIPMENT_CARDS.find((c) => c.id === detailCardId) ?? null;
+  // 왼쪽은 상시 그룹 — 목 그룹 + (있으면) 사용자가 직접 등록한 미분류 묶음.
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
     rows,
@@ -154,6 +232,14 @@ export function ChatContainer() {
     clear: clearRequests,
     fulfilledFor: fulfilledRequestsFor,
   } = useDataRequests();
+
+  // 왼쪽 데이터 패널이 그릴 그룹 — 시안용 목 그룹 + 직접 등록분("미분류").
+  const dataGroups = [
+    ...MOCK_GROUPS,
+    ...(snapshots.length > 0
+      ? [{ key: "unassigned", label: "미분류", snapshots }]
+      : []),
+  ];
 
   // ── Conversation ↔ local state sync ─────────────────────────
   // Load: when activeId transitions to a real id, hydrate local chat state
@@ -652,24 +738,68 @@ export function ChatContainer() {
       />
 
       <div className="flex flex-1 min-h-0 gap-md px-md pb-md">
-        {/* 좌 — 데이터 패널 (상주). 등록 결과와 요청 카드가 항상 눈앞에 있다. */}
-        <DataPanel
-          snapshots={snapshots}
-          requests={openRequests}
-          onAdd={handleAddSnapshot}
-          onFulfill={handleFulfillRequest}
-          onToggleIncluded={toggleSnapshotIncluded}
-          onRemove={removeSnapshot}
-          onRename={setSnapshotLabel}
-          onSetQuery={setSnapshotSourceSql}
-          lastRemoved={lastRemovedSnapshot}
-          onRestore={restoreSnapshot}
-          expanded={dataExpanded}
-          onToggleExpanded={() => setDataExpanded((v) => !v)}
-        />
+        {/* 좌 — 데이터 패널(상주). [자세히]가 열리면 폭이 0 으로 접히면서
+            왼쪽으로 미끄러져 나간다 — 그 공간을 채팅과 확장 패널이 나눠 갖는다. */}
+        <div
+          className="relative shrink-0 overflow-hidden transition-[width] duration-300 ease-out"
+          // 폭의 주인이 둘이면 깨진다 — 데이터 패널 확장(#136, 70%)과 설비
+          // [자세히] 접힘(0)을 여기서 한 번에 계산하고, 안쪽 패널은 이 칸을
+          // 그대로 채우게 한다(패널 자신의 w-[400px]/w-[70%] 는 무력화).
+          style={{
+            width: detailCard ? "0px" : dataExpanded ? "70%" : "400px",
+            marginRight: detailCard ? "-1rem" : undefined,
+          }}
+          aria-hidden={detailCard !== null}
+        >
+          <div
+            className={[
+              "absolute inset-0 flex transition-transform duration-200 ease-out",
+              "[&>aside]:!w-full [&>aside]:!transition-none",
+              detailCard ? "-translate-x-[105%]" : "translate-x-0",
+            ].join(" ")}
+          >
+            <DataPanel
+              snapshots={snapshots}
+              // 시안: 목 그룹 + 직접 등록분(요청 메타가 없어 "미분류").
+              groups={dataGroups}
+              focusGroupKey={groupFocus.key}
+              focusNonce={groupFocus.n}
+              focusRequestKey={requestFocus.key}
+              requestFocusNonce={requestFocus.n}
+              openGroupKeys={openGroupKeys}
+              onSetAllGroups={(open: boolean) =>
+                setOpenGroupKeys(open ? null : [])
+              }
+              onToggleGroup={(key) =>
+                setOpenGroupKeys((prev) => {
+                  const base = prev ?? dataGroups.map((g) => g.key);
+                  return base.includes(key)
+                    ? base.filter((k) => k !== key)
+                    : [...base, key];
+                })
+              }
+              // 시안: 대기 줄과 짝이 되는 목 요청 + 실제로 도착한 요청.
+              requests={[...MOCK_REQUESTS, ...openRequests]}
+              onAdd={handleAddSnapshot}
+              onFulfill={handleFulfillRequest}
+              onToggleIncluded={toggleSnapshotIncluded}
+              onRemove={removeSnapshot}
+              onRename={setSnapshotLabel}
+              onSetQuery={setSnapshotSourceSql}
+              lastRemoved={lastRemovedSnapshot}
+              onRestore={restoreSnapshot}
+              expanded={dataExpandedInner}
+              detailVisible={dataDetailVisible}
+              onToggleExpanded={toggleDataExpanded}
+            />
+          </div>
+        </div>
 
-        {/* 중앙 — 채팅 카드 */}
-        <div className="flex flex-1 min-w-0 flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
+        {/* 중앙 — 채팅 카드. 확장 패널이 열리면 남은 폭을 3:7 로 나눈다. */}
+        <div
+          className="flex min-w-0 flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden transition-[flex-grow] duration-200 ease-out"
+          style={{ flexGrow: detailCard ? 3 : 1, flexBasis: 0 }}
+        >
 
         <main className="flex-1 overflow-y-auto scrollbar-none">
           {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
@@ -749,8 +879,45 @@ export function ChatContainer() {
         {/* 우 — 설비 정보 / 요약 탭 (상주 카드). 주 작업면은 데이터·채팅이라
             우측은 좁게 유지한다. 데이터 패널 확장(#136) 동안은 자리를 양보 —
             탭·상세 상태는 위에서 쥐고 있어 복귀하면 그대로다. */}
-        {!dataExpanded && (
-        <aside className="shrink-0 w-[320px] flex flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden">
+        {/* 확장 패널 — 채팅과 설비 패널 **사이** 칸. 닫히면 폭 0(가로 gap 도
+            상쇄), 열리면 남은 폭을 채팅과 3:7 로 나눠 갖는다. */}
+        <div
+          className="relative shrink-0 overflow-hidden transition-[flex-grow] duration-200 ease-out"
+          style={{
+            flexGrow: detailCard ? 7 : 0,
+            flexBasis: 0,
+            minWidth: 0,
+            // 닫히면 제 몫의 가로 여백까지 지우고, 열리면 오른쪽 여백을 상쇄해
+            // 설비 패널과 맞붙는다(둘이 하나의 패널로 보이도록).
+            marginLeft: detailCard ? undefined : "-1rem",
+            marginRight: detailCard ? "-1rem" : undefined,
+          }}
+          aria-hidden={detailCard === null}
+        >
+          <div
+            className={[
+              "absolute inset-0 flex transition-transform duration-200 ease-out",
+              detailCard
+                ? "translate-x-0"
+                : "translate-x-full pointer-events-none",
+            ].join(" ")}
+          >
+            <EquipmentDetailDrawer
+              card={detailCard}
+              onClose={() => setDetailCardId(null)}
+            />
+          </div>
+        </div>
+
+        {/* 우 — 설비 패널. 설비 확장 패널이 열려도 자리를 지킨다(카드에서 바로
+            다른 설비로 옮겨갈 수 있어야 한다). 데이터 패널 확장 때만 비운다. */}
+        {asideVisible && (
+        <aside
+          className={[
+            "shrink-0 w-[320px] flex flex-col border border-brand-hairline bg-brand-canvas overflow-hidden",
+            detailCard ? "rounded-r-xl" : "rounded-xl",
+          ].join(" ")}
+        >
         <div
           role="tablist"
           aria-label="우측 패널 탭"
@@ -768,25 +935,34 @@ export function ChatContainer() {
           />
         </div>
         <div className="flex-1 min-h-0">
-          <ContextPanel
+          {/* 오른쪽 패널 = 설비 카드(시안). 입력 폼(ContextPanel)을 대신하며,
+              카드·줄은 아직 목 데이터에서 온다 — 파생 배선은 다음 단계. */}
+          <EquipmentPanel
             open={rightTab === "context"}
-            rows={rows}
-            timeRange={timeRange}
-            onStartChange={setStart}
-            onEndChange={setEnd}
-            onEquipmentChange={setEquipment}
-            onAddRow={addRow}
-            onDeleteRow={deleteRow}
-            onAddChamber={addChamber}
-            onSetChamberName={setChamberName}
-            onDeleteChamber={deleteChamber}
-            onAddSensor={addSensor}
-            onSetSensorName={setSensorName}
-            onDeleteSensor={deleteSensor}
-            onReset={resetContext}
-            onExpandDetail={() => setDetailOpen(true)}
-            detailOpen={detailOpen}
-            canExpandDetail={equipmentNames.length > 0}
+            cards={MOCK_EQUIPMENT_CARDS}
+            onFocusLine={(lineKey) => {
+              const line = findMockLineByKey(lineKey);
+              // 아직 데이터가 없는 줄은 볼 게 없다 — 대신 그 데이터를 부른
+              // **요청 카드**로 데려간다.
+              if (line?.status === "pending") {
+                if (!line.requestKey) return;
+                setRequestFocus((prev) => ({
+                  key: line.requestKey!,
+                  n: prev.n + 1,
+                }));
+                return;
+              }
+              const key = groupKeyForLine(lineKey);
+              if (!key) return;
+              // 대상만 펼치고 나머지는 접는다 — 그래야 안내가 눈에 들어온다.
+              setOpenGroupKeys([key]);
+              setGroupFocus((prev) => ({ key, n: prev.n + 1 }));
+            }}
+            // 같은 카드를 다시 누르면 닫힌다.
+            onOpenDetail={(id) =>
+              setDetailCardId((prev) => (prev === id ? null : id))
+            }
+            detailCardId={detailCardId}
           />
           <SummaryPanel
             open={rightTab === "summary"}
