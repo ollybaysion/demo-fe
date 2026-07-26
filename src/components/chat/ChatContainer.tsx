@@ -15,9 +15,12 @@ import {
  */
 const REQUEST_TIMEOUT_MS = 30_000;
 import { parseSseStream } from "@/lib/sse";
+import { toChatInputs } from "@/lib/input-store";
 import type {
+  ChatInputs,
   ContextRow,
   DataRequest,
+  InputRequest,
   Message,
   MessageChartEntry,
   MessageEventTimelineEntry,
@@ -40,7 +43,12 @@ import {
   MOCK_REQUESTS,
 } from "./context/equipment-cards.mock";
 import { ConversationsSidebar, useConversations } from "./history";
-import { DataPanel, useDataRequests, useDataSnapshots } from "./data";
+import {
+  DataPanel,
+  useDataRequests,
+  useDataSnapshots,
+  useInputRequests,
+} from "./data";
 import { toChatPayload } from "@/lib/snapshot-store";
 
 type TokenPayload = { content: string };
@@ -73,6 +81,11 @@ type DonePayload = {
    * 대신 사용자에게 조달을 요청하는 통로.
    */
   dataRequests?: DataRequest[];
+  /**
+   * 스킬에 필요한 스칼라 값(예: param_index)이 없어 백엔드가 청한 입력 요청.
+   * 데이터 패널의 입력 카드로 렌더되고, 전부 채우면 자동으로 재분석된다.
+   */
+  inputRequests?: InputRequest[];
 };
 type StreamPayload = TokenPayload | ErrorPayload | DonePayload;
 
@@ -232,6 +245,14 @@ export function ChatContainer() {
     clear: clearRequests,
     fulfilledFor: fulfilledRequestsFor,
   } = useDataRequests();
+  const {
+    values: inputValues,
+    open: openInputCards,
+    openWith: openInputsWith,
+    receive: receiveInputRequests,
+    fill: fillInput,
+    clear: clearInputs,
+  } = useInputRequests();
 
   // 왼쪽 데이터 패널이 그릴 그룹 — 시안용 목 그룹 + 직접 등록분("미분류").
   const dataGroups = [
@@ -295,6 +316,9 @@ export function ChatContainer() {
       context: ContextRow[],
       timeRangeSnapshot: { start: string; end: string },
       demoMeta?: DemoMeta,
+      // 자동 재발사는 방금 채운 값 맵을 명시로 넘긴다(setState 직후라 클로저의
+      // inputValues 는 아직 최신이 아니다). 일반 발화는 생략 → sticky inputValues.
+      inputsSnapshot?: ChatInputs,
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
@@ -320,6 +344,11 @@ export function ChatContainer() {
             // 싣지 않는다: 시나리오는 정해진 답을 내야 하는데, 사용자가 보관해 둔
             // 스냅샷이 끼어들면 재생이 결정론을 잃는다.
             dataSnapshots: demoMeta ? undefined : toChatPayload(snapshots),
+            // 채운 스칼라 입력 — 스킬 네임스페이스. sticky 라 대화 내내 실려 나가
+            // 백엔드가 후속 턴마다 그 값으로 스킬을 이어간다. 데모는 싣지 않는다.
+            inputs: demoMeta
+              ? undefined
+              : toChatInputs(inputsSnapshot ?? inputValues),
           }),
           signal: controller.signal,
         });
@@ -367,13 +396,16 @@ export function ChatContainer() {
               payload.recommendQuestion.length > 0;
             const hasDataRequests =
               !!payload.dataRequests && payload.dataRequests.length > 0;
+            const hasInputRequests =
+              !!payload.inputRequests && payload.inputRequests.length > 0;
             if (
               assistantInserted &&
               (hasTables ||
                 hasCharts ||
                 hasTimelines ||
                 hasRecommend ||
-                hasDataRequests)
+                hasDataRequests ||
+                hasInputRequests)
             ) {
               setMessages((prev) =>
                 prev.map((m) => {
@@ -386,6 +418,7 @@ export function ChatContainer() {
                     next.recommendQuestion = payload.recommendQuestion;
                   }
                   if (hasDataRequests) next.dataRequests = payload.dataRequests;
+                  if (hasInputRequests) next.inputRequests = payload.inputRequests;
                   return next;
                 }),
               );
@@ -403,6 +436,11 @@ export function ChatContainer() {
               if (origin) {
                 receiveRequests(payload.dataRequests!, origin.id);
               }
+            }
+            // 입력 카드도 데이터 패널이 안는다 — 스칼라라 출처 매기 없이 (skill,key)
+            // 로 관리한다. 데모 재생 중에는 만들지 않는다(시나리오 결정론 보존).
+            if (hasInputRequests && !demoMeta) {
+              receiveInputRequests(payload.inputRequests!);
             }
             // 비-데모 모드에서만 extractedContext 적용. 데모는
             // turn.contextPanel 흐름이 우선이라 스킵.
@@ -440,7 +478,54 @@ export function ChatContainer() {
         setIsStreaming(false);
       }
     },
-    [appendRows, replaceRows, replaceTimeRange, snapshots, receiveRequests],
+    [
+      appendRows,
+      replaceRows,
+      replaceTimeRange,
+      snapshots,
+      inputValues,
+      receiveRequests,
+      receiveInputRequests,
+    ],
+  );
+
+  /**
+   * 입력 카드 제출 — 값을 sticky inputs 로 넣고, 요청된 입력이 **전부** 채워지면
+   * 채팅 API 를 자동으로 다시 호출한다("등록 완료" 타이핑 불필요). 스칼라는 값
+   * 하나라 왕복을 자동화한다. 자동 발사가 보내는 것: 트랜스크립트에 보이는 합성
+   * user 메시지(트리거) + 구조화 `inputs`(억제·바인딩). 데모 재생 중엔 입력 카드가
+   * 생기지 않으므로 이 경로는 실 파이프라인에서만 탄다.
+   */
+  const handleSubmitInput = useCallback(
+    (skill: string, key: string, value: string) => {
+      const label =
+        openInputCards.find(
+          (p) => p.request.skill === skill && p.request.key === key,
+        )?.request.label ?? key;
+      const next = fillInput(skill, key, value);
+      if (openInputsWith(next).length > 0) return; // 아직 채울 카드가 남았다
+
+      // 마지막 입력이 채워졌다 → 자동 재발사.
+      const userMessage: Message = {
+        id: newId(),
+        role: "user",
+        content: `입력 완료 — ${label}: ${value}`,
+        createdAt: Date.now(),
+      };
+      const nextHistory = [...messages, userMessage];
+      setMessages(nextHistory);
+      setIsStreaming(true);
+      void sendToApi(nextHistory, nonEmptyRows(rows), timeRange, undefined, next);
+    },
+    [
+      openInputCards,
+      openInputsWith,
+      fillInput,
+      messages,
+      rows,
+      timeRange,
+      sendToApi,
+    ],
   );
 
   const handleScenarioStart = useCallback(
@@ -593,10 +678,12 @@ export function ChatContainer() {
     setDetailOpen(false);
     resetContext();
     // 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라져야 한다.
-    // 스냅샷은 반대로 남는다(대화와 독립된 보관물).
+    // 스냅샷은 반대로 남는다(대화와 독립된 보관물). 채운 입력도 대화에 매인 것이라
+    // 함께 걷어낸다(sticky 지만 새 대화에는 이월하지 않는다).
     clearRequests();
+    clearInputs();
     startNewConversation();
-  }, [resetContext, startNewConversation, clearRequests]);
+  }, [resetContext, startNewConversation, clearRequests, clearInputs]);
 
   const handleSidebarSelect = useCallback(
     (id: string) => {
@@ -607,9 +694,10 @@ export function ChatContainer() {
       setDetailOpen(false);
       setHistoryOpen(false);
       clearRequests();
+      clearInputs();
       selectConversation(id);
     },
-    [isStreaming, selectConversation, clearRequests],
+    [isStreaming, selectConversation, clearRequests, clearInputs],
   );
 
   const equipmentNames = useMemo(
@@ -780,6 +868,8 @@ export function ChatContainer() {
               }
               // 시안: 대기 줄과 짝이 되는 목 요청 + 실제로 도착한 요청.
               requests={[...MOCK_REQUESTS, ...openRequests]}
+              inputRequests={openInputCards}
+              onSubmitInput={handleSubmitInput}
               onAdd={handleAddSnapshot}
               onFulfill={handleFulfillRequest}
               onToggleIncluded={toggleSnapshotIncluded}

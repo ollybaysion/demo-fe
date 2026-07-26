@@ -170,6 +170,11 @@ export type Message = {
    */
   dataRequests?: DataRequest[];
   /**
+   * 입력 요청 — 어시스턴트 메시지에만. 스킬에 필요한 스칼라 값(예: param_index)이
+   * 없어 백엔드가 청한 것. 데이터 패널의 입력 카드로 렌더된다.
+   */
+  inputRequests?: InputRequest[];
+  /**
    * 에러 상세 — `role: "error"` 메시지에만. 사용자 친화 본문은
    * `content`, 원인 분류 / HTTP 상태 / 원본 메시지 등 기술적 디테일은
    * 여기에. UI 에서 [원인 보기] 토글로 접어 노출.
@@ -278,6 +283,34 @@ export type DataRequest = {
    */
   timeRange?: { start: string; end: string };
 };
+
+/**
+ * 입력 요청 — 백엔드가 "스킬에 이 값 하나가 있어야 답할 수 있다"고 알려오는 것.
+ *
+ * {@link DataRequest}(SQL 실행→표 붙여넣기)의 형제지만, 이쪽은 스칼라 값 하나를
+ * 직접 타이핑해 받는다(예: param_index). 사용자가 채운 값은 채팅 요청 본문의
+ * `inputs[skill][key]` 로 되돌아가 백엔드가 그 스킬을 이어서 진행한다.
+ */
+export type InputRequest = {
+  /**
+   * 이 값이 필요한 스킬(툴) 이름. 회신이 이 스킬로 네임스페이스돼
+   * (`inputs[skill][key]`) 같은 key 를 쓰는 여러 스킬이 충돌하지 않는다.
+   */
+  skill: string;
+  /** 스킬 인자 이름 — 채운 값이 이 이름으로 회신된다(예: param_index). */
+  key: string;
+  /** 사람이 읽는 입력 이름 — 카드에 표시된다(예: PARAM_INDEX). */
+  label: string;
+  /** 무슨 값을 넣어야 하는지 짧은 안내(선택). */
+  description?: string;
+};
+
+/**
+ * 채팅 요청에 실리는 채운 입력값 — `POST /api/fdc/v1/chat` 의 `inputs`.
+ * 스킬로 네임스페이스된다({@code {skill: {key: value}}}). 한 번 채운 값은 대화
+ * 내내 sticky 로 매 요청에 실려 나간다(폼 컨텍스트처럼).
+ */
+export type ChatInputs = Record<string, Record<string, string>>;
 
 /**
  * 채팅 요청에 실리는 스냅샷 — `POST /api/fdc/v1/chat` 의 `dataSnapshots[]`.

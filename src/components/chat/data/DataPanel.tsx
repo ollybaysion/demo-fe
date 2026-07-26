@@ -1,10 +1,12 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import type { PendingInput } from "@/lib/input-store";
 import type { PendingRequest } from "@/lib/request-store";
 import type { SnapshotGroupModel } from "../context/equipment-cards.mock";
 import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
+import { InputCard } from "./InputCard";
 import { RequestCard } from "./RequestCard";
 import { SnapshotCard } from "./SnapshotCard";
 import { SnapshotDetail } from "./SnapshotDetail";
@@ -35,6 +37,10 @@ type Props = {
   snapshots: DataSnapshot[];
   /** 아직 채워지지 않은 데이터 요청 — 최상단에 카드로 뜬다. */
   requests: PendingRequest[];
+  /** 아직 채워지지 않은 입력 요청(스칼라) — 요청 카드와 같은 섹션 위쪽에 뜬다. */
+  inputRequests: PendingInput[];
+  /** 입력 카드 제출 — 값을 sticky inputs 로 넣는다(전부 차면 자동 재발사). */
+  onSubmitInput: (skill: string, key: string, value: string) => void;
   onAdd: (input: string) => AddSnapshotResult;
   onFulfill: (
     input: string,
@@ -83,6 +89,8 @@ type Props = {
 export function DataPanel({
   snapshots,
   requests,
+  inputRequests,
+  onSubmitInput,
   onAdd,
   onFulfill,
   onToggleIncluded,
@@ -301,10 +309,11 @@ export function DataPanel({
         >
           <div className="flex-1 overflow-y-auto scrollbar-none">
             {/* 요청이 있으면 무엇보다 먼저 — 모델이 "이게 있어야 답한다"고 세운
-                요구라, 보관 목록보다 위에 둔다. */}
-            {requests.length > 0 && (
+                요구라, 보관 목록보다 위에 둔다. 입력 카드(스칼라)가 위, 조달
+                카드(SQL)가 아래 — 인자가 있어야 조달 SQL 이 렌더되니 선행이다. */}
+            {(requests.length > 0 || inputRequests.length > 0) && (
               <CollapsibleSection
-                title={`요청받은 데이터 (${requests.length})`}
+                title={`요청받은 데이터 (${requests.length + inputRequests.length})`}
                 open={requestsOpen}
                 onToggle={() => setRequestsOpen((v) => !v)}
                 filter={<FilterRow label="요청 필터" />}
@@ -325,6 +334,13 @@ export function DataPanel({
                 }
               >
                 <div className="flex flex-col gap-xs">
+                  {inputRequests.map((p) => (
+                    <InputCard
+                      key={`${p.request.skill} ${p.request.key}`}
+                      request={p.request}
+                      onSubmit={onSubmitInput}
+                    />
+                  ))}
                   {requests.map((p) => (
                     <RequestCard
                       key={p.request.queryKey}
