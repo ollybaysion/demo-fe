@@ -359,6 +359,29 @@ const REQUESTABLE: Array<DataRequest & { triggers: string[] }> = [
     columns: ["RECIPE_ID", "STEP_NO", "STEP_NAME", "DURATION_SEC"],
     sql: "SELECT recipe_id, step_no, step_name, duration_sec\n  FROM fdc_recipe_step\n WHERE recipe_id = :recipe_id\n ORDER BY step_no",
   },
+  // 설비 계열도 조달 대상이다 — 전용 조회 API 를 걷어낸 뒤로 설비 정보는
+  // "요청 → 붙여넣기"로만 들어온다.
+  {
+    queryKey: "equipment_detail",
+    label: "설비 기본 정보",
+    triggers: ["설비 정보", "설비 상세", "상세 정보"],
+    columns: ["EQP_ID", "EQP_NAME", "MODEL_CD", "VENDOR", "USE_YN"],
+    sql: "SELECT eqp_id, eqp_name, model_cd, vendor, use_yn\n  FROM fdc_equipment\n WHERE eqp_id = :equipment_id",
+  },
+  {
+    queryKey: "equipment_peers",
+    label: "동종 설비 목록",
+    triggers: ["동종", "피어", "peer"],
+    columns: ["EQP_ID", "EQP_NAME", "MODEL_CD"],
+    sql: "SELECT eqp_id, eqp_name, model_cd\n  FROM fdc_equipment\n WHERE model_cd = (SELECT model_cd FROM fdc_equipment WHERE eqp_id = :equipment_id)\n   AND eqp_id <> :equipment_id\n ORDER BY eqp_id",
+  },
+  {
+    queryKey: "setup_events",
+    label: "설비 셋업·정비 이력",
+    triggers: ["셋업", "정비 이력"],
+    columns: ["EVT_DT", "EVT_TYPE_CD", "EVT_LABEL"],
+    sql: "SELECT evt_dt, evt_type_cd, evt_label\n  FROM fdc_setup_event\n WHERE eqp_id = :equipment_id\n ORDER BY evt_dt DESC",
+  },
 ];
 
 /** 질문이 건드리는 데이터 중, 아직 동봉되지 않은 것들. */

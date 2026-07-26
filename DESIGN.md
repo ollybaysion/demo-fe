@@ -720,9 +720,7 @@ A chat page is a single-column conversation centered at `{container.chat-narrow}
 
 **`chat-conversation-history-sidebar`** — Left 320px push-layout sidebar (mirror of right-side context panel — `w-0 ↔ w-[320px]` transition, no overlay). Persistent conversation list grouped by relative time (`방금` / `N분 전` / `N시간 전` / `N일 전` / absolute date), each item showing title + context summary (e.g., `ETCH-01 · 2026-05-02 13:00~14:00`). Tap loads that conversation into the chat. Persistence is client-side `localStorage` only (no backend).
 
-**`chat-equipment-detail-panel`** — Right-edge 70vw push panel layered inside the context panel (handle-on-handle). Tabs for `설비 정보` / `챔버 정보` / `센서 정보` / `설비 데이터 비교`. The compare tab does 1:1 side-by-side stats + line-overlay charts for current vs a single peer, post-setup matching mode (window 1d/7d/30d). Diff cells color-coded (warning tint for >+5% mean, teal tint for >−5%, error-soft for ≥2-event anomaly delta). A `[이 차이를 채팅에 가져오기]` action injects the comparison into the chat as an assistant message (paired stats table + per-sensor charts), so the next user query carries the comparison as history context.
-
-**`chat-summary-panel`** — Right 320px panel for ops handover. Sections: 설비 정보 (key:value rows from the context panel), 발생 시간, 요약 (Phase-1 placeholder until backend), 비교 결과 (auto-bundles whatever was imported via `chat-equipment-detail-panel` — most recent only). `[복사]` flattens everything into a single Markdown payload for paste into mail/messenger.
+**`chat-summary-panel`** — Right 320px panel for ops handover. Sections: 설비 정보 (key:value rows carried by the conversation), 발생 시간, 요약 (Phase-1 placeholder until backend). `[복사]` flattens everything into a single Markdown payload for paste into mail/messenger.
 
 **`help-fab`** — Bottom-right fixed circular button (44×44, `{colors.primary}` fill, `{rounded.pill}`) with a `?` glyph. Click opens a centered modal whose body is rendered from `src/content/help.md` through `{component.markdown-rendering-policy}`. Close on `[×]` / `Esc` / backdrop click.
 

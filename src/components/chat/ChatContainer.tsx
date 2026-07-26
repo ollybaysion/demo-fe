@@ -26,7 +26,6 @@ import type {
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
-import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
@@ -108,11 +107,10 @@ export function ChatContainer() {
   const [rightTab, setRightTab] = useState<"context" | "summary">("context");
   // 대화 이력은 상주 컬럼에서 밀려나 헤더 ≡ 로 여는 오버레이 드로어.
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
   /**
    * 데이터 패널 확장 모드(#136) — 패널이 70% 마스터-디테일이 되고 우측(설비
-   * 정보/요약) 패널이 자리를 양보한다. 우측 패널의 탭·detailOpen 상태는 이
-   * 컴포넌트가 쥐고 있으므로 숨겼다 복귀해도 그대로다.
+   * 정보/요약) 패널이 자리를 양보한다. 우측 패널의 탭 상태는 이 컴포넌트가
+   * 쥐고 있으므로 숨겼다 복귀해도 그대로다.
    */
   const [dataExpanded, setDataExpanded] = useState(false);
   /**
@@ -186,20 +184,11 @@ export function ChatContainer() {
     MOCK_EQUIPMENT_CARDS.find((c) => c.id === detailCardId) ?? null;
   // 왼쪽은 상시 그룹 — 목 그룹 + (있으면) 사용자가 직접 등록한 미분류 묶음.
   const [demoState, setDemoState] = useState<DemoState | null>(null);
+  // 편집 핸들러(setEquipment·addChamber…)는 입력 폼 패널이 사라지며 소비자가
+  // 없어졌다 — 훅에는 남아 있고, 여기서는 읽기·복원 경로만 꺼내 쓴다.
   const {
     rows,
     timeRange,
-    setStart,
-    setEnd,
-    setEquipment,
-    addRow,
-    deleteRow,
-    addChamber,
-    setChamberName,
-    deleteChamber,
-    addSensor,
-    setSensorName,
-    deleteSensor,
     replaceRows,
     appendRows,
     replaceTimeRange,
@@ -590,7 +579,6 @@ export function ChatContainer() {
     setMessages([]);
     setIsStreaming(false);
     setDemoState(null);
-    setDetailOpen(false);
     resetContext();
     // 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라져야 한다.
     // 스냅샷은 반대로 남는다(대화와 독립된 보관물).
@@ -604,20 +592,11 @@ export function ChatContainer() {
       // require the user to wait for the current turn to settle.
       if (isStreaming) return;
       setDemoState(null);
-      setDetailOpen(false);
       setHistoryOpen(false);
       clearRequests();
       selectConversation(id);
     },
     [isStreaming, selectConversation, clearRequests],
-  );
-
-  const equipmentNames = useMemo(
-    () =>
-      rows
-        .map((r) => r.equipment.trim())
-        .filter((n) => n.length > 0),
-    [rows],
   );
 
   // 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
@@ -633,20 +612,6 @@ export function ChatContainer() {
     return [];
   }, [messages]);
 
-  // 가장 최근 채팅 인입 비교 메시지의 마크다운 (Phase 3) —
-  // SummaryPanel 의 [비교 결과] Section + 클립보드 복사에 자동 동봉.
-  // EquipmentDetailPanel 이 buildCompareMessage 로 만든 메시지는 id 가
-  // `compare_` prefix.
-  const lastCompareDigest = useMemo<string | undefined>(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant" && m.id.startsWith("compare_")) {
-        return m.content;
-      }
-    }
-    return undefined;
-  }, [messages]);
-
   // 데모 모드에서 다음 turn 에 매칭되는 user 텍스트 — 일치하지 않는 chip
   // 은 SuggestedQuestions 가 비활성화. 비-데모 (실 백엔드) 일 때는 모든
   // chip 활성.
@@ -656,10 +621,8 @@ export function ChatContainer() {
     return scenario?.turns[demoState.turnIndex]?.user;
   }, [demoState]);
 
-  /** 우측 탭 전환. 설비 상세 확장은 설비 탭에 매인 것이라 떠날 때 접는다. */
   function handleRightTab(next: "context" | "summary") {
     setRightTab(next);
-    if (next !== "context") setDetailOpen(false);
   }
 
   /**
@@ -968,22 +931,11 @@ export function ChatContainer() {
             open={rightTab === "summary"}
             rows={rows}
             timeRange={timeRange}
-            compareDigest={lastCompareDigest}
           />
         </div>
         </aside>
         )}
       </div>
-
-      <EquipmentDetailPanel
-        open={!dataExpanded && rightTab === "context" && detailOpen}
-        equipmentNames={equipmentNames}
-        onClose={() => setDetailOpen(false)}
-        onImportToChat={(msg) => {
-          setMessages((prev) => [...prev, msg]);
-          setDetailOpen(false);
-        }}
-      />
 
       <ConversationsSidebar
         open={historyOpen}
