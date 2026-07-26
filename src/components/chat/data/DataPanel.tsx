@@ -2,6 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { PendingRequest } from "@/lib/request-store";
+import type { SnapshotGroupModel } from "../context/equipment-cards.mock";
 import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
 import { RequestCard } from "./RequestCard";
@@ -51,6 +52,32 @@ type Props = {
   /** 확장 모드(70% 마스터-디테일) 여부 — 레이아웃 양보가 걸려 있어 부모 소유. */
   expanded: boolean;
   onToggleExpanded: () => void;
+  /**
+   * 상세 면을 그릴지. 폭이 변하는 **동안에는 그리지 않는다** — 좁아지는 칸에
+   * 남아 있으면 글자가 폭에 맞춰 다시 흐르며 깨져 보인다. 기본값은 `expanded`.
+   */
+  detailVisible?: boolean;
+  /**
+   * 상시 그룹 — 데이터는 늘 (설비 · 구간 · category) 묶음으로 보인다.
+   * 안 넘기면 예전처럼 평평한 목록(`snapshots`)을 그린다.
+   */
+  groups?: SnapshotGroupModel[];
+  /**
+   * 오른쪽 줄을 누르면 그 그룹을 화면 안으로 끌어와 잠깐 깜빡인다.
+   * **지속 상태가 아니다** — 한 번의 안내일 뿐이라, 사용자가 그 뒤에 그룹을
+   * 접거나 다른 걸 봐도 어긋날 상태가 남지 않는다. `focusNonce` 가 바뀔 때마다
+   * 다시 안내한다(같은 줄을 또 눌러도 반응하도록).
+   */
+  focusGroupKey?: string | null;
+  focusNonce?: number;
+  /** 대기 줄이 가리킨 요청 카드 — 같은 방식으로 한 번 안내한다. */
+  focusRequestKey?: string | null;
+  requestFocusNonce?: number;
+  /** 펼쳐진 그룹 키들. `null` = 전부 펼침. 상태의 주인은 호스트다. */
+  openGroupKeys?: string[] | null;
+  onToggleGroup?: (key: string) => void;
+  /** 단 제목 줄 아이콘 — 그룹을 한 번에 접거나 편다. */
+  onSetAllGroups?: (open: boolean) => void;
 };
 
 export function DataPanel({
@@ -66,6 +93,15 @@ export function DataPanel({
   onRestore,
   expanded,
   onToggleExpanded,
+  detailVisible,
+  groups,
+  focusGroupKey,
+  focusNonce = 0,
+  focusRequestKey,
+  requestFocusNonce = 0,
+  openGroupKeys = null,
+  onToggleGroup,
+  onSetAllGroups,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [seed, setSeed] = useState<{
@@ -73,6 +109,12 @@ export function DataPanel({
     error: { code: string; message: string };
   } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  // 요청 묶음 전체 접기 — 요청이 여러 건이면 보관 목록이 한참 아래로 밀린다.
+  const [requestsOpen, setRequestsOpen] = useState(true);
+  // 보관 목록도 같은 급의 단이다 — 요청 단만 접히면 대등하지 않다.
+  const [dataOpen, setDataOpen] = useState(true);
+  // 요청 카드 접힘 — null = 전부 펼침. 단 제목 줄의 아이콘이 여기를 쥔다.
+  const [openRequestKeys, setOpenRequestKeys] = useState<string[] | null>(null);
   /**
    * 방금 등록된 카드 — 잠깐 강조하고 화면 안으로 끌어온다. 전역 Ctrl+V 등록은
    * 스크롤 밖(목록 끝)에서 일어날 수 있어, 피드백이 없으면 "아무 일도 안
@@ -97,6 +139,16 @@ export function DataPanel({
     [],
   );
   const includedCount = snapshots.filter((s) => s.included).length;
+  const showDetail = detailVisible ?? expanded;
+  // 요청 카드를 가리켰는데 단이 접혀 있으면 보여줄 수가 없다 — 먼저 편다.
+  useEffect(() => {
+    if (requestFocusNonce === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRequestsOpen(true);
+  }, [requestFocusNonce]);
+  const dataCount = groups
+    ? groups.reduce((n, g) => n + g.snapshots.length, 0)
+    : snapshots.length;
 
   /**
    * 확장 모드의 상세 대상. 명시 선택이 사라졌으면(삭제 등) 첫 카드로
@@ -192,6 +244,21 @@ export function DataPanel({
             </span>
           )}
         </h2>
+        <div className="shrink-0 flex items-center gap-xxs">
+        {/* 패널 전체 접기 — 두 단을 한 번에. */}
+        <button
+          type="button"
+          onClick={() => {
+            const collapse = requestsOpen || dataOpen;
+            setRequestsOpen(!collapse);
+            setDataOpen(!collapse);
+          }}
+          title={!requestsOpen && !dataOpen ? "전체 펼치기" : "전체 접기"}
+          aria-label={!requestsOpen && !dataOpen ? "전체 펼치기" : "전체 접기"}
+          className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-sm text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+        >
+          <FoldIcon collapsed={!requestsOpen && !dataOpen} />
+        </button>
         {/* 슬라이드 버튼(#136) — 70% 마스터-디테일 확장/복귀. */}
         <button
           type="button"
@@ -217,6 +284,7 @@ export function DataPanel({
             <polyline points="6 17 11 12 6 7" />
           </svg>
         </button>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 flex">
@@ -225,7 +293,9 @@ export function DataPanel({
           className={[
             "flex flex-col min-h-0",
             expanded
-              ? "w-[360px] shrink-0 border-r border-brand-hairline-soft"
+              // 접힘 모드의 패널 폭과 **같은 값**이어야 한다 — 다르면 확장
+              // 전후로 카드 폭이 달라져 목록이 다시 흐른다.
+              ? "w-[400px] shrink-0 border-r border-brand-hairline-soft"
               : "flex-1 min-w-0",
           ].join(" ")}
         >
@@ -233,20 +303,71 @@ export function DataPanel({
             {/* 요청이 있으면 무엇보다 먼저 — 모델이 "이게 있어야 답한다"고 세운
                 요구라, 보관 목록보다 위에 둔다. */}
             {requests.length > 0 && (
-              <Section title={`요청받은 데이터 (${requests.length})`}>
+              <CollapsibleSection
+                title={`요청받은 데이터 (${requests.length})`}
+                open={requestsOpen}
+                onToggle={() => setRequestsOpen((v) => !v)}
+                filter={<FilterRow label="요청 필터" />}
+                action={
+                  <CollapseCardsButton
+                    collapsed={openRequestKeys?.length === 0}
+                    onClick={() =>
+                      setOpenRequestKeys((prev) =>
+                        prev?.length === 0 ? null : [],
+                      )
+                    }
+                    title={
+                      openRequestKeys?.length === 0
+                        ? "요청 카드 전부 펼치기"
+                        : "요청 카드 전부 접기"
+                    }
+                  />
+                }
+              >
                 <div className="flex flex-col gap-xs">
                   {requests.map((p) => (
                     <RequestCard
                       key={p.request.queryKey}
                       request={p.request}
+                      open={
+                        openRequestKeys === null ||
+                        openRequestKeys.includes(p.request.queryKey)
+                      }
+                      onToggle={() =>
+                        setOpenRequestKeys((prev) => {
+                          const base =
+                            prev ?? requests.map((r) => r.request.queryKey);
+                          return base.includes(p.request.queryKey)
+                            ? base.filter((k) => k !== p.request.queryKey)
+                            : [...base, p.request.queryKey];
+                        })
+                      }
+                      focused={p.request.queryKey === focusRequestKey}
+                      focusNonce={requestFocusNonce}
                       onFulfill={handleFulfill}
                     />
                   ))}
                 </div>
-              </Section>
+              </CollapsibleSection>
             )}
 
-            <div className="px-lg pt-md pb-md">
+            <CollapsibleSection
+              title={`등록된 데이터 (${dataCount})`}
+              open={dataOpen}
+              onToggle={() => setDataOpen((v) => !v)}
+              filter={<FilterRow label="데이터 필터" />}
+              action={
+                <CollapseCardsButton
+                  collapsed={openGroupKeys?.length === 0}
+                  onClick={() => onSetAllGroups?.(openGroupKeys?.length === 0)}
+                  title={
+                    openGroupKeys?.length === 0
+                      ? "그룹 전부 펼치기"
+                      : "그룹 전부 접기"
+                  }
+                />
+              }
+            >
               {/* 실수 삭제 구제 — 스냅샷은 SQL 재실행 없이 다시 만들기 번거로워,
                   삭제 직후 한 번은 그 자리에서 되돌릴 수 있어야 한다. */}
               {lastRemoved && (
@@ -264,7 +385,62 @@ export function DataPanel({
                 </div>
               )}
 
-              {snapshots.length === 0 ? (
+              {/* 데이터는 상시 그룹 — 같은 설비·구간·category 에서 나온 카드가
+                  하나의 둥근 틀로 묶인다. `groups` 가 없으면 예전처럼 평평한
+                  목록(확장 모드의 마스터 컬럼도 이 경로를 그대로 쓴다). */}
+              {groups ? (
+                <div className="flex flex-col gap-xs">
+                  {groups.length === 0 ? (
+                    <p className="text-caption text-brand-muted-soft">
+                      아직 등록된 데이터가 없습니다. 채팅이 요청한 조회 결과를
+                      붙여넣으면 그룹으로 쌓입니다.
+                    </p>
+                  ) : (
+                    groups.map((g) => (
+                      <SnapshotGroup
+                        key={g.key}
+                        label={g.label}
+                        count={g.snapshots.length}
+                        open={
+                          openGroupKeys === null || openGroupKeys.includes(g.key)
+                        }
+                        onToggle={() => onToggleGroup?.(g.key)}
+                        focused={g.key === focusGroupKey}
+                        focusNonce={focusNonce}
+                      >
+                        {g.snapshots.length === 0 ? (
+                          <p className="px-xxs pb-xs text-caption text-brand-muted-soft">
+                            이 그룹은 아직 데이터가 없습니다 — 요청만 나간
+                            상태입니다.
+                          </p>
+                        ) : (
+                          g.snapshots.map((s) => (
+                            // 카드는 그룹 바탕보다 한 톤 밝게 — 묶여 있으면서도
+                            // 각각이 떠 보여야 한다.
+                            <div
+                              key={s.id}
+                              className="rounded-lg bg-brand-canvas"
+                            >
+                              <SnapshotCard
+                                snapshot={s}
+                                onToggleIncluded={onToggleIncluded}
+                                onRemove={onRemove}
+                                onRename={onRename}
+                                onSetQuery={onSetQuery}
+                                flash={s.id === flashId}
+                                onSelect={
+                                  expanded ? () => setSelectedId(s.id) : undefined
+                                }
+                                selected={expanded && s.id === detailTarget?.id}
+                              />
+                            </div>
+                          ))
+                        )}
+                      </SnapshotGroup>
+                    ))
+                  )}
+                </div>
+              ) : snapshots.length === 0 ? (
                 <p className="text-caption text-brand-muted-soft">
                   DB 에 붙지 못하는 상황이면, 직접 실행한 조회 결과를 아래 [+
                   데이터 추가]로 붙여넣어 두세요. 체크된 데이터만 질문에 함께
@@ -289,7 +465,7 @@ export function DataPanel({
                   ))}
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
           </div>
 
           {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
@@ -312,7 +488,7 @@ export function DataPanel({
         </div>
 
         {/* 상세 면 — 확장 모드의 오른쪽. 카드에서 걷어낸 "읽기"가 여기 산다. */}
-        {expanded &&
+        {showDetail &&
           (detailTarget ? (
             <SnapshotDetail snapshot={detailTarget} />
           ) : (
@@ -354,16 +530,258 @@ export function DataPanel({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * 좁혀진 한 그룹 — 같은 설비·구간·category 에서 나온 카드들을 하나의 둥근 틀로
+ * 묶는다. 머리를 누르면 접힌다(좁힘 자체를 푸는 [전체 보기]는 패널 최상단).
+ * `key={label}` 로 렌더하므로 다른 그룹으로 옮기면 펼친 상태로 시작한다.
+ */
+const FLASH_MS = 1200;
+
+function SnapshotGroup({
+  label,
+  count,
+  open,
+  onToggle,
+  focused = false,
+  focusNonce = 0,
+  children,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  /** 이번 안내의 대상인가 — 지속 상태가 아니라 한 번의 신호다. */
+  focused?: boolean;
+  focusNonce?: number;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  // 오른쪽 줄을 누른 순간: 화면 안으로 끌어오고 잠깐 깜빡인다(펼침·접힘 정리는
+  // 호스트가 이미 했다). 깜빡임은 렌더 상태가 아니라 클래스로 처리한다 —
+  // 끝나면 흔적이 남지 않아야 하기 때문이다.
+  useEffect(() => {
+    if (!focused || focusNonce === 0) return;
+    const el = ref.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el.classList.add("border-brand-primary", "ring-2", "ring-brand-primary/40");
+    const timer = window.setTimeout(() => {
+      el.classList.remove(
+        "border-brand-primary",
+        "ring-2",
+        "ring-brand-primary/40",
+      );
+    }, FLASH_MS);
+    return () => window.clearTimeout(timer);
+  }, [focused, focusNonce]);
+
   return (
-    <section className="px-lg pt-md pb-md border-b border-brand-hairline-soft">
-      <h3 className="font-sans text-body-sm font-medium text-brand-ink mb-sm">
-        {title}
-      </h3>
-      {children}
+    // 여백은 틀이 아니라 **버튼과 내용**이 나눠 갖는다 — 제목 글자만 눌리면
+    // 표적이 너무 작다(요청 단 제목과 같은 규칙).
+    <div
+      ref={ref}
+      className="rounded-lg border border-brand-hairline bg-brand-surface-soft flex flex-col overflow-hidden transition-[box-shadow,border-color] duration-500"
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-center gap-xs px-sm py-xs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+      >
+        <span className="min-w-0 flex-1 truncate text-caption font-medium text-brand-ink">
+          {label}
+        </span>
+        <span className="shrink-0 text-caption text-brand-muted-soft tabular-nums">
+          {count}
+        </span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+          className={[
+            "shrink-0 text-brand-muted-soft transition-transform",
+            open ? "rotate-90" : "",
+          ].join(" ")}
+        >
+          <polyline points="9 6 15 12 9 18" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-xs pb-xs flex flex-col gap-xs">{children}</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 필터 줄 자리표시자 — 아직 기능이 없다. 점선으로 "여기 들어올 것"임을 알린다.
+ * 단(섹션)마다 따로 두는 게 규칙이다: 요청과 데이터는 거르는 기준이 다르다.
+ */
+function FilterRow({
+  label,
+  action,
+}: {
+  label: string;
+  /** 오른쪽 끝 동작 — 이 단에만 걸린다(예: 전체 축소). */
+  action?: ReactNode;
+}) {
+  return (
+    <div className="mb-xs flex items-center gap-xs rounded-md border border-dashed border-brand-hairline px-sm py-[6px]">
+      <span className="flex-1 min-w-0 text-caption text-brand-muted-soft truncate">
+        {label}
+      </span>
+      {action}
+    </div>
+  );
+}
+
+/**
+ * 안쪽을 한 번에 접고 펴는 아이콘 버튼. 화살표가 **모이면 접기**, **벌어지면
+ * 펴기** — 제목 줄은 좁아서 글자 대신 방향으로 말한다.
+ */
+/** 단 접힘 표시 — 펼쳐지면 위를, 접히면 아래를 가리킨다. */
+function SectionChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={[
+        "shrink-0 text-brand-muted transition-transform",
+        open ? "rotate-180" : "",
+      ].join(" ")}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+/** 안의 카드들을 한 번에 접고 펴는 아이콘 버튼. */
+function CollapseCardsButton({
+  collapsed,
+  onClick,
+  title,
+}: {
+  collapsed: boolean;
+  onClick: () => void;
+  title: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="inline-flex items-center justify-center w-7 h-7 rounded-sm text-brand-muted-soft hover:text-brand-ink hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+    >
+      <FoldIcon collapsed={collapsed} />
+    </button>
+  );
+}
+
+function FoldIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      className="shrink-0 text-brand-muted"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {collapsed ? (
+        <>
+          <polyline points="7 9 12 4 17 9" />
+          <polyline points="7 15 12 20 17 15" />
+        </>
+      ) : (
+        <>
+          <polyline points="7 4 12 9 17 4" />
+          <polyline points="7 20 12 15 17 20" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** 접을 수 있는 섹션 — 제목 줄 전체가 토글이다. */
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  filter,
+  action,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  /** 이 단에만 걸리는 필터 줄 — 펼쳐져 있을 때 목록 맨 위에 놓인다. */
+  filter?: ReactNode;
+  /** 제목 줄 오른쪽 아이콘 — **이 단 안의 카드들**을 한 번에 접는다(단은 그대로). */
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    // 여백은 섹션이 아니라 **버튼**이 갖는다 — 제목 글자만 눌리면 표적이 너무
+    // 작다. 제목 줄 전체(좌우 여백 포함)가 눌리는 면이 된다.
+    // 접히면 아래 여백도 함께 사라져야 한다 — 내용이 없는데 자리를 차지하면
+    // "뭔가 있는데 안 보이는" 빈 칸으로 읽힌다.
+    <section
+      // 구분선을 두지 않는다 — hover 음영 바로 아래에 실선이 깔리면 음영이
+      // 잘린 것처럼 보인다. 단은 제목과 여백만으로 갈린다.
+      className={open ? "pb-md" : ""}
+    >
+      {/* 제목 줄의 두 동작은 층이 다르다:
+          · 제목(넓은 면) = **이 단 자체**를 접는다
+          · 오른쪽 아이콘 = 단은 두고 **안의 카드들**을 접는다
+          음영은 줄 전체에 깔린다 — 둘 다 같은 줄의 동작이기 때문이다. */}
+      <div
+        className={[
+          "flex items-center pl-lg pr-md pt-md hover:bg-brand-ink-translucent-04 transition-colors",
+          open ? "pb-sm" : "pb-md",
+        ].join(" ")}
+      >
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex-1 min-w-0 flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+        >
+          <h3 className="flex-1 min-w-0 font-sans text-body-sm font-medium text-brand-ink truncate">
+            {title}
+          </h3>
+          <SectionChevron open={open} />
+        </button>
+        {action && <span className="shrink-0 pl-xs">{action}</span>}
+      </div>
+      {open && (
+        <div className="px-lg">
+          {filter}
+          {children}
+        </div>
+      )}
     </section>
   );
 }
+
 
 function PlusIcon() {
   return (

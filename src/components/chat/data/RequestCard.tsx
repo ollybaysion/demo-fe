@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { formatRange } from "@/lib/format-range";
 import type { DataRequest } from "@/lib/types";
 import { sampleResultFor } from "./request-samples";
 import type { AddSnapshotResult } from "./useDataSnapshots";
@@ -22,6 +23,12 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  */
 type Props = {
   request: DataRequest;
+  /** 밖에서 접고 펴려면 넘긴다. 없으면 카드가 스스로 쥔다. */
+  open?: boolean;
+  onToggle?: () => void;
+  /** 오른쪽 대기 줄이 이 카드를 가리켰다 — 화면 안으로 들어와 잠깐 깜빡인다. */
+  focused?: boolean;
+  focusNonce?: number;
   onFulfill: (
     input: string,
     label: string,
@@ -38,12 +45,36 @@ const SHOW_SAMPLES =
   process.env.NODE_ENV === "development" ||
   process.env.NEXT_PUBLIC_DEMO_SAMPLES === "1";
 
-export function RequestCard({ request, onFulfill }: Props) {
+export function RequestCard({
+  request,
+  open: openProp,
+  onToggle,
+  focused = false,
+  focusNonce = 0,
+  onFulfill,
+}: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<{ code: string; message: string } | null>(
     null,
   );
   const [copied, setCopied] = useState(false);
+  // 요청 카드는 SQL·붙여넣기 칸까지 안고 있어 세로로 길다 — 여러 건이 쌓이면
+  // 목록을 삼키므로 접을 수 있어야 한다(제목 줄만 남는다).
+  const [openSelf, setOpenSelf] = useState(true);
+  const open = openProp ?? openSelf;
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  // 깜빡임은 렌더 상태가 아니라 클래스로 — 끝나면 흔적이 남지 않아야 한다.
+  useEffect(() => {
+    if (!focused || focusNonce === 0) return;
+    const el = cardRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el.classList.add("ring-2", "ring-brand-primary/40");
+    const timer = window.setTimeout(() => {
+      el.classList.remove("ring-2", "ring-brand-primary/40");
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [focused, focusNonce]);
   // DB 없이 왕복을 걸어볼 수 있게 하는 예시 — 있는 queryKey 에만 버튼이 뜬다.
   const sample = SHOW_SAMPLES ? sampleResultFor(request.queryKey) : null;
 
@@ -77,15 +108,36 @@ export function RequestCard({ request, onFulfill }: Props) {
   }
 
   return (
-    <div className="rounded-md border border-brand-primary bg-brand-surface-card px-sm py-xs flex flex-col gap-xxs">
-      <div className="flex items-center gap-xxs">
+    <div
+      ref={cardRef}
+      className="rounded-md border border-brand-primary bg-brand-surface-card flex flex-col overflow-hidden transition-[box-shadow] duration-500"
+    >
+      <button
+        type="button"
+        onClick={() => (onToggle ? onToggle() : setOpenSelf((v) => !v))}
+        aria-expanded={open}
+        className="w-full px-sm py-xs flex items-start gap-xxs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+      >
         <span className="shrink-0 inline-flex items-center h-5 px-xs rounded-full bg-brand-primary/15 text-brand-primary text-caption font-medium">
           요청됨
         </span>
-        <span className="flex-1 min-w-0 text-body-sm text-brand-ink truncate">
-          {request.label}
+        <span className="flex-1 min-w-0">
+          <span className="block text-body-sm text-brand-ink truncate">
+            {request.label}
+          </span>
+          {/* 구간은 제목에 이어 붙이면 잘린다 — 한 줄 아래에 따로 적는다.
+              구간이 없는 요청(코드표·마스터 등)도 있으니 있을 때만. */}
+          {request.timeRange && (
+            <span className="block text-caption text-brand-muted-soft tabular-nums">
+              {formatRange(request.timeRange.start, request.timeRange.end)}
+            </span>
+          )}
         </span>
-      </div>
+        <ChevronIcon open={open} />
+      </button>
+
+      {open && (
+        <div className="px-sm pb-xs flex flex-col gap-xxs">
 
       <p className="text-caption text-brand-muted">
         이 조회를 실행한 결과를 붙여넣어 주세요.
@@ -161,11 +213,36 @@ export function RequestCard({ request, onFulfill }: Props) {
           등록
         </button>
       </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // 복사 아이콘 한 쌍 — `ChatMessage` 의 메시지 액션과 같은 14px 인라인 SVG 관례.
+/** 접힘/펼침 표시 — 펼쳐지면 아래를 가리킨다. */
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={[
+        "shrink-0 self-start mt-[3px] text-brand-muted transition-transform",
+        open ? "rotate-180" : "",
+      ].join(" ")}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 function CopyIcon() {
   return (
     <svg

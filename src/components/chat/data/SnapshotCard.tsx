@@ -7,6 +7,7 @@ import {
   buildFullViewHtml,
   csvFileName,
 } from "@/lib/snapshot-export";
+import { formatRange } from "@/lib/format-range";
 import type { DataSnapshot } from "@/lib/types";
 
 /**
@@ -189,6 +190,13 @@ export function SnapshotCard({
             >
               {snapshot.label}
             </span>
+            {/* 구간은 이름에 이어 붙이면 잘린다 — 요청 카드와 같이 한 줄 아래로.
+                구간이 없는 데이터(직접 붙여넣기·마스터 조회)도 있으니 있을 때만. */}
+            {snapshot.timeRange && (
+              <span className="block text-caption text-brand-muted-soft tabular-nums">
+                {formatRange(snapshot.timeRange.start, snapshot.timeRange.end)}
+              </span>
+            )}
             <Chips snapshot={snapshot} />
           </div>
         )}
