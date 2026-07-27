@@ -13,7 +13,11 @@
  * 이 예시는 반대로 실 파이프라인을 그대로 태우는 자리에서만 쓰인다.
  */
 
-/** 요청 카드 왕복을 확실히 여는 질문 — REQUESTABLE 트리거("센서 목록")를 포함. */
+/**
+ * 요청 카드 왕복을 확실히 여는 질문 — REQUESTABLE 트리거("센서 목록")를 포함한다.
+ * 설비 id 는 일부러 빼둔다: 있으면 백엔드 MockLlm 의 다른 툴 분기가 이 요청을
+ * 가로챈다. FE mock 라우트가 설비 미검출 시 데모 기본값으로 라벨을 붙여 준다.
+ */
 export const SNAPSHOT_DEMO_QUESTION = "챔버별 센서 목록 보여줘";
 
 const SAMPLES: Record<string, string> = {

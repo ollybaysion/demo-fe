@@ -5,9 +5,10 @@ import { HELP_MARKDOWN } from "@/content/help";
 import { MarkdownContent } from "@/components/chat/message/markdown/MarkdownContent";
 
 /**
- * 도움말 FAB + 모달.
+ * 도움말 버튼 + 모달.
  *
- * - 좌측 하단 fixed FAB (`?` 아이콘) — 모든 화면에서 항상 노출
+ * - 헤더 우측 아이콘 버튼(`?`) — 설정·새 대화와 한 줄에 선다. 화면 구석은
+ *   패널의 진입 버튼(설비 추가)이 쓰므로, 상시 노출이되 그 자리는 비운다.
  * - 클릭 → 중앙 모달 (마크다운 렌더링)
  * - 닫기: X 버튼 / ESC / backdrop 클릭
  * - 모달 내부 스크롤 — 긴 가이드 대응
@@ -36,8 +37,8 @@ export function HelpButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="도움말 / 운영 정책"
-        className="fixed bottom-lg right-lg z-30 inline-flex items-center justify-center w-11 h-11 rounded-full bg-brand-primary text-brand-on-primary shadow-md hover:bg-brand-primary-active focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        title="도움말"
+        className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-md text-brand-muted hover:bg-brand-ink-translucent-04 hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
         <QuestionIcon />
       </button>
@@ -82,8 +83,8 @@ export function HelpButton() {
 function QuestionIcon() {
   return (
     <svg
-      width="20"
-      height="20"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

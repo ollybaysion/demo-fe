@@ -1,10 +1,11 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import type { PendingRequest } from "@/lib/request-store";
-import type { SnapshotGroupModel } from "../context/equipment-cards.mock";
+import type { PendingInput } from "@/lib/input-store";
+import type { DerivedGroup } from "../context/derive-cards";
 import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
+import { InputCard } from "./InputCard";
 import { RequestCard } from "./RequestCard";
 import { SnapshotCard } from "./SnapshotCard";
 import { SnapshotDetail } from "./SnapshotDetail";
@@ -33,8 +34,10 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  */
 type Props = {
   snapshots: DataSnapshot[];
-  /** 아직 채워지지 않은 데이터 요청 — 최상단에 카드로 뜬다. */
-  requests: PendingRequest[];
+  /** 아직 채워지지 않은 입력 요청(스칼라) — 상단 '입력 요청' 섹션에 카드로 뜬다. */
+  inputRequests: PendingInput[];
+  /** 입력 카드 제출 — 값을 sticky inputs 로 넣는다(전부 차면 자동 재발사). */
+  onSubmitInput: (skill: string, key: string, value: string) => void;
   onAdd: (input: string) => AddSnapshotResult;
   onFulfill: (
     input: string,
@@ -58,10 +61,19 @@ type Props = {
    */
   detailVisible?: boolean;
   /**
-   * 상시 그룹 — 데이터는 늘 (설비 · 구간 · category) 묶음으로 보인다.
+   * 설비별 통합 그룹 — 채워진 데이터 카드와 대기 요청 카드가 한 그룹에 함께.
    * 안 넘기면 예전처럼 평평한 목록(`snapshots`)을 그린다.
    */
-  groups?: SnapshotGroupModel[];
+  groups?: DerivedGroup[];
+  /**
+   * 좌측 그룹을 묶는 축. `equipment` = 설비별 통합(요청+데이터 한 그룹),
+   * `type` = 요청/데이터 유형별 분리(요청은 상단, 데이터는 아래 그룹).
+   */
+  viewMode?: "equipment" | "type";
+  onToggleView?: () => void;
+  /** 데이터 스코프 — 참이면 전역 저장분 전부, 거짓이면 현재 세션 등록분만. */
+  scopeAll?: boolean;
+  onToggleScope?: () => void;
   /**
    * 오른쪽 줄을 누르면 그 그룹을 화면 안으로 끌어와 잠깐 깜빡인다.
    * **지속 상태가 아니다** — 한 번의 안내일 뿐이라, 사용자가 그 뒤에 그룹을
@@ -82,7 +94,8 @@ type Props = {
 
 export function DataPanel({
   snapshots,
-  requests,
+  inputRequests,
+  onSubmitInput,
   onAdd,
   onFulfill,
   onToggleIncluded,
@@ -95,6 +108,10 @@ export function DataPanel({
   onToggleExpanded,
   detailVisible,
   groups,
+  viewMode = "equipment",
+  onToggleView,
+  scopeAll = false,
+  onToggleScope,
   focusGroupKey,
   focusNonce = 0,
   focusRequestKey,
@@ -149,6 +166,17 @@ export function DataPanel({
   const dataCount = groups
     ? groups.reduce((n, g) => n + g.snapshots.length, 0)
     : snapshots.length;
+  // 그룹 안 요청 카드의 "전부 접기/펼치기" 기본값을 계산할 원본 키 목록.
+  const allRequestKeys = (groups ?? []).flatMap((g) =>
+    g.requests.map((r) => r.request.queryKey),
+  );
+  // 유형별 모드에서 상단으로 끌어올릴 데이터 요청(그룹에서 평탄화).
+  const flatRequests = (groups ?? []).flatMap((g) => g.requests);
+  // 유형별 모드에선 요청만 있는 그룹(데이터 없음)은 상단에서 다루므로 감춘다.
+  const shownGroups =
+    viewMode === "type"
+      ? (groups ?? []).filter((g) => g.snapshots.length > 0)
+      : (groups ?? []);
 
   /**
    * 확장 모드의 상세 대상. 명시 선택이 사라졌으면(삭제 등) 첫 카드로
@@ -245,6 +273,28 @@ export function DataPanel({
           )}
         </h2>
         <div className="shrink-0 flex items-center gap-xxs">
+        {/* 스코프 토글 — 현재 세션 등록분만(기본) vs 전역 저장분 전부. */}
+        {onToggleScope && (
+          <button
+            type="button"
+            onClick={onToggleScope}
+            title={scopeAll ? "현재 세션 데이터만 보기" : "전체 데이터 보기"}
+            className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            {scopeAll ? "전체" : "현재 세션"}
+          </button>
+        )}
+        {/* 뷰 토글 — 설비별 통합 vs 요청/데이터 유형별. */}
+        {onToggleView && (
+          <button
+            type="button"
+            onClick={onToggleView}
+            title={viewMode === "equipment" ? "유형별로 보기" : "설비별로 보기"}
+            className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            {viewMode === "equipment" ? "설비별" : "유형별"}
+          </button>
+        )}
         {/* 패널 전체 접기 — 두 단을 한 번에. */}
         <button
           type="button"
@@ -300,59 +350,70 @@ export function DataPanel({
           ].join(" ")}
         >
           <div className="flex-1 overflow-y-auto scrollbar-none">
-            {/* 요청이 있으면 무엇보다 먼저 — 모델이 "이게 있어야 답한다"고 세운
-                요구라, 보관 목록보다 위에 둔다. */}
-            {requests.length > 0 && (
+            {/* 상단 요청 섹션. 설비별 모드에선 스칼라 입력 요청만(데이터 요청은
+                각 설비 그룹 안으로). 유형별 모드에선 데이터 요청도 여기로 모은다. */}
+            {(inputRequests.length > 0 ||
+              (viewMode === "type" && flatRequests.length > 0)) && (
               <CollapsibleSection
-                title={`요청받은 데이터 (${requests.length})`}
+                title={`요청받은 데이터 (${
+                  inputRequests.length +
+                  (viewMode === "type" ? flatRequests.length : 0)
+                })`}
                 open={requestsOpen}
                 onToggle={() => setRequestsOpen((v) => !v)}
                 filter={<FilterRow label="요청 필터" />}
-                action={
-                  <CollapseCardsButton
-                    collapsed={openRequestKeys?.length === 0}
-                    onClick={() =>
-                      setOpenRequestKeys((prev) =>
-                        prev?.length === 0 ? null : [],
-                      )
-                    }
-                    title={
-                      openRequestKeys?.length === 0
-                        ? "요청 카드 전부 펼치기"
-                        : "요청 카드 전부 접기"
-                    }
-                  />
-                }
               >
                 <div className="flex flex-col gap-xs">
-                  {requests.map((p) => (
-                    <RequestCard
-                      key={p.request.queryKey}
+                  {inputRequests.map((p) => (
+                    <InputCard
+                      key={`${p.request.skill} ${p.request.key}`}
                       request={p.request}
-                      open={
-                        openRequestKeys === null ||
-                        openRequestKeys.includes(p.request.queryKey)
-                      }
-                      onToggle={() =>
-                        setOpenRequestKeys((prev) => {
-                          const base =
-                            prev ?? requests.map((r) => r.request.queryKey);
-                          return base.includes(p.request.queryKey)
-                            ? base.filter((k) => k !== p.request.queryKey)
-                            : [...base, p.request.queryKey];
-                        })
-                      }
-                      focused={p.request.queryKey === focusRequestKey}
-                      focusNonce={requestFocusNonce}
-                      onFulfill={handleFulfill}
+                      onSubmit={onSubmitInput}
                     />
                   ))}
+                  {viewMode === "type" &&
+                    flatRequests.map((p) => (
+                      <RequestCard
+                        key={p.request.queryKey}
+                        request={p.request}
+                        open={
+                          openRequestKeys === null ||
+                          openRequestKeys.includes(p.request.queryKey)
+                        }
+                        onToggle={() =>
+                          setOpenRequestKeys((prev) => {
+                            const base = prev ?? allRequestKeys;
+                            return base.includes(p.request.queryKey)
+                              ? base.filter((k) => k !== p.request.queryKey)
+                              : [...base, p.request.queryKey];
+                          })
+                        }
+                        focused={p.request.queryKey === focusRequestKey}
+                        focusNonce={requestFocusNonce}
+                        onFulfill={handleFulfill}
+                      />
+                    ))}
                 </div>
               </CollapsibleSection>
             )}
 
+            {/*
+              설비별 모드에선 이 섹션에 **아직 조달 전인 요청 카드도 함께** 산다
+              (설비 하나를 한 자리에서 보려고 그렇게 묶는다). 그래서 제목을
+              "등록된 데이터"라고 하면 요청됨 카드가 등록된 것처럼 읽힌다 —
+              내용에 맞춰 이름과 수를 나눈다. 유형별 모드에선 요청이 위 섹션으로
+              올라가므로 여기 남는 것은 정말 등록분뿐이다.
+            */}
             <CollapsibleSection
-              title={`등록된 데이터 (${dataCount})`}
+              title={
+                viewMode === "equipment"
+                  ? `설비별 데이터 (등록 ${dataCount}${
+                      allRequestKeys.length > 0
+                        ? ` · 요청 ${allRequestKeys.length}`
+                        : ""
+                    })`
+                  : `등록된 데이터 (${dataCount})`
+              }
               open={dataOpen}
               onToggle={() => setDataOpen((v) => !v)}
               filter={<FilterRow label="데이터 필터" />}
@@ -390,17 +451,21 @@ export function DataPanel({
                   목록(확장 모드의 마스터 컬럼도 이 경로를 그대로 쓴다). */}
               {groups ? (
                 <div className="flex flex-col gap-xs">
-                  {groups.length === 0 ? (
+                  {shownGroups.length === 0 ? (
                     <p className="text-caption text-brand-muted-soft">
                       아직 등록된 데이터가 없습니다. 채팅이 요청한 조회 결과를
                       붙여넣으면 그룹으로 쌓입니다.
                     </p>
                   ) : (
-                    groups.map((g) => (
+                    shownGroups.map((g) => (
                       <SnapshotGroup
                         key={g.key}
                         label={g.label}
-                        count={g.snapshots.length}
+                        count={
+                          viewMode === "type"
+                            ? g.snapshots.length
+                            : g.snapshots.length + g.requests.length
+                        }
                         open={
                           openGroupKeys === null || openGroupKeys.includes(g.key)
                         }
@@ -408,34 +473,57 @@ export function DataPanel({
                         focused={g.key === focusGroupKey}
                         focusNonce={focusNonce}
                       >
-                        {g.snapshots.length === 0 ? (
-                          <p className="px-xxs pb-xs text-caption text-brand-muted-soft">
-                            이 그룹은 아직 데이터가 없습니다 — 요청만 나간
-                            상태입니다.
-                          </p>
-                        ) : (
-                          g.snapshots.map((s) => (
-                            // 카드는 그룹 바탕보다 한 톤 밝게 — 묶여 있으면서도
-                            // 각각이 떠 보여야 한다.
-                            <div
-                              key={s.id}
-                              className="rounded-lg bg-brand-canvas"
-                            >
-                              <SnapshotCard
-                                snapshot={s}
-                                onToggleIncluded={onToggleIncluded}
-                                onRemove={onRemove}
-                                onRename={onRename}
-                                onSetQuery={onSetQuery}
-                                flash={s.id === flashId}
-                                onSelect={
-                                  expanded ? () => setSelectedId(s.id) : undefined
-                                }
-                                selected={expanded && s.id === detailTarget?.id}
-                              />
-                            </div>
-                          ))
-                        )}
+                        {/* 설비별 통합 모드에서만 대기 요청 카드를 그룹 안에 얹는다
+                            ('아직 오는 것'이 위, 가진 데이터가 아래). 유형별 모드에선
+                            요청은 상단 섹션에 있으니 여기선 데이터만 보인다. */}
+                        {viewMode === "equipment" &&
+                          g.requests.map((p) => (
+                            <RequestCard
+                              key={p.request.queryKey}
+                              request={p.request}
+                              open={
+                                openRequestKeys === null ||
+                                openRequestKeys.includes(p.request.queryKey)
+                              }
+                              onToggle={() =>
+                                setOpenRequestKeys((prev) => {
+                                  const base = prev ?? allRequestKeys;
+                                  return base.includes(p.request.queryKey)
+                                    ? base.filter(
+                                        (k) => k !== p.request.queryKey,
+                                      )
+                                    : [...base, p.request.queryKey];
+                                })
+                              }
+                              focused={p.request.queryKey === focusRequestKey}
+                              focusNonce={requestFocusNonce}
+                              onFulfill={handleFulfill}
+                            />
+                          ))}
+                        {g.snapshots.map((s) => (
+                          // 카드는 그룹 바탕보다 한 톤 밝게 — 묶여 있으면서도
+                          // 각각이 떠 보여야 한다.
+                          <div key={s.id} className="rounded-lg bg-brand-canvas">
+                            <SnapshotCard
+                              snapshot={s}
+                              onToggleIncluded={onToggleIncluded}
+                              onRemove={onRemove}
+                              onRename={onRename}
+                              onSetQuery={onSetQuery}
+                              flash={s.id === flashId}
+                              onSelect={
+                                expanded ? () => setSelectedId(s.id) : undefined
+                              }
+                              selected={expanded && s.id === detailTarget?.id}
+                            />
+                          </div>
+                        ))}
+                        {g.snapshots.length === 0 &&
+                          g.requests.length === 0 && (
+                            <p className="px-xxs pb-xs text-caption text-brand-muted-soft">
+                              이 그룹은 아직 비어 있습니다.
+                            </p>
+                          )}
                       </SnapshotGroup>
                     ))
                   )}
