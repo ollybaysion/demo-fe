@@ -39,6 +39,23 @@ export function useInputRequests() {
     [values],
   );
 
+  /**
+   * 한 스킬의 값 여러 개를 한 번에 채운다 — "설비 추가" 진입이 2단에서 받아 온
+   * 값처럼, 같은 렌더에서 여러 칸이 동시에 정해지는 경우. `fill` 을 연달아 부르면
+   * 각 호출이 같은 `values` 를 보고 시작해 마지막 하나만 남는다.
+   */
+  const fillAll = useCallback(
+    (skill: string, entries: Record<string, string>): ChatInputs => {
+      const next = Object.entries(entries).reduce(
+        (acc, [key, value]) => setInput(acc, skill, key, value),
+        values,
+      );
+      setValues(next);
+      return next;
+    },
+    [values],
+  );
+
   const clear = useCallback(() => {
     setPending([]);
     setValues({});
@@ -51,6 +68,7 @@ export function useInputRequests() {
     openWith: (v: ChatInputs) => openInputs(pending, v),
     receive,
     fill,
+    fillAll,
     clear,
   };
 }

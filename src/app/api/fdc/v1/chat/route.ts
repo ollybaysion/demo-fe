@@ -374,12 +374,25 @@ const REQUESTABLE: Array<DataRequest & { triggers: string[] }> = [
   },
 ];
 
+/**
+ * 데모: 질문에서 설비 id 토큰(CVD-01 꼴)을 뽑는다. FE 의 파생 배선이 요청 라벨의
+ * "설비 · category" 를 읽어 우측 설비 카드를 만들므로, 질문이 설비를 대면 그
+ * 설비의 카드가 뜨게 된다. 실제 백엔드는 이를 구조화 필드로 실어 보낼 것이다.
+ */
+function extractEquipment(question: string): string | null {
+  const m = /\b([A-Za-z]{2,4}-\d{1,3})\b/.exec(question);
+  return m ? m[1].toUpperCase() : null;
+}
+
 /** 질문이 건드리는 데이터 중, 아직 동봉되지 않은 것들. */
 function missingDataRequests(
   question: string,
   supplied: ChatRequestBody["dataSnapshots"],
 ): DataRequest[] {
   const q = question.toLowerCase();
+  // 설비를 못 대면 데모 기본값으로 — mock 라우트라 늘 설비 카드가 서게 한다
+  // (실제 백엔드는 요청에 진짜 설비를 실어 보낸다).
+  const eq = extractEquipment(question) ?? "CVD-01";
   const have = new Set((supplied ?? []).map((s) => s.queryKey));
   return REQUESTABLE.filter(
     (r) =>
@@ -387,7 +400,9 @@ function missingDataRequests(
       r.triggers.some((t) => q.includes(t.toLowerCase())),
   ).map((r) => ({
     queryKey: r.queryKey,
-    label: r.label,
+    // "설비 · category" 로 — 파생이 그 설비 카드로 묶는다. 구간은 일부러
+    // 비운다(요청과 그 충족 스냅샷이 같은 그룹으로 합쳐지도록).
+    label: `${eq} · ${r.label}`,
     columns: r.columns,
     sql: r.sql,
   }));

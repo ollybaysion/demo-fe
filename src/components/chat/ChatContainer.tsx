@@ -20,6 +20,7 @@ import type {
   ChatInputs,
   ContextRow,
   DataRequest,
+  DataSnapshot,
   InputRequest,
   Message,
   MessageChartEntry,
@@ -35,13 +36,14 @@ import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
 import { EquipmentPanel, useContextRows } from "./context";
 import { EquipmentDetailDrawer } from "./context/EquipmentDetailDrawer";
+import { derivePanel, equipmentCardId, parseLabel } from "./context/derive-cards";
+import { isFulfilledBy, type PendingRequest } from "@/lib/request-store";
 import {
-  findMockLineByKey,
-  groupKeyForLine,
-  MOCK_EQUIPMENT_CARDS,
-  MOCK_GROUPS,
-  MOCK_REQUESTS,
-} from "./context/equipment-cards.mock";
+  equipmentInputKey,
+  skillDataRequests,
+  type Skill,
+  type SkillSession,
+} from "@/lib/skills";
 import { ConversationsSidebar, useConversations } from "./history";
 import {
   DataPanel,
@@ -95,6 +97,23 @@ type DemoState = DemoMeta & { ended: boolean };
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+/**
+ * 미분류 더미 — 설비 메타가 없는 데이터가 어디로 모이는지 늘 한 자리 보여준다.
+ * `included:false` 라 LLM 에 실려 나가지 않고(id 접두사 `dummy-` 로 페이로드에서도
+ * 거른다), 라벨에 ` · ` 가 없어 파생이 "미분류" 그룹으로 떨군다.
+ */
+const DUMMY_UNCLASSIFIED: DataSnapshot = {
+  id: "dummy-unclassified",
+  queryKey: "dummy-unclassified",
+  label: "예시 — 직접 붙여넣은 표(설비 미상)",
+  capturedAt: "2026-05-11T00:00:00.000Z",
+  columns: ["MEMO"],
+  rows: [["설비를 알 수 없는 데이터는 여기로 모입니다"]],
+  contentHash: "dummy-unclassified".padEnd(64, "0"),
+  included: false,
+  warnings: [],
+};
 
 function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
   return rows
@@ -188,15 +207,35 @@ export function ChatContainer() {
   // 왼쪽 그룹의 펼침 상태 — null = 전부 펼침. 줄을 누르면 그 그룹만 남기고
   // 접는다(다른 게 펼쳐져 있으면 대상이 화면 밖으로 밀려 안 보인다).
   const [openGroupKeys, setOpenGroupKeys] = useState<string[] | null>(null);
-  // 대기 줄이 가리키는 요청 카드로의 안내 — 그룹 안내와 같은 일회성 신호.
-  const [requestFocus, setRequestFocus] = useState<{ key: string; n: number }>({
+  // 요청 카드 개별 강조(일회성 신호)의 자리 — 지금은 그룹 단위 안내로 갈음하고,
+  // 우측 설비 카드 강조를 붙일 다음 증분에서 다시 켠다.
+  const [requestFocus] = useState<{ key: string; n: number }>({
     key: "",
     n: 0,
   });
   // [자세히]로 연 설비 확장 패널 — 내용은 미정, 지금은 껍데기만.
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
-  const detailCard =
-    MOCK_EQUIPMENT_CARDS.find((c) => c.id === detailCardId) ?? null;
+  // 요청 도착 시 우측 설비 카드 강조 — 일회성 신호(nonce).
+  const [equipmentFocus, setEquipmentFocus] = useState<{
+    key: string;
+    n: number;
+  }>({ key: "", n: 0 });
+  // 좌측 데이터 패널 뷰 모드 — 설비별 통합 vs 요청/데이터 유형별.
+  const [dataView, setDataView] = useState<"equipment" | "type">("equipment");
+  // 데이터 스코프 — 현재 세션이 등록한 것만(기본) vs 전역 저장분 전부.
+  // 예전 세션의 잔여 스냅샷이 현재 채팅에 실려 나가는 걸 막는다.
+  const [scopeAll, setScopeAll] = useState(false);
+  const [sessionSnapshotIds, setSessionSnapshotIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const rememberSessionSnapshot = useCallback((id: string) => {
+    setSessionSnapshotIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
   // 왼쪽은 상시 그룹 — 목 그룹 + (있으면) 사용자가 직접 등록한 미분류 묶음.
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
@@ -251,16 +290,92 @@ export function ChatContainer() {
     openWith: openInputsWith,
     receive: receiveInputRequests,
     fill: fillInput,
+    fillAll: fillAllInputs,
     clear: clearInputs,
   } = useInputRequests();
 
-  // 왼쪽 데이터 패널이 그릴 그룹 — 시안용 목 그룹 + 직접 등록분("미분류").
-  const dataGroups = [
-    ...MOCK_GROUPS,
-    ...(snapshots.length > 0
-      ? [{ key: "unassigned", label: "미분류", snapshots }]
-      : []),
-  ];
+  // "설비 추가"로 연 스킬 세션 — 설비 하나를 스킬 하나로 본다. 여기 등록된 것이
+  // 좌측 카드(입력·요청)의 출처다.
+  const [skillSessions, setSkillSessions] = useState<SkillSession[]>([]);
+  // 직접 등록한 설비 — **스킬과 무관**하다. 설비만 넣고 채팅부터 시작할 수 있어야
+  // 하므로(진입 1단), 우측 설비 카드의 씨앗은 세션이 아니라 이 목록이다.
+  const [seedEquipments, setSeedEquipments] = useState<string[]>([]);
+
+  /**
+   * 설비 등록 — 이 화면의 **진입**. 두 번 불린다.
+   *
+   * 첫 호출은 설비만(`skill === null`): 카드를 세우고 끝난다. 스킬을 안 고르고
+   * 채팅부터 시작할 수 있어야 하므로, 등록의 최소 단위는 설비 하나다.
+   *
+   * 스킬까지 정해지면 두 번째 호출이 온다. 그때는 **필요한 값이 이미 다 채워져
+   * 있다** — 진입 폼이 다 채우기 전에는 [시작]을 열지 않기 때문이다. 그래서
+   * 여기서 입력 카드를 세울 일은 없고, 설비명과 폼이 받아 온 값(`values`)을
+   * 그대로 값 맵에 넣는 것으로 끝난다. 조회 스텝은 요청 카드로 서고, 그건
+   * 파생이 그린다.
+   */
+  const handleAddEquipment = useCallback(
+    (
+      equipment: string,
+      skill: Skill | null,
+      values: Record<string, string>,
+    ) => {
+      // 설비 카드부터 세운다 — 스킬이 붙든 안 붙든 이건 늘 한다.
+      setSeedEquipments((prev) =>
+        prev.includes(equipment) ? prev : [...prev, equipment],
+      );
+      // 방금 세운 설비 카드로 데려간다 — 등록이 무엇을 만들었는지 보이도록.
+      setRightTab("context");
+      setEquipmentFocus((prev) => ({
+        key: equipmentCardId(equipment),
+        n: prev.n + 1,
+      }));
+      if (!skill) return;
+
+      const session: SkillSession = { id: newId(), equipment, skill };
+      setSkillSessions((prev) =>
+        // 같은 설비를 같은 스킬로 두 번 등록하면 카드가 겹쳐 쌓이기만 한다.
+        prev.some(
+          (s) => s.equipment === equipment && s.skill.skill === skill.skill,
+        )
+          ? prev
+          : [...prev, session],
+      );
+      const eqKey = equipmentInputKey(skill);
+      fillAllInputs(skill.skill, {
+        ...(eqKey ? { [eqKey]: equipment } : {}),
+        ...values,
+      });
+    },
+    [fillAllInputs],
+  );
+
+  // 현재 세션이 등록한 스냅샷만 기본으로 본다 — 전역 저장분(예전 세션 잔여)은
+  // '전체' 스코프에서만. 채팅에 실려 나가는 것도 이 스코프를 따른다.
+  const scopedSnapshots = scopeAll
+    ? snapshots
+    : snapshots.filter((s) => sessionSnapshotIds.has(s.id));
+
+  // "설비 추가"로 등록한 스킬이 세우는 요청 카드 — 상태로 쌓지 않고 **매번
+  // 파생**한다. 그래야 사용자가 입력 카드를 채우는 즉시 그 값이 SQL 의 bind 자리로
+  // 들어가고(고정해 두면 낡은 SQL 이 남는다), 결과를 붙여넣으면 같은 queryKey 의
+  // 스냅샷이 생겨 카드가 저절로 걷힌다.
+  const sessionRequests: PendingRequest[] = skillSessions.flatMap((session) =>
+    skillDataRequests(session, inputValues)
+      .filter((request) => !isFulfilledBy(scopedSnapshots, request.queryKey))
+      .map((request) => ({
+        request,
+        originMessageId: `skill:${session.id}`,
+        fulfilled: false,
+      })),
+  );
+  // 표시용엔 미분류 더미를 얹는다(LLM 페이로드엔 안 실린다 — 아래 scopedSnapshots 사용).
+  const { equipmentCards, groups: dataGroups } = derivePanel(
+    [...openRequests, ...sessionRequests],
+    [...scopedSnapshots, DUMMY_UNCLASSIFIED],
+    seedEquipments,
+  );
+  const detailCard =
+    equipmentCards.find((c) => c.id === detailCardId) ?? null;
 
   // ── Conversation ↔ local state sync ─────────────────────────
   // Load: when activeId transitions to a real id, hydrate local chat state
@@ -343,7 +458,7 @@ export function ChatContainer() {
             // 요청은 지금까지와 똑같은 본문으로 나간다. 데모 재생 중에는 아예
             // 싣지 않는다: 시나리오는 정해진 답을 내야 하는데, 사용자가 보관해 둔
             // 스냅샷이 끼어들면 재생이 결정론을 잃는다.
-            dataSnapshots: demoMeta ? undefined : toChatPayload(snapshots),
+            dataSnapshots: demoMeta ? undefined : toChatPayload(scopedSnapshots),
             // 채운 스칼라 입력 — 스킬 네임스페이스. sticky 라 대화 내내 실려 나가
             // 백엔드가 후속 턴마다 그 값으로 스킬을 이어간다. 데모는 싣지 않는다.
             inputs: demoMeta
@@ -436,6 +551,15 @@ export function ChatContainer() {
               if (origin) {
                 receiveRequests(payload.dataRequests!, origin.id);
               }
+              // 강조는 오른쪽 — 요청이 낳은 설비 카드를 우측에서 펼치고 깜빡인다.
+              const eq = parseLabel(payload.dataRequests![0].label).equipment;
+              if (eq) {
+                setRightTab("context");
+                setEquipmentFocus((prev) => ({
+                  key: equipmentCardId(eq),
+                  n: prev.n + 1,
+                }));
+              }
             }
             // 입력 카드도 데이터 패널이 안는다 — 스칼라라 출처 매기 없이 (skill,key)
             // 로 관리한다. 데모 재생 중에는 만들지 않는다(시나리오 결정론 보존).
@@ -482,10 +606,11 @@ export function ChatContainer() {
       appendRows,
       replaceRows,
       replaceTimeRange,
-      snapshots,
+      scopedSnapshots,
       inputValues,
       receiveRequests,
       receiveInputRequests,
+      setEquipmentFocus,
     ],
   );
 
@@ -682,6 +807,11 @@ export function ChatContainer() {
     // 함께 걷어낸다(sticky 지만 새 대화에는 이월하지 않는다).
     clearRequests();
     clearInputs();
+    // 등록한 설비·스킬도 그 대화의 것이다 — 카드가 새 대화로 넘어오면 안 된다.
+    setSkillSessions([]);
+    setSeedEquipments([]);
+    // 새 세션 — 예전 대화가 등록한 스냅샷은 기본 스코프에서 빠진다('전체'에서만).
+    setSessionSnapshotIds(new Set());
     startNewConversation();
   }, [resetContext, startNewConversation, clearRequests, clearInputs]);
 
@@ -695,6 +825,9 @@ export function ChatContainer() {
       setHistoryOpen(false);
       clearRequests();
       clearInputs();
+      setSkillSessions([]);
+      setSeedEquipments([]);
+      setSessionSnapshotIds(new Set());
       selectConversation(id);
     },
     [isStreaming, selectConversation, clearRequests, clearInputs],
@@ -762,16 +895,23 @@ export function ChatContainer() {
       opts: { include: boolean; queryKey: string; sourceSql?: string },
     ) => {
       const result = addSnapshot(input, label, opts);
-      if (result.ok) fulfillRequest(opts.queryKey);
+      if (result.ok) {
+        fulfillRequest(opts.queryKey);
+        rememberSessionSnapshot(result.snapshot.id);
+      }
       return result;
     },
-    [addSnapshot, fulfillRequest],
+    [addSnapshot, fulfillRequest, rememberSessionSnapshot],
   );
 
   /** 수동 등록 — 이름을 묻지 않는다. 라벨은 내용에서 자동으로 만들어진다. */
   const handleAddSnapshot = useCallback(
-    (input: string) => addSnapshot(input, ""),
-    [addSnapshot],
+    (input: string) => {
+      const result = addSnapshot(input, "");
+      if (result.ok) rememberSessionSnapshot(result.snapshot.id);
+      return result;
+    },
+    [addSnapshot, rememberSessionSnapshot],
   );
 
   // 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지 잘라낸 뒤
@@ -847,9 +987,15 @@ export function ChatContainer() {
             ].join(" ")}
           >
             <DataPanel
-              snapshots={snapshots}
-              // 시안: 목 그룹 + 직접 등록분(요청 메타가 없어 "미분류").
+              snapshots={scopedSnapshots}
+              // 현재 세션 요청 + 스냅샷에서 파생한 그룹. viewMode 로 설비별/유형별.
               groups={dataGroups}
+              viewMode={dataView}
+              onToggleView={() =>
+                setDataView((v) => (v === "equipment" ? "type" : "equipment"))
+              }
+              scopeAll={scopeAll}
+              onToggleScope={() => setScopeAll((v) => !v)}
               focusGroupKey={groupFocus.key}
               focusNonce={groupFocus.n}
               focusRequestKey={requestFocus.key}
@@ -866,8 +1012,6 @@ export function ChatContainer() {
                     : [...base, key];
                 })
               }
-              // 시안: 대기 줄과 짝이 되는 목 요청 + 실제로 도착한 요청.
-              requests={[...MOCK_REQUESTS, ...openRequests]}
               inputRequests={openInputCards}
               onSubmitInput={handleSubmitInput}
               onAdd={handleAddSnapshot}
@@ -1025,34 +1169,25 @@ export function ChatContainer() {
           />
         </div>
         <div className="flex-1 min-h-0">
-          {/* 오른쪽 패널 = 설비 카드(시안). 입력 폼(ContextPanel)을 대신하며,
-              카드·줄은 아직 목 데이터에서 온다 — 파생 배선은 다음 단계. */}
+          {/* 오른쪽 패널 = 설비 카드. 카드·줄은 현재 세션 요청+스냅샷에서 파생. */}
           <EquipmentPanel
             open={rightTab === "context"}
-            cards={MOCK_EQUIPMENT_CARDS}
+            cards={equipmentCards}
             onFocusLine={(lineKey) => {
-              const line = findMockLineByKey(lineKey);
-              // 아직 데이터가 없는 줄은 볼 게 없다 — 대신 그 데이터를 부른
-              // **요청 카드**로 데려간다.
-              if (line?.status === "pending") {
-                if (!line.requestKey) return;
-                setRequestFocus((prev) => ({
-                  key: line.requestKey!,
-                  n: prev.n + 1,
-                }));
-                return;
-              }
-              const key = groupKeyForLine(lineKey);
-              if (!key) return;
-              // 대상만 펼치고 나머지는 접는다 — 그래야 안내가 눈에 들어온다.
-              setOpenGroupKeys([key]);
-              setGroupFocus((prev) => ({ key, n: prev.n + 1 }));
+              // lineKey 는 곧 그룹 키다(설비·구간·category). 그 그룹만 왼쪽에서
+              // 펼치고 깜빡여 안내한다 — 대기 줄이면 그 안에 요청 카드가, 채워진
+              // 줄이면 데이터 카드가 이미 그 그룹에 들어 있다.
+              setOpenGroupKeys([lineKey]);
+              setGroupFocus((prev) => ({ key: lineKey, n: prev.n + 1 }));
             }}
             // 같은 카드를 다시 누르면 닫힌다.
             onOpenDetail={(id) =>
               setDetailCardId((prev) => (prev === id ? null : id))
             }
             detailCardId={detailCardId}
+            focusCardId={equipmentFocus.key}
+            focusNonce={equipmentFocus.n}
+            onAddEquipment={handleAddEquipment}
           />
           <SummaryPanel
             open={rightTab === "summary"}

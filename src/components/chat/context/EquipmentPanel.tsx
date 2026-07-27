@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatRange } from "@/lib/format-range";
+import type { Skill } from "@/lib/skills";
+import { AddEquipment } from "./AddEquipment";
 import type { EquipmentCardModel, EquipmentLine } from "./equipment-cards.mock";
+
+/** 강조 깜빡임 지속(ms) — 요청 도착 안내가 눈에 들되 흔적은 안 남게. */
+const FLASH_MS = 1400;
 
 /**
  * 오른쪽 패널 — **설비 카드**.
@@ -11,7 +16,7 @@ import type { EquipmentCardModel, EquipmentLine } from "./equipment-cards.mock";
  * 아니라, 데이터 요청(설비 / 구간 / category)이 카드와 줄을 만든다.
  *
  * <p>카드는 두 동작을 **다른 행**으로 나눠 갖는다 — 위 본문을 누르면 확장
- * 패널(자세히), 아래 `분석 이력 N` 줄을 누르면 접힘/펼침. 같은 행에서 둘이
+ * 패널(자세히), 아래 `분석 카드 N` 줄을 누르면 접힘/펼침. 같은 행에서 둘이
  * 경쟁하면 어느 쪽도 눌러야 할 곳으로 안 읽힌다.
  *
  * <p>색 규율: **주황(primary)은 "선택"에만** 쓴다 — 대기는 회색 점선과 글자로,
@@ -27,6 +32,18 @@ type Props = {
   onOpenDetail: (cardId: string) => void;
   /** 지금 확장 패널이 열려 있는 카드 — 그 카드가 "열린 상태"로 보여야 한다. */
   detailCardId: string | null;
+  /** 요청 도착 안내 대상 카드 — 펼치고 잠깐 깜빡인다. 일회성 신호(nonce). */
+  focusCardId?: string | null;
+  focusNonce?: number;
+  /**
+   * "설비 추가" 등록 — 설비명 + 스킬 + 진입에서 받아 둔 인자 값. 안 넘기면 진입
+   * 버튼을 아예 안 그린다(파생만으로 카드가 서는 화면).
+   */
+  onAddEquipment?: (
+    equipment: string,
+    skill: Skill | null,
+    values: Record<string, string>,
+  ) => void;
 };
 
 export function EquipmentPanel({
@@ -35,11 +52,28 @@ export function EquipmentPanel({
   onFocusLine,
   onOpenDetail,
   detailCardId,
+  focusCardId = null,
+  focusNonce = 0,
+  onAddEquipment,
 }: Props) {
   // 첫 카드는 펼쳐 둔다 — 빈 목록처럼 보이지 않게.
   const [expanded, setExpanded] = useState<string[]>(() =>
     cards.length > 0 ? [cards[0].id] : [],
   );
+  // 카드의 [+]가 하단 진입 폼에 "이 설비로 스킬부터" 라고 알리는 신호.
+  const [skillFor, setSkillFor] = useState<{
+    equipment: string;
+    nonce: number;
+  } | null>(null);
+
+  // 요청이 도착하면 그 설비 카드를 펼쳐 둔다 — 강조가 접힌 카드 뒤에 숨지 않게.
+  useEffect(() => {
+    if (focusNonce === 0 || !focusCardId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExpanded((prev) =>
+      prev.includes(focusCardId) ? prev : [...prev, focusCardId],
+    );
+  }, [focusNonce, focusCardId]);
 
   function toggle(id: string) {
     setExpanded((prev) =>
@@ -76,8 +110,9 @@ export function EquipmentPanel({
           </div>
           {cards.length === 0 ? (
             <p className="text-caption text-brand-muted-soft leading-relaxed">
-              아직 조회된 설비가 없습니다. 채팅에서 데이터를 요청하면 여기에
-              설비 카드가 생깁니다.
+              {onAddEquipment
+                ? "아직 설비가 없습니다 — 아래 [+]로 분석을 시작하거나, 채팅에서 데이터를 요청하면 여기에 설비 카드가 생깁니다."
+                : "아직 조회된 설비가 없습니다. 채팅에서 데이터를 요청하면 여기에 설비 카드가 생깁니다."}
             </p>
           ) : (
             cards.map((card) => (
@@ -89,10 +124,33 @@ export function EquipmentPanel({
                 onFocusLine={onFocusLine}
                 onOpenDetail={() => onOpenDetail(card.id)}
                 detailOpen={card.id === detailCardId}
+                focused={card.id === focusCardId}
+                focusNonce={focusNonce}
+                onAddSkill={
+                  onAddEquipment
+                    ? () =>
+                        setSkillFor((prev) => ({
+                          equipment: card.equipment,
+                          nonce: (prev?.nonce ?? 0) + 1,
+                        }))
+                    : undefined
+                }
               />
             ))
           )}
         </div>
+
+        {/* 하단 진입 — 접혀 있을 땐 동그란 [+] 하나가 가운데. 목록이 얼마나 길든
+            진입은 늘 여기 있고, 펼치면 같은 자리에서 폼이 위로 자란다. */}
+        {onAddEquipment && (
+          <div className="shrink-0 px-lg py-md flex justify-center">
+            <AddEquipment
+              onAdd={onAddEquipment}
+              existing={cards.map((c) => c.equipment)}
+              openFor={skillFor}
+            />
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -105,6 +163,9 @@ function EquipmentCard({
   onFocusLine,
   onOpenDetail,
   detailOpen,
+  focused = false,
+  focusNonce = 0,
+  onAddSkill,
 }: {
   card: EquipmentCardModel;
   open: boolean;
@@ -112,13 +173,37 @@ function EquipmentCard({
   onFocusLine: (lineKey: string) => void;
   onOpenDetail: () => void;
   detailOpen: boolean;
+  focused?: boolean;
+  focusNonce?: number;
+  /** 이 설비에 분석을 더한다 — 하단 폼이 스킬 단계로 열린다. */
+  onAddSkill?: () => void;
 }) {
   const known = card.descriptors.length > 0;
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  // 요청 도착 안내 — 화면 안으로 끌어오고 잠깐 깜빡인다. 지속 상태가 아니라
+  // 클래스로 처리해 끝나면 흔적이 남지 않게 한다(왼쪽 그룹 안내와 같은 규칙).
+  useEffect(() => {
+    if (!focused || focusNonce === 0) return;
+    const el = ref.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el.classList.add("border-brand-primary", "ring-2", "ring-brand-primary/40");
+    const timer = window.setTimeout(() => {
+      el.classList.remove(
+        "border-brand-primary",
+        "ring-2",
+        "ring-brand-primary/40",
+      );
+    }, FLASH_MS);
+    return () => window.clearTimeout(timer);
+  }, [focused, focusNonce]);
 
   return (
     <div
+      ref={ref}
       className={[
-        "rounded-lg border bg-brand-surface-soft overflow-hidden transition-colors",
+        "rounded-lg border bg-brand-surface-soft overflow-hidden transition-[box-shadow,border-color] duration-500",
         detailOpen
           ? "border-brand-primary ring-1 ring-brand-primary/30"
           : "border-brand-hairline",
@@ -178,18 +263,33 @@ function EquipmentCard({
         </span>
       </button>
 
-      {/* 펼침 = 라벨이 붙은 disclosure. 무엇이 열리는지 글자로 말한다. */}
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="w-full px-sm py-xs flex items-center gap-xs border-t border-brand-hairline-soft text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
-      >
-        <span className="flex-1 text-caption text-brand-muted">
-          분석 이력 {card.lines.length}
-        </span>
-        <Chevron open={open} />
-      </button>
+      {/* 펼침 = 라벨이 붙은 disclosure. 무엇이 열리는지 글자로 말한다.
+          그 오른쪽의 [+]는 **이 설비에** 분석을 더한다 — 이미 이 카드를 보고 있는
+          사람에게 설비명을 다시 치게 하지 않는 자리다. */}
+      <div className="w-full flex items-center border-t border-brand-hairline-soft">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex-1 min-w-0 px-sm py-xs flex items-center gap-xs text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+        >
+          <span className="flex-1 text-caption text-brand-muted">
+            분석 카드 {card.lines.length}
+          </span>
+          <Chevron open={open} />
+        </button>
+        {onAddSkill && (
+          <button
+            type="button"
+            onClick={onAddSkill}
+            aria-label={`${card.equipment}에 분석 추가`}
+            title="분석 추가"
+            className="shrink-0 px-sm py-xs text-brand-muted-soft hover:text-brand-primary hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <PlusMini />
+          </button>
+        )}
+      </div>
 
       {open && (
         <div className="px-xs pb-xs pt-xxs flex flex-col gap-xxs">
@@ -266,9 +366,11 @@ function LineRow({
           </span>
         )}
       </span>
-      <span className="text-caption text-brand-muted-soft tabular-nums whitespace-nowrap">
-        {formatRange(line.start, line.end)}
-      </span>
+      {line.start && line.end && (
+        <span className="text-caption text-brand-muted-soft tabular-nums whitespace-nowrap">
+          {formatRange(line.start, line.end)}
+        </span>
+      )}
     </button>
   );
 }
@@ -317,6 +419,25 @@ function BackChevron({ open }: { open: boolean }) {
       ].join(" ")}
     >
       <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
+function PlusMini() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   );
 }
