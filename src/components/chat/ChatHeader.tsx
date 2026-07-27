@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HelpButton } from "@/components/help/HelpButton";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 
 type Props = {
@@ -43,6 +44,7 @@ export function ChatHeader({ onNewConversation, onOpenHistory }: Props) {
               <span className="font-sans text-button">새 대화</span>
             </button>
           )}
+          <HelpButton />
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
