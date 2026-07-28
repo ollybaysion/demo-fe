@@ -1166,18 +1166,10 @@ export function ChatContainer() {
         >
 
         <main className="flex-1 overflow-y-auto scrollbar-none">
-          {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
-              풍선 자체는 항상 중앙(`[1fr | 768 | 1fr]`)에 두어 표 유무에
-              따라 움직이지 않음. 풍선이 오른쪽으로 슬라이드되는 더 적극
-              적인 레이아웃은 별도 이슈에서 검토. */}
-          <div
-            className={[
-              "mx-auto py-xl",
-              messages.length === 0
-                ? "max-w-chat-narrow px-lg"
-                : "max-w-chat-narrow px-lg xl:max-w-none xl:px-[5vw]",
-            ].join(" ")}
-          >
+          {/* 메시지 목록은 늘 좁은 한 단이다 — 풍선 양옆의 표·차트 패널을
+              걷어내면서 넓은 폭을 쓸 이유가 없어졌다. 들어온 데이터는 왼쪽
+              데이터 패널로 간다. */}
+          <div className="mx-auto py-xl max-w-chat-narrow px-lg">
             {messages.length === 0 ? (
               <ChatEmptyState
                 onScenarioStart={handleScenarioStart}
