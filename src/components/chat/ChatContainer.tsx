@@ -315,6 +315,29 @@ export function ChatContainer() {
   // 질문인지이며, 담긴 게 없으면 지금까지처럼 대화 맥락 전체를 본다.
   const [queryScope, setQueryScope] = useState<ScopeItem[]>([]);
 
+  /**
+   * 대화가 아는 설비를 카드로 세운다.
+   *
+   * 답이 ETCH-01 을 놓고 말하고 있는데 우측 패널이 "아직 설비가 없습니다"라고
+   * 하면, 화면 둘이 서로 다른 말을 한다. 게다가 카드가 없으면 담을 것도 없어
+   * 질의 대상 트레이가 아무 쓸모가 없다.
+   *
+   * 출처는 둘 — 데모 시나리오의 `contextPanel` 과 실 백엔드의
+   * `extractedContext.rows`. 둘 다 "이 대화가 무엇을 놓고 있는지"를 말한다.
+   * 초기 시드 행은 여기 안 온다: 대화가 정한 것만 카드가 된다.
+   */
+  const seedEquipmentsFromRows = useCallback((incoming: ContextRow[]) => {
+    const names = incoming
+      .map((r) => r.equipment.trim())
+      .filter((n) => n.length > 0);
+    if (names.length === 0) return;
+    setSeedEquipments((prev) => {
+      const next = [...prev];
+      for (const n of names) if (!next.includes(n)) next.push(n);
+      return next.length === prev.length ? prev : next;
+    });
+  }, []);
+
   const toggleQueryScope = useCallback((item: ScopeItem) => {
     setQueryScope((prev) => toggleScope(prev, item));
   }, []);
@@ -650,6 +673,7 @@ export function ChatContainer() {
                 } else {
                   replaceRows(ec.rows);
                 }
+                seedEquipmentsFromRows(ec.rows);
               }
               if (ec.timeRange) {
                 replaceTimeRange({
@@ -679,6 +703,7 @@ export function ChatContainer() {
     [
       appendRows,
       replaceRows,
+      seedEquipmentsFromRows,
       replaceTimeRange,
       sentSnapshots,
       prunedScope,
@@ -733,6 +758,7 @@ export function ChatContainer() {
     async (scenario: Scenario) => {
       // Auto-fill context panel + optional time range
       replaceRows(scenario.contextPanel);
+      seedEquipmentsFromRows(scenario.contextPanel);
       if (scenario.timeRange) {
         replaceTimeRange(scenario.timeRange);
       }
@@ -760,7 +786,13 @@ export function ChatContainer() {
         ended: nextIdx >= scenario.turns.length,
       });
     },
-    [replaceRows, replaceTimeRange, sendToApi, timeRange],
+    [
+      replaceRows,
+      seedEquipmentsFromRows,
+      replaceTimeRange,
+      sendToApi,
+      timeRange,
+    ],
   );
 
   const handleSubmit = useCallback(
@@ -796,6 +828,7 @@ export function ChatContainer() {
         let effectiveTimeRange = timeRange;
         if (currentTurn?.contextPanel) {
           replaceRows(currentTurn.contextPanel);
+          seedEquipmentsFromRows(currentTurn.contextPanel);
           setRightTab("context");
         }
         if (currentTurn?.timeRange) {
@@ -830,6 +863,7 @@ export function ChatContainer() {
       activeId,
       sendToApi,
       replaceRows,
+      seedEquipmentsFromRows,
       replaceTimeRange,
       createConversation,
       clearFulfilledRequests,
