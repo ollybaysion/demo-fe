@@ -23,7 +23,6 @@ const WEEK_COMPARE: readonly Record<string, unknown>[] = Array.from(
 export const uc9: Scenario = {
   id: "uc-9",
   starter: "지난주와 이번주 추세를 비교하고 싶습니다.",
-  contextPanel: [],
   turns: [
     {
       user: "지난주와 이번주 추세를 비교하고 싶습니다.",
@@ -37,19 +36,6 @@ export const uc9: Scenario = {
     {
       user: "예시 시점 비교",
       assistant: "지난주 vs 이번주 APC_PRESSURE 비교입니다. **이번주 평균이 5% 상승** 했습니다.",
-      contextPanel: [
-        {
-          id: "uc9-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc9-ch-1",
-              name: "A",
-              sensors: [{ id: "uc9-sn-1", name: "APC_PRESSURE" }],
-            },
-          ],
-        },
-      ],
       charts: [
         {
           type: "line",

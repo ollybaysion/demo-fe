@@ -20,7 +20,6 @@ const MULTI_TREND: readonly Record<string, unknown>[] = Array.from(
 export const uc4: Scenario = {
   id: "uc-4",
   starter: "여러 센서를 동시에 비교하고 싶습니다.",
-  contextPanel: [],
   turns: [
     {
       user: "여러 센서를 동시에 비교하고 싶습니다.",
@@ -35,24 +34,6 @@ export const uc4: Scenario = {
       user: "예시 다중 센서로 시작",
       assistant:
         "4개 센서의 동시 추세입니다. **APC_PRESSURE** 와 **RF_FORWARD** 는 동시성을 보이며, **GAS_FLOW** 는 약한 역상관 패턴입니다.",
-      contextPanel: [
-        {
-          id: "uc4-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc4-ch-1",
-              name: "A",
-              sensors: [
-                { id: "uc4-sn-1", name: "APC_PRESSURE" },
-                { id: "uc4-sn-2", name: "RF_FORWARD" },
-                { id: "uc4-sn-3", name: "GAS_FLOW" },
-                { id: "uc4-sn-4", name: "TEMP" },
-              ],
-            },
-          ],
-        },
-      ],
       charts: [
         {
           type: "line",

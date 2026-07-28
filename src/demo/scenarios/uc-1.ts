@@ -37,7 +37,6 @@ const MULTI_SENSOR_ROWS: readonly Record<string, unknown>[] = Array.from(
 export const uc1: Scenario = {
   id: "uc-1",
   starter: "데이터가 왜 이렇게 발생했는지 궁금합니다.",
-  contextPanel: [],
   turns: [
     {
       user: "데이터가 왜 이렇게 발생했는지 궁금합니다.",
@@ -61,20 +60,6 @@ export const uc1: Scenario = {
         "",
         "최근 24시간 추세는 다음과 같습니다. **정상 범위 안에서 안정적으로 움직이고 있으며**, 14:20 경 짧은 스파이크 한 건이 관측됩니다.",
       ].join("\n"),
-      contextPanel: [
-        {
-          id: "uc1-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc1-ch-1",
-              name: "A",
-              sensors: [{ id: "uc1-sn-1", name: "APC_PRESSURE" }],
-            },
-          ],
-        },
-      ],
-      timeRange: { start: "2026-05-03T00:00", end: "2026-05-03T23:59" },
       tables: [
         {
           title: "APC_PRESSURE 시간대별 측정",

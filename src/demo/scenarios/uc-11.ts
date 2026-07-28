@@ -9,7 +9,6 @@ import type { Scenario } from "./types";
 export const uc11: Scenario = {
   id: "uc-11",
   starter: "FDC 트리거 조건은 어떻게 설정하나요?",
-  contextPanel: [],
   turns: [
     {
       user: "FDC 트리거 조건은 어떻게 설정하나요?",

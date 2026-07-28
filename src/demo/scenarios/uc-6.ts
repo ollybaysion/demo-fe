@@ -18,7 +18,6 @@ const LEAK_TREND: readonly Record<string, unknown>[] = Array.from(
 export const uc6: Scenario = {
   id: "uc-6",
   starter: "GasLeak 알람이 발생했습니다. 어떻게 대응해야 하나요?",
-  contextPanel: [],
   turns: [
     {
       user: "GasLeak 알람이 발생했습니다. 어떻게 대응해야 하나요?",
@@ -46,19 +45,6 @@ export const uc6: Scenario = {
     {
       user: "현재 누설량 추세를 보여주세요",
       assistant: "최근 30분 누설량 추세입니다. **13:42 임계치 초과** 후 상승 중입니다.",
-      contextPanel: [
-        {
-          id: "uc6-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc6-ch-1",
-              name: "A",
-              sensors: [{ id: "uc6-sn-1", name: "GAS_LEAK" }],
-            },
-          ],
-        },
-      ],
       charts: [
         {
           type: "area",

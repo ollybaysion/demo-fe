@@ -56,7 +56,6 @@ const APC_PRESSURE_TREND: readonly Record<string, unknown>[] = [
 export const dataShape: Scenario = {
   id: "data-shape",
   starter: "설비 데이터가 왜 이렇게 발생했는지 궁금합니다.",
-  contextPanel: [],
   turns: [
     {
       user: "설비 데이터가 왜 이렇게 발생했는지 궁금합니다.",
@@ -156,20 +155,6 @@ export const dataShape: Scenario = {
           ],
         },
       ],
-      contextPanel: [
-        {
-          id: "demo-shape-eq-1",
-          equipment: "ETCH-02",
-          chambers: [
-            {
-              id: "demo-shape-ch-1",
-              name: "A",
-              sensors: [{ id: "demo-shape-sn-1", name: "APC_PRESSURE" }],
-            },
-          ],
-        },
-      ],
-      timeRange: { start: "2026-05-02T09:00", end: "2026-05-02T09:10" },
       recommendQuestion: [
         "다른 주요 센서들도 모두 표로 같이 보여줘",
         "동종설비와 비교해줘",
