@@ -309,8 +309,11 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
           className="group w-full flex items-center gap-xs rounded-sm py-xxs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
           <span className="shrink-0">분석 스킬</span>
-          <span className="flex-1 min-w-0 text-left truncate text-brand-ink">
-            {selectedSkill?.focus ?? ""}
+          {/* 고른 뒤에 남는 한 줄 — 목록에서 누른 것과 **같은 말**이어야 한다.
+              focus 를 세워 두면 "센서 측정값"을 골랐는데 붙는 건
+              `fdc-trace-reading` 이라, 고르고 나서도 무엇을 골랐는지 모른다. */}
+          <span className="flex-1 min-w-0 text-left truncate font-mono text-brand-ink">
+            {selectedSkill?.name ?? ""}
           </span>
           {/*
             누를 곳 표시는 **상태마다 하나만** 둔다. 고르기 전에는 "열린다"는

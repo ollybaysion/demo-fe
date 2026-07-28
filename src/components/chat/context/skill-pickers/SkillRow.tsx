@@ -5,9 +5,12 @@ import { skillSummary, type Skill } from "@/lib/skills";
 /**
  * 목록 한 줄 — 패널 목록과 넓은 화면이 함께 쓴다.
  *
- * 한 줄에 담는 것: focus(무엇을 보는지)와 **짧은 설명**. 고르는 사람이 30개에서
- * 답해야 하는 질문은 "이게 내가 찾는 그건가" 하나뿐이라, 그 판단에 쓰이는 문장만
- * 둔다. 스킬 식별자와 인자·조회의 세부는 넓은 화면(`SkillBrowserModal`)의 몫이다.
+ * 한 줄에 담는 것: **스킬 이름**, 무엇을 보는지(focus), 그리고 짧은 설명.
+ *
+ * 이름이 먼저인 이유는 그것이 이 스킬을 부르는 유일한 말이기 때문이다 — 채팅에서
+ * 툴로 불리는 것도, 문서·동료와 주고받는 것도 `fdc-trace-reading` 이지 "센서
+ * 측정값" 이 아니다. focus 만 세워 두면 목록에서 고른 것과 실제로 붙은 것이 같은
+ * 이름으로 이어지지 않아, 고르고 나서도 무엇을 골랐는지 확인할 길이 없다.
  */
 export function SkillRow({
   skill,
@@ -34,8 +37,15 @@ export function SkillRow({
           : "border-transparent hover:border-brand-hairline hover:bg-brand-ink-translucent-04",
       ].join(" ")}
     >
-      <span className="block text-caption text-brand-ink truncate">
-        {skill.focus}
+      <span className="flex items-baseline gap-xs">
+        <span className="min-w-0 truncate font-mono text-caption text-brand-ink">
+          {skill.name}
+        </span>
+        {/* focus 는 이름 옆에 낮은 무게로 — 무엇을 보는 스킬인지 가리키는 꼬리표지
+            이름 자리를 대신하는 값이 아니다. */}
+        <span className="min-w-0 shrink truncate text-caption text-brand-muted">
+          {skill.focus}
+        </span>
       </span>
       <span
         className={[
