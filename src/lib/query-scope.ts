@@ -59,18 +59,14 @@ export function hasEquipment(scope: ScopeItem[], equipment: string): boolean {
 }
 
 /**
- * 이 줄이 대상에 들어가는가 — 줄 자체가 담겼거나, **그 설비가 통째로 담겼거나**.
- * 흡수를 화면에도 그대로 보이게 하려면 후자를 같이 봐야 한다.
+ * **이 줄 자체가** 담겼는가 — 설비가 통째로 담긴 경우는 여기 안 센다.
+ *
+ * <p>흡수는 화면에서 **테두리 중첩**으로 말한다: 굵은 설비 테두리 안에 있으면
+ * 그게 곧 포함이다. 그걸 줄에도 또 표시하면, 담긴 것은 하나인데 표시는 여럿이
+ * 되어 트레이의 칩 수와 어긋난다.
  */
-export function hasLine(
-  scope: ScopeItem[],
-  equipment: string,
-  lineKey: string,
-): boolean {
-  return (
-    hasEquipment(scope, equipment) ||
-    scope.some((i) => i.kind === "analysis" && i.lineKey === lineKey)
-  );
+export function hasLine(scope: ScopeItem[], lineKey: string): boolean {
+  return scope.some((i) => i.kind === "analysis" && i.lineKey === lineKey);
 }
 
 /**
@@ -97,18 +93,22 @@ export function removeFromScope(
 }
 
 /**
- * 담기 토글. 설비가 통째로 담긴 상태에서 그 아래 줄을 끄면 **설비를 뺀다** —
- * 줄만 빼는 건 목록에 없는 것을 빼는 셈이라 아무 반응도 없어 보인다.
+ * 담기 토글.
+ *
+ * <p>설비가 통째로 담긴 상태에서 그 아래 줄을 누르면 **그 줄로 좁힌다**(설비를
+ * 빼고 줄을 담는다) — 이미 포함된 것을 또 담는 건 아무 일도 아니고, 통째로
+ * 빼버리는 것도 "이 분석만 보겠다"는 뜻과 다르다.
  */
 export function toggleScope(scope: ScopeItem[], item: ScopeItem): ScopeItem[] {
   if (scope.some((i) => scopeKey(i) === scopeKey(item))) {
     return removeFromScope(scope, item);
   }
   if (item.kind === "analysis" && hasEquipment(scope, item.equipment)) {
-    return removeFromScope(scope, {
+    const narrowed = removeFromScope(scope, {
       kind: "equipment",
       equipment: item.equipment,
     });
+    return addToScope(narrowed, item);
   }
   return addToScope(scope, item);
 }

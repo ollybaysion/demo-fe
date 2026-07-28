@@ -6,9 +6,7 @@ import {
   scopeKey,
   scopeLabel,
 } from "@/lib/query-scope";
-
-/** 드래그 페이로드의 MIME — 다른 드래그(파일 등)와 섞이지 않게 전용 타입. */
-export const SCOPE_DRAG_TYPE = "application/x-fdc-scope-item";
+import { SCOPE_DRAG_TYPE } from "./drag";
 
 /**
  * 질의 대상 트레이 — 입력창 **바로 위**.
@@ -17,9 +15,8 @@ export const SCOPE_DRAG_TYPE = "application/x-fdc-scope-item";
  * 헤더에 두면 "담긴 목록"으로는 읽혀도 "이 질문의 대상"으로는 안 읽힌다.
  *
  * <p>빈 상태의 문구가 곧 드래그 어포던스다 — 끌 수 있다는 건 보이지 않으므로,
- * 놓을 자리가 스스로 말해야 한다. 다만 드래그는 **가속기**일 뿐이라 카드 쪽에
- * 담기 버튼이 따로 있다(패널은 스크롤 컨테이너고 카드마다 클릭 동작이 있어서
- * 드래그만으로는 닿기 어렵다).
+ * 놓을 자리가 스스로 말해야 한다. 다만 드래그는 **가속기**일 뿐이다: 담는 기본
+ * 동작은 오른쪽 카드/줄을 누르는 것이고, 담긴 것은 그쪽에서 굵은 테두리로 보인다.
  */
 export function ScopeTray({
   items,
