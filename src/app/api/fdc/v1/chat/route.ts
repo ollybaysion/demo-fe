@@ -10,6 +10,8 @@ import type {
   DataRequest,
   InputRequest,
   Message,
+  MessageImage,
+  MessageLink,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -251,6 +253,8 @@ export async function POST(request: Request): Promise<Response> {
   let responseRecommend: string[] | undefined;
   let responseDataRequests: DataRequest[] | undefined;
   let responseInputRequests: InputRequest[] | undefined;
+  let responseImages: MessageImage[] | undefined;
+  let responseLinks: MessageLink[] | undefined;
   if (body.demo) {
     const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
     const turn = scenario?.turns[body.demo.turnIndex];
@@ -296,6 +300,14 @@ export async function POST(request: Request): Promise<Response> {
           : answer;
     }
     responseRecommend = recommendNext(lastUser.content);
+    // 조달을 청하는 답에는 붙이지 않는다 — 없는 데이터를 말하면서 그림을
+    // 내미는 건 앞뒤가 안 맞는다.
+    if (!responseDataRequests && !responseInputRequests) {
+      const images = mockImages(lastUser.content);
+      const links = mockLinks(lastUser.content);
+      if (images.length > 0) responseImages = images;
+      if (links.length > 0) responseLinks = links;
+    }
   }
   const characters = [...responseText];
   const messageId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -331,6 +343,12 @@ export async function POST(request: Request): Promise<Response> {
               : {}),
             ...(responseInputRequests && responseInputRequests.length > 0
               ? { inputRequests: responseInputRequests }
+              : {}),
+            ...(responseImages && responseImages.length > 0
+              ? { images: responseImages }
+              : {}),
+            ...(responseLinks && responseLinks.length > 0
+              ? { links: responseLinks }
               : {}),
           }),
         );
@@ -380,6 +398,57 @@ export async function POST(request: Request): Promise<Response> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 그림·링크 — 실 백엔드에서는 모델이 MCP 로 읽어온 것이 여기 실린다. mock 은
+ * 그럴 수 없으므로 키워드로 흉내 낸다. 데이터 패널의 `답변 산출물` 단이 실제로
+ * 서는지 화면에서 걸어 볼 수 있게 하는 것이 목적이다.
+ *
+ * 이미지는 외부 요청 없이 그려지도록 inline SVG(data URL)로 둔다 — 사내망에서
+ * 바깥 호스트를 때리는 mock 은 그 자체로 거짓 신호다.
+ */
+const MOCK_DIAGRAM =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="200" viewBox="0 0 480 200">
+      <rect width="480" height="200" fill="#f6f4ef"/>
+      <rect x="24" y="40" width="120" height="120" rx="8" fill="none" stroke="#8a7f6d" stroke-width="2"/>
+      <rect x="180" y="40" width="120" height="120" rx="8" fill="none" stroke="#8a7f6d" stroke-width="2"/>
+      <rect x="336" y="40" width="120" height="120" rx="8" fill="none" stroke="#8a7f6d" stroke-width="2"/>
+      <text x="84" y="105" font-size="14" text-anchor="middle" fill="#4a4438">PM1</text>
+      <text x="240" y="105" font-size="14" text-anchor="middle" fill="#4a4438">PM2</text>
+      <text x="396" y="105" font-size="14" text-anchor="middle" fill="#4a4438">PM3</text>
+      <text x="240" y="184" font-size="12" text-anchor="middle" fill="#8a7f6d">챔버 배치 (예시)</text>
+    </svg>`,
+  );
+
+function mockImages(question: string): MessageImage[] {
+  const q = question.toLowerCase();
+  if (!["도면", "배치", "그림", "이미지", "챔버"].some((t) => q.includes(t))) {
+    return [];
+  }
+  return [
+    {
+      label: "챔버 배치도",
+      dataUrl: MOCK_DIAGRAM,
+      alt: "PM1·PM2·PM3 챔버가 나란히 놓인 배치도",
+    },
+  ];
+}
+
+function mockLinks(question: string): MessageLink[] {
+  const q = question.toLowerCase();
+  if (!["레시피", "규격", "문서", "절차", "센서"].some((t) => q.includes(t))) {
+    return [];
+  }
+  return [
+    {
+      label: "FDC 센서 명명 규칙",
+      url: "https://wiki.example.internal/fdc/sensor-naming",
+      description: "PARAM_INDEX 와 센서 이름이 어떻게 대응되는지",
+    },
+  ];
 }
 
 /**
