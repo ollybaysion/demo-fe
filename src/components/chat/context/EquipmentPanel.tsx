@@ -4,10 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatRange } from "@/lib/format-range";
 import type { ScopeItem } from "@/lib/query-scope";
 import type { Skill } from "@/lib/skills";
-import {
-  ScopeToggle,
-  scopeDragProps,
-} from "@/components/chat/scope/ScopeToggle";
+import { scopeDragProps } from "@/components/chat/scope/drag";
 import { AddEquipment } from "./AddEquipment";
 import type { EquipmentCardModel, EquipmentLine } from "./equipment-cards.mock";
 
@@ -226,31 +223,54 @@ function EquipmentCard({
       {...(onToggleScope ? scopeDragProps(scopeItem) : {})}
       className={[
         "rounded-lg border bg-brand-surface-soft overflow-hidden transition-[box-shadow,border-color] duration-500",
-        detailOpen
-          ? "border-brand-primary ring-1 ring-brand-primary/30"
-          : picked
-            ? "border-brand-primary ring-2 ring-brand-primary/10"
+        // 담김은 **굵은 테두리**로만 말한다. 별도 컨트롤(체크 등)을 붙이면 카드가
+        // 이미 가진 동작들과 섞여 뜻이 안 읽히고, 상위가 담겼을 때 그 아래 줄까지
+        // 같은 표시가 붙어 담긴 개수와 트레이의 칩 수가 어긋난다. 테두리는
+        // 중첩되므로 흡수가 저절로 드러난다 — 굵은 테두리 안에 있으면 포함된 것이다.
+        picked
+          ? "border-brand-primary ring-1 ring-inset ring-brand-primary"
+          : detailOpen
+            ? "border-brand-primary/50"
             : "border-brand-hairline",
       ].join(" ")}
     >
-      {/* 본문 = 자세히. 카드에서 가장 넓은 면이 가장 흔한 동작을 갖는다.
-          담기는 그 옆에 따로 선다 — 버튼 안에 버튼을 넣을 수 없기도 하지만,
-          "보기"와 "고르기"는 애초에 다른 동작이다. */}
+      {/* 카드에서 가장 넓은 면이 가장 흔한 동작을 갖는다 — 이 패널의 정체가
+          "질의 대상 고르는 곳"이므로 그 동작은 **담기**다. 자세히는 왼쪽 `‹` 로
+          내려간다(원래도 그 자리에서 "왼쪽에 열린다"를 가리키고 있었다). */}
       <div className="flex items-start">
+      {onOpenDetail && (
+        <button
+          type="button"
+          onClick={onOpenDetail}
+          aria-label={`${card.equipment} 자세히 보기`}
+          aria-expanded={detailOpen}
+          title={
+            detailOpen ? "상세 닫기" : "자세히 — 왼쪽에 상세 화면이 열립니다"
+          }
+          className="group shrink-0 pl-sm pr-xxs pt-sm pb-xs hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+        >
+          <BackChevron open={detailOpen} />
+        </button>
+      )}
       <button
         type="button"
-        onClick={onOpenDetail}
-        aria-label={`${card.equipment} 자세히 보기`}
-        aria-expanded={detailOpen}
-        title={
-          detailOpen ? "상세 닫기" : "자세히 — 왼쪽에 상세 화면이 열립니다"
+        onClick={onToggleScope ? () => onToggleScope(scopeItem) : undefined}
+        aria-pressed={onToggleScope ? picked : undefined}
+        aria-label={
+          onToggleScope
+            ? `${card.equipment} ${picked ? "질의 대상에서 빼기" : "질의 대상에 담기"}`
+            : card.equipment
         }
-        className="group flex-1 min-w-0 px-sm pt-sm pb-xs text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+        title={
+          onToggleScope
+            ? picked
+              ? "질의 대상에서 빼기"
+              : "질의 대상에 담기 — 이 설비에 대해 질의합니다"
+            : undefined
+        }
+        className="group flex-1 min-w-0 pr-sm pl-xxs pt-sm pb-xs text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
       >
         <span className="flex items-baseline gap-xs">
-          {/* ‹ 가 왼쪽을 가리켜 "결과가 왼쪽에 열린다"를 미리 말한다.
-              열려 있으면 방향이 뒤집혀 "닫으면 오른쪽으로 접힌다"가 된다. */}
-          <BackChevron open={detailOpen} />
           <span className="flex-1 min-w-0 text-body-md font-medium text-brand-ink truncate">
             {card.equipment}
           </span>
@@ -289,15 +309,6 @@ function EquipmentCard({
           )}
         </span>
       </button>
-        {onToggleScope && (
-          <span className="shrink-0 pt-sm pr-sm">
-            <ScopeToggle
-              item={scopeItem}
-              on={picked}
-              onToggle={() => onToggleScope(scopeItem)}
-            />
-          </span>
-        )}
       </div>
 
       {/* 펼침 = 라벨이 붙은 disclosure. 무엇이 열리는지 글자로 말한다.
@@ -373,23 +384,30 @@ function LineRow({
   };
   const picked = inScope ? inScope(scopeItem) : false;
 
+  // 줄에서도 넓은 면은 담기다 — 카드와 같은 규칙. 왼쪽에서 보기는 끝의 `←` 로
+  // 내려간다(원래도 그 자리에서 방향을 가리키고 있었다).
   const row = (
     <button
       type="button"
-      onClick={onSelect}
-      // 대기 줄도 누를 수 있다 — 볼 데이터 대신 **그 데이터를 부른 요청 카드**로
-      // 데려간다(요청이 왼쪽에 실제로 있으니 갈 곳이 있다).
+      onClick={onToggleScope ? () => onToggleScope(scopeItem) : onSelect}
+      aria-pressed={onToggleScope ? picked : undefined}
+      aria-label={
+        onToggleScope
+          ? `${equipment} › ${line.category} ${picked ? "질의 대상에서 빼기" : "질의 대상에 담기"}`
+          : undefined
+      }
       title={
-        waiting
-          ? "아직 데이터가 없습니다 — 왼쪽 요청 카드로 이동합니다"
+        onToggleScope
+          ? picked
+            ? "질의 대상에서 빼기"
+            : "질의 대상에 담기 — 이 분석만 놓고 질의합니다"
           : "왼쪽에서 이 데이터 보기"
       }
       className={[
         "group/line flex-1 min-w-0 flex flex-col gap-[2px] rounded-md px-xs py-xs text-left",
         "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
-        "active:border-brand-primary active:bg-brand-primary/10",
         picked
-          ? "border border-brand-primary bg-brand-primary/[0.07]"
+          ? "border border-brand-primary ring-1 ring-inset ring-brand-primary bg-brand-canvas"
           : waiting
             ? "border border-dashed border-brand-hairline bg-brand-canvas/60 hover:border-brand-muted-soft"
             : "border border-brand-hairline bg-brand-canvas hover:border-brand-muted-soft",
@@ -397,7 +415,7 @@ function LineRow({
     >
       {/* 무엇을 봤는지(category)가 먼저, 언제인지(구간)가 그 아래.
           표 수는 싣지 않는다 — 누르면 왼쪽에 그 카드들이 그대로 보이고,
-          정작 필요한 구분(채워짐/대기)은 `대기` 표시가 이미 한다. */}
+          정작 필요한 구분(채워짐/대기)은 `요청됨` 표시가 이미 한다. */}
       <span className="flex items-baseline gap-xs">
         <span
           className={[
@@ -407,17 +425,9 @@ function LineRow({
         >
           {line.category}
         </span>
-        {/* 오른쪽 자리는 하나뿐이다 — 대기면 상태, 아니면 hover 힌트.
-            시각 행에 두면 힌트가 뜰 때 시각을 밀어내 잘랐다. */}
-        {waiting ? (
-          <span className="shrink-0 inline-flex items-center gap-[3px] text-[11px] leading-none text-brand-muted-soft">
-            <ArrowLeft />
+        {waiting && (
+          <span className="shrink-0 text-[11px] leading-none text-brand-muted-soft">
             요청됨
-          </span>
-        ) : (
-          <span className="shrink-0 inline-flex items-center gap-[3px] text-[11px] leading-none text-brand-muted-soft/0 transition-colors group-hover/line:text-brand-muted-soft">
-            <ArrowLeft />
-            왼쪽에서 보기
           </span>
         )}
       </span>
@@ -432,17 +442,23 @@ function LineRow({
   if (!onToggleScope) return row;
 
   return (
-    <div
-      {...scopeDragProps(scopeItem)}
-      className="flex items-center gap-xxs"
-    >
+    <div {...scopeDragProps(scopeItem)} className="flex items-stretch gap-xxs">
       {row}
-      <ScopeToggle
-        item={scopeItem}
-        on={picked}
-        onToggle={() => onToggleScope(scopeItem)}
-        size="sm"
-      />
+      {/* 대기 줄도 누를 수 있다 — 볼 데이터 대신 **그 데이터를 부른 요청 카드**로
+          데려간다(요청이 왼쪽에 실제로 있으니 갈 곳이 있다). */}
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={`${line.category} 왼쪽에서 보기`}
+        title={
+          waiting
+            ? "아직 데이터가 없습니다 — 왼쪽 요청 카드로 이동합니다"
+            : "왼쪽에서 이 데이터 보기"
+        }
+        className="shrink-0 px-xxs rounded-md text-brand-muted-soft hover:text-brand-primary hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+      >
+        <ArrowLeft />
+      </button>
     </div>
   );
 }

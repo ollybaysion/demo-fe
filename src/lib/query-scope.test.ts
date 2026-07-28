@@ -70,13 +70,15 @@ describe("addToScope", () => {
 });
 
 describe("hasLine", () => {
-  it("설비가 통째로 담기면 그 아래 줄도 담긴 것이다", () => {
-    expect(hasLine([EQ_A], "CVD-01", LINE_A1.lineKey)).toBe(true);
+  it("줄 자체가 담겼을 때만 참이다", () => {
+    expect(hasLine([LINE_A1], LINE_A1.lineKey)).toBe(true);
+    expect(hasEquipment([LINE_A1], "CVD-01")).toBe(false);
   });
 
-  it("줄만 담긴 경우 그 줄만 담긴 것이다", () => {
-    expect(hasLine([LINE_A1], "CVD-01", LINE_A1.lineKey)).toBe(true);
-    expect(hasEquipment([LINE_A1], "CVD-01")).toBe(false);
+  it("설비가 통째로 담긴 것은 여기 안 센다", () => {
+    // 흡수는 화면에서 테두리 중첩으로 말한다 — 줄에도 표시하면 담긴 것은
+    // 하나인데 표시가 여럿이 되어 트레이 칩 수와 어긋난다.
+    expect(hasLine([EQ_A], LINE_A1.lineKey)).toBe(false);
   });
 });
 
@@ -85,9 +87,13 @@ describe("toggleScope", () => {
     expect(toggleScope([EQ_A], EQ_A)).toEqual([]);
   });
 
-  it("설비로 담긴 줄을 끄면 설비가 빠진다", () => {
-    // 줄만 빼면 목록에 없는 것을 빼는 셈이라 아무 반응도 없어 보인다.
-    expect(toggleScope([EQ_A], LINE_A1)).toEqual([]);
+  it("설비가 담긴 상태에서 그 줄을 누르면 그 줄로 좁힌다", () => {
+    // "이 분석만 보겠다" — 통째로 빼버리는 것과는 다른 뜻이다.
+    expect(toggleScope([EQ_A], LINE_A1)).toEqual([LINE_A1]);
+  });
+
+  it("좁힌 뒤 그 줄을 다시 누르면 빠진다", () => {
+    expect(toggleScope(toggleScope([EQ_A], LINE_A1), LINE_A1)).toEqual([]);
   });
 });
 

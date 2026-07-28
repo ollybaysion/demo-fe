@@ -1313,7 +1313,7 @@ export function ChatContainer() {
             inScope={(item) =>
               item.kind === "equipment"
                 ? hasEquipment(prunedScope, item.equipment)
-                : hasLine(prunedScope, item.equipment, item.lineKey)
+                : hasLine(prunedScope, item.lineKey)
             }
           />
           <SummaryPanel
