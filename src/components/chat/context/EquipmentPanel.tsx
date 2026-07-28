@@ -43,6 +43,7 @@ type Props = {
    */
   onAddEquipment?: (
     equipment: string,
+    line: string | null,
     skill: Skill | null,
     values: Record<string, string>,
   ) => void;
@@ -235,8 +236,12 @@ function EquipmentCard({
     >
       {/* 카드에서 가장 넓은 면이 가장 흔한 동작을 갖는다 — 이 패널의 정체가
           "질의 대상 고르는 곳"이므로 그 동작은 **담기**다. 자세히는 왼쪽 `‹` 로
-          내려간다(원래도 그 자리에서 "왼쪽에 열린다"를 가리키고 있었다). */}
-      <div className="flex items-start">
+          내려간다(원래도 그 자리에서 "왼쪽에 열린다"를 가리키고 있었다).
+
+          음영은 **머리 줄 전체가 한 면으로** 받는다. 안쪽 버튼들이 각자 칠하면
+          `‹` 칼럼만 빠진 채 본문만 물들고, 마우스를 옮길 때마다 조각난 영역이
+          번갈아 켜져 카드가 흔들리는 것처럼 보인다. 안쪽은 글자색만 바꾼다. */}
+      <div className="flex items-start transition-colors hover:bg-brand-ink-translucent-04">
       {onOpenDetail && (
         <button
           type="button"
@@ -246,7 +251,7 @@ function EquipmentCard({
           title={
             detailOpen ? "상세 닫기" : "자세히 — 왼쪽에 상세 화면이 열립니다"
           }
-          className="group shrink-0 pl-sm pr-xxs pt-sm pb-xs hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+          className="group shrink-0 pl-sm pr-xxs py-sm hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
         >
           <BackChevron open={detailOpen} />
         </button>
@@ -267,17 +272,21 @@ function EquipmentCard({
               : "질의 대상에 담기 — 이 설비에 대해 질의합니다"
             : undefined
         }
-        className="group flex-1 min-w-0 pr-sm pl-xxs pt-sm pb-xs text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+        className="group flex-1 min-w-0 pr-sm pl-xxs py-sm text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
       >
-        <span className="flex items-baseline gap-xs">
+        <span className="flex items-center gap-xs">
           <span className="flex-1 min-w-0 text-body-md font-medium text-brand-ink truncate">
             {card.equipment}
           </span>
-          <span className="shrink-0 text-caption text-brand-muted-soft">
-            라인 {card.line}
-          </span>
+          {/* 라인은 아는 경우에만 말한다 — 모르면서 숫자를 붙이면 그 숫자가
+              어디선가 온 값처럼 읽힌다. */}
+          {card.line && (
+            <span className="shrink-0 inline-flex items-center rounded-[4px] bg-brand-ink-translucent-04 px-[6px] py-[2px] text-[11px] leading-[1.5] text-brand-muted">
+              {card.line}
+            </span>
+          )}
         </span>
-        <span className="mt-xxs flex items-center gap-xs">
+        <span className="mt-xs flex items-center gap-xs">
           {/* 설명 값은 각각 테두리 있는 칩으로 — 어디까지가 한 값인지 경계가
               보인다. 무게는 낮게 유지한다(11px·테두리만·채움 없음). */}
           <span className="flex-1 min-w-0 flex flex-wrap items-center gap-[4px]">
@@ -285,14 +294,14 @@ function EquipmentCard({
               card.descriptors.map((d) => (
                 <span
                   key={d}
-                  className="inline-flex max-w-[150px] items-center rounded-[4px] border border-brand-hairline px-[6px] py-[2px] text-[11px] leading-[1.5] text-brand-muted"
+                  className="inline-flex max-w-full items-center rounded-[4px] border border-brand-hairline px-[6px] py-[3px] text-[11px] leading-[1.5] text-brand-muted"
                   title={d}
                 >
                   <span className="truncate">{d}</span>
                 </span>
               ))
             ) : (
-              <span className="inline-flex items-center rounded-[4px] border border-dashed border-brand-hairline px-[6px] py-[2px] text-[11px] leading-[1.5] text-brand-muted-soft">
+              <span className="inline-flex items-center rounded-[4px] border border-dashed border-brand-hairline px-[6px] py-[3px] text-[11px] leading-[1.5] text-brand-muted-soft">
                 설비 정보 미조회
               </span>
             )}
@@ -312,13 +321,14 @@ function EquipmentCard({
 
       {/* 펼침 = 라벨이 붙은 disclosure. 무엇이 열리는지 글자로 말한다.
           그 오른쪽의 [+]는 **이 설비에** 분석을 더한다 — 이미 이 카드를 보고 있는
-          사람에게 설비명을 다시 치게 하지 않는 자리다. */}
-      <div className="w-full flex items-center border-t border-brand-hairline-soft">
+          사람에게 설비명을 다시 치게 하지 않는 자리다.
+          머리 줄과 같은 규칙: 음영은 줄 하나가 통째로 받고 [+]는 글자색만 바꾼다. */}
+      <div className="w-full flex items-center border-t border-brand-hairline-soft transition-colors hover:bg-brand-ink-translucent-04">
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
-          className="flex-1 min-w-0 px-sm py-xs flex items-center gap-xs text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+          className="flex-1 min-w-0 px-sm py-xs flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
         >
           <span className="flex-1 text-caption text-brand-muted">
             분석 카드 {card.lines.length}
@@ -331,7 +341,7 @@ function EquipmentCard({
             onClick={onAddSkill}
             aria-label={`${card.equipment}에 분석 추가`}
             title="분석 추가"
-            className="shrink-0 px-sm py-xs text-brand-muted-soft hover:text-brand-primary hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            className="shrink-0 px-sm py-xs text-brand-muted-soft hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
             <PlusMini />
           </button>
@@ -339,7 +349,7 @@ function EquipmentCard({
       </div>
 
       {open && (
-        <div className="px-xs pb-xs pt-xxs flex flex-col gap-xxs">
+        <div className="px-sm pb-sm pt-xs flex flex-col gap-xxs">
           {card.lines.map((line) => (
             <LineRow
               key={line.key}
@@ -454,7 +464,7 @@ function LineRow({
             ? "아직 데이터가 없습니다 — 왼쪽 요청 카드로 이동합니다"
             : "왼쪽에서 이 데이터 보기"
         }
-        className="shrink-0 px-xxs rounded-md text-brand-muted-soft hover:text-brand-primary hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+        className="shrink-0 px-xxs rounded-md text-brand-muted-soft hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
         <ArrowLeft />
       </button>

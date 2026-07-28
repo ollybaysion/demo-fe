@@ -30,8 +30,11 @@ export type EquipmentLine = {
 export type EquipmentCardModel = {
   id: string;
   equipment: string;
-  /** 이 설비가 속한 라인 번호. */
-  line: number;
+  /**
+   * 이 설비가 속한 라인 — AKG 가 가진 목록에서 고른 값. 채팅에서 파생된 카드는
+   * 라인을 알 길이 없으므로 `null` 이다(모르는 것을 순번으로 지어내지 않는다).
+   */
+  line: string | null;
   /**
    * 설비를 설명하는 값들(설비명·모델…) — "설비 정보" category 조회가 채운다.
    * 칩 여러 개가 아니라 **한 줄 텍스트**로 이어 붙인다: 좁은 패널에서 칩 3개는
@@ -47,7 +50,7 @@ export const MOCK_EQUIPMENT_CARDS: EquipmentCardModel[] = [
   {
     id: "eq-cvd-01",
     equipment: "CVD-01",
-    line: 1,
+    line: "L1",
     descriptors: ["증착기 1호", "AMAT CV-800"],
     status: "가동",
     lines: [
@@ -81,7 +84,7 @@ export const MOCK_EQUIPMENT_CARDS: EquipmentCardModel[] = [
   {
     id: "eq-etch-01",
     equipment: "ETCH-01",
-    line: 2,
+    line: "L2",
     descriptors: ["식각기 1호", "LAM Kiyo"],
     status: "가동",
     lines: [
@@ -98,7 +101,7 @@ export const MOCK_EQUIPMENT_CARDS: EquipmentCardModel[] = [
   {
     id: "eq-cmp-02",
     equipment: "CMP-02",
-    line: 3,
+    line: "L3",
     descriptors: [],
     status: null,
     lines: [

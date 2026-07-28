@@ -311,6 +311,10 @@ export function ChatContainer() {
   // 직접 등록한 설비 — **스킬과 무관**하다. 설비만 넣고 채팅부터 시작할 수 있어야
   // 하므로(진입 1단), 우측 설비 카드의 씨앗은 세션이 아니라 이 목록이다.
   const [seedEquipments, setSeedEquipments] = useState<string[]>([]);
+  /** 설비 → 사람이 고른 라인. 채팅에서 파생된 설비는 여기 없다(라인을 모른다). */
+  const [equipmentLines, setEquipmentLines] = useState<Record<string, string>>(
+    {},
+  );
   // 질의 대상 — 사용자가 트레이에 담은 설비·분석. 이 질문이 무엇을 놓고 하는
   // 질문인지이며, 담긴 게 없으면 지금까지처럼 대화 맥락 전체를 본다.
   const [queryScope, setQueryScope] = useState<ScopeItem[]>([]);
@@ -363,6 +367,7 @@ export function ChatContainer() {
   const handleAddEquipment = useCallback(
     (
       equipment: string,
+      line: string | null,
       skill: Skill | null,
       values: Record<string, string>,
     ) => {
@@ -370,6 +375,13 @@ export function ChatContainer() {
       setSeedEquipments((prev) =>
         prev.includes(equipment) ? prev : [...prev, equipment],
       );
+      // 라인은 고른 사람이 있을 때만 기억한다 — 안 고른 것을 빈 값으로 덮어쓰면
+      // 앞서 고른 라인이 다시 등록 한 번에 사라진다.
+      if (line) {
+        setEquipmentLines((prev) =>
+          prev[equipment] === line ? prev : { ...prev, [equipment]: line },
+        );
+      }
       // 아직 아무것도 안 담겼으면 방금 등록한 설비를 담는다 — 등록하자마자 묻는
       // 사람에게 "어느 설비인지 모르겠습니다"가 돌아오면 안 된다. 이미 담아 둔 게
       // 있으면 건드리지 않는다: 그건 사용자가 정한 범위다.
@@ -428,6 +440,7 @@ export function ChatContainer() {
     [...openRequests, ...sessionRequests],
     [...scopedSnapshots, DUMMY_UNCLASSIFIED],
     seedEquipments,
+    equipmentLines,
   );
   const detailCard =
     equipmentCards.find((c) => c.id === detailCardId) ?? null;

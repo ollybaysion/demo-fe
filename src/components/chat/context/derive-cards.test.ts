@@ -144,6 +144,20 @@ describe("derivePanel", () => {
       "CVD-09",
       "ETCH-01",
     ]);
-    expect(equipmentCards.map((c) => c.line)).toEqual([1, 2]);
+  });
+
+  it("라인은 등록에서 고른 것만 — 모르는 설비는 null 로 남는다", () => {
+    const { equipmentCards } = derivePanel(
+      [req("q1", "ETCH-01 · 수집값")],
+      [],
+      ["CVD-09"],
+      { "CVD-09": "L2" },
+    );
+    // 등록에서 고른 CVD-09 만 라인을 갖는다. 채팅에서 파생된 ETCH-01 은 라인을
+    // 알 길이 없으므로 순번을 지어내지 않고 비워 둔다.
+    expect(equipmentCards.map((c) => [c.equipment, c.line])).toEqual([
+      ["CVD-09", "L2"],
+      ["ETCH-01", null],
+    ]);
   });
 });
