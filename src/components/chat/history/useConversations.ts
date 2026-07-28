@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readJson, removeKey, writeJson } from "@/lib/storage";
-import type { ContextRow, Message } from "@/lib/types";
-import type { TimeRange } from "../context/useContextRows";
+import type { Message } from "@/lib/types";
+import type { TimeRange } from "../context/useTimeRange";
 
 /**
  * 대화 이력 의 데이터 레이어.
@@ -25,7 +25,6 @@ export type Conversation = {
   updatedAt: number;
   messages: Message[];
   context: {
-    rows: ContextRow[];
     timeRange: TimeRange;
   };
 };
@@ -63,7 +62,6 @@ function isConversation(v: unknown): v is Conversation {
   }
   const ctx = c.context as Record<string, unknown> | undefined;
   if (!ctx || typeof ctx !== "object") return false;
-  if (!Array.isArray(ctx.rows)) return false;
   const tr = ctx.timeRange as Record<string, unknown> | undefined;
   if (!tr || typeof tr.start !== "string" || typeof tr.end !== "string") {
     return false;
@@ -141,7 +139,7 @@ export function useConversations() {
   const createConversation = useCallback(
     (params: {
       messages: Message[];
-      context: { rows: ContextRow[]; timeRange: TimeRange };
+      context: { timeRange: TimeRange };
     }): Conversation => {
       const now = Date.now();
       const created: Conversation = {
@@ -170,18 +168,16 @@ export function useConversations() {
       id: string,
       patch: {
         messages?: Message[];
-        context?: { rows: ContextRow[]; timeRange: TimeRange };
+        context?: { timeRange: TimeRange };
       },
     ) => {
       setList((prev) =>
         prev.map((c) => {
           if (c.id !== id) return c;
           const newMessages = patch.messages ?? c.messages;
-          const newRows = patch.context?.rows ?? c.context.rows;
           const newRange = patch.context?.timeRange ?? c.context.timeRange;
           if (
             newMessages === c.messages &&
-            newRows === c.context.rows &&
             newRange === c.context.timeRange
           ) {
             return c;
@@ -191,7 +187,7 @@ export function useConversations() {
           return {
             ...c,
             messages: newMessages,
-            context: { rows: newRows, timeRange: newRange },
+            context: { timeRange: newRange },
             title,
             updatedAt: Date.now(),
           };

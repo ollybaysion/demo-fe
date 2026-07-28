@@ -34,7 +34,7 @@ import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
-import { EquipmentPanel, useContextRows } from "./context";
+import { EquipmentPanel, useTimeRange } from "./context";
 import { EquipmentDetailDrawer } from "./context/EquipmentDetailDrawer";
 import { derivePanel, equipmentCardId, parseLabel } from "./context/derive-cards";
 import { isFulfilledBy, type PendingRequest } from "@/lib/request-store";
@@ -126,24 +126,6 @@ const DUMMY_UNCLASSIFIED: DataSnapshot = {
   included: false,
   warnings: [],
 };
-
-function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
-  return rows
-    .map((r) => {
-      const chambers = r.chambers
-        .map((c) => ({
-          ...c,
-          sensors: c.sensors.filter((s) => s.name.trim().length > 0),
-        }))
-        .filter(
-          (c) => c.name.trim().length > 0 || c.sensors.length > 0,
-        );
-      return { ...r, chambers };
-    })
-    .filter(
-      (r) => r.equipment.trim().length > 0 || r.chambers.length > 0,
-    );
-}
 
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -251,24 +233,10 @@ export function ChatContainer() {
   // 왼쪽은 상시 그룹 — 목 그룹 + (있으면) 사용자가 직접 등록한 미분류 묶음.
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
-    rows,
     timeRange,
-    setStart,
-    setEnd,
-    setEquipment,
-    addRow,
-    deleteRow,
-    addChamber,
-    setChamberName,
-    deleteChamber,
-    addSensor,
-    setSensorName,
-    deleteSensor,
-    replaceRows,
-    appendRows,
     replaceTimeRange,
     reset: resetContext,
-  } = useContextRows();
+  } = useTimeRange();
   const {
     list: conversations,
     activeId,
@@ -480,15 +448,8 @@ export function ChatContainer() {
     if (!conv) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(conv.messages);
-    replaceRows(conv.context.rows);
     replaceTimeRange(conv.context.timeRange);
-  }, [
-    activeId,
-    conversationsHydrated,
-    conversations,
-    replaceRows,
-    replaceTimeRange,
-  ]);
+  }, [activeId, conversationsHydrated, conversations, replaceTimeRange]);
 
   // Persist: throttle local state writes to the active conversation. The
   // 300ms idle window collapses per-token streaming updates into a single
@@ -501,23 +462,15 @@ export function ChatContainer() {
     const handle = setTimeout(() => {
       updateConversation(activeId, {
         messages,
-        context: { rows, timeRange },
+        context: { timeRange },
       });
     }, 300);
     return () => clearTimeout(handle);
-  }, [
-    messages,
-    rows,
-    timeRange,
-    activeId,
-    conversationsHydrated,
-    updateConversation,
-  ]);
+  }, [messages, timeRange, activeId, conversationsHydrated, updateConversation]);
 
   const sendToApi = useCallback(
     async (
       history: Message[],
-      context: ContextRow[],
       timeRangeSnapshot: { start: string; end: string },
       demoMeta?: DemoMeta,
       // 자동 재발사는 방금 채운 값 맵을 명시로 넘긴다(setState 직후라 클로저의
@@ -540,7 +493,6 @@ export function ChatContainer() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: history,
-            context,
             timeRange: hasRange ? timeRangeSnapshot : undefined,
             demo: demoMeta,
             // 동봉이 없으면 undefined 라 필드 자체가 빠진다 — 이 기능을 안 쓰는
@@ -664,15 +616,12 @@ export function ChatContainer() {
               receiveInputRequests(payload.inputRequests!);
             }
             // 비-데모 모드에서만 extractedContext 적용. 데모는
-            // turn.contextPanel 흐름이 우선이라 스킵.
+            // turn.contextPanel 흐름이 우선이라 스킵. 행 자체는 더 쌓지 않고
+            // 설비 이름만 카드로 세운다 — 폼 컨텍스트가 없어진 뒤로 이 행이
+            // 갈 곳은 설비 카드뿐이다.
             if (!demoMeta && payload.extractedContext) {
               const ec = payload.extractedContext;
               if (ec.rows && ec.rows.length > 0) {
-                if (ec.rowsMode === "append") {
-                  appendRows(ec.rows);
-                } else {
-                  replaceRows(ec.rows);
-                }
                 seedEquipmentsFromRows(ec.rows);
               }
               if (ec.timeRange) {
@@ -701,8 +650,6 @@ export function ChatContainer() {
       }
     },
     [
-      appendRows,
-      replaceRows,
       seedEquipmentsFromRows,
       replaceTimeRange,
       sentSnapshots,
@@ -741,23 +688,14 @@ export function ChatContainer() {
       const nextHistory = [...messages, userMessage];
       setMessages(nextHistory);
       setIsStreaming(true);
-      void sendToApi(nextHistory, nonEmptyRows(rows), timeRange, undefined, next);
+      void sendToApi(nextHistory, timeRange, undefined, next);
     },
-    [
-      openInputCards,
-      openInputsWith,
-      fillInput,
-      messages,
-      rows,
-      timeRange,
-      sendToApi,
-    ],
+    [openInputCards, openInputsWith, fillInput, messages, timeRange, sendToApi],
   );
 
   const handleScenarioStart = useCallback(
     async (scenario: Scenario) => {
-      // Auto-fill context panel + optional time range
-      replaceRows(scenario.contextPanel);
+      // 시나리오가 아는 설비를 카드로 세우고 구간을 맞춘다.
       seedEquipmentsFromRows(scenario.contextPanel);
       if (scenario.timeRange) {
         replaceTimeRange(scenario.timeRange);
@@ -772,12 +710,10 @@ export function ChatContainer() {
       setIsStreaming(true);
       setDemoState({ scenarioId: scenario.id, turnIndex: 0, ended: false });
 
-      await sendToApi(
-        [starterMsg],
-        [],
-        scenario.timeRange ?? timeRange,
-        { scenarioId: scenario.id, turnIndex: 0 },
-      );
+      await sendToApi([starterMsg], scenario.timeRange ?? timeRange, {
+        scenarioId: scenario.id,
+        turnIndex: 0,
+      });
 
       const nextIdx = 1;
       setDemoState({
@@ -786,13 +722,7 @@ export function ChatContainer() {
         ended: nextIdx >= scenario.turns.length,
       });
     },
-    [
-      replaceRows,
-      seedEquipmentsFromRows,
-      replaceTimeRange,
-      sendToApi,
-      timeRange,
-    ],
+    [seedEquipmentsFromRows, replaceTimeRange, sendToApi, timeRange],
   );
 
   const handleSubmit = useCallback(
@@ -817,7 +747,7 @@ export function ChatContainer() {
       if (!demoState && !activeId) {
         createConversation({
           messages: nextHistory,
-          context: { rows, timeRange },
+          context: { timeRange },
         });
       }
 
@@ -827,7 +757,6 @@ export function ChatContainer() {
 
         let effectiveTimeRange = timeRange;
         if (currentTurn?.contextPanel) {
-          replaceRows(currentTurn.contextPanel);
           seedEquipmentsFromRows(currentTurn.contextPanel);
           setRightTab("context");
         }
@@ -836,12 +765,10 @@ export function ChatContainer() {
           effectiveTimeRange = currentTurn.timeRange;
         }
 
-        await sendToApi(
-          nextHistory,
-          [],
-          effectiveTimeRange,
-          { scenarioId: demoState.scenarioId, turnIndex: demoState.turnIndex },
-        );
+        await sendToApi(nextHistory, effectiveTimeRange, {
+          scenarioId: demoState.scenarioId,
+          turnIndex: demoState.turnIndex,
+        });
         const nextIdx = demoState.turnIndex + 1;
         setDemoState({
           scenarioId: demoState.scenarioId,
@@ -852,17 +779,15 @@ export function ChatContainer() {
         // 어떤 발화든 나가는 순간 충족된 요청의 소임이 끝난다 — 등록된
         // 스냅샷은 이 요청에 함께 실려 나간다. ("등록 완료" chip 도 사라진다.)
         clearFulfilledRequests();
-        await sendToApi(nextHistory, nonEmptyRows(rows), timeRange);
+        await sendToApi(nextHistory, timeRange);
       }
     },
     [
       demoState,
       messages,
-      rows,
       timeRange,
       activeId,
       sendToApi,
-      replaceRows,
       seedEquipmentsFromRows,
       replaceTimeRange,
       createConversation,
@@ -871,14 +796,14 @@ export function ChatContainer() {
   );
 
   /**
-   * 데이터 요청 왕복 체험 시작 — 질문은 실 파이프라인으로 보내되 **컨텍스트를
-   * 비우고** 출발한다. 설비 정보가 남아 있으면 [분석 대상]으로 프롬프트에
-   * 주입되고, mock 의 설비 ID 분기가 데이터 요청 분기보다 먼저 잡아채
-   * 요청 카드가 만들어지지 않는다.
+   * 데이터 요청 왕복 체험 시작 — 질문을 실 파이프라인으로 보낸다.
+   *
+   * <p>예전에는 여기서 폼 컨텍스트를 비우고 출발했다: 설비 정보가 남아 있으면
+   * 프롬프트에 주입돼 mock 의 설비 ID 분기가 데이터 요청 분기보다 먼저 잡아챘기
+   * 때문이다. 폼 컨텍스트가 없어진 뒤로는 비울 것이 없다.
    */
   const handleQuickStart = useCallback(
     async (text: string) => {
-      replaceRows([]); // 화면의 설비 입력도 비운다 — 보내는 컨텍스트와 일치하게.
       const userMessage: Message = {
         id: newId(),
         role: "user",
@@ -891,19 +816,12 @@ export function ChatContainer() {
       if (!activeId) {
         createConversation({
           messages: nextHistory,
-          context: { rows: [], timeRange },
+          context: { timeRange },
         });
       }
-      await sendToApi(nextHistory, [], timeRange);
+      await sendToApi(nextHistory, timeRange);
     },
-    [
-      messages,
-      activeId,
-      timeRange,
-      sendToApi,
-      replaceRows,
-      createConversation,
-    ],
+    [messages, activeId, timeRange, sendToApi, createConversation],
   );
 
   const handleNewConversation = useCallback(() => {
@@ -945,12 +863,10 @@ export function ChatContainer() {
     [isStreaming, selectConversation, clearRequests, clearInputs],
   );
 
+  // 지금 화면에 서 있는 설비 — 폼이 아니라 설비 카드가 출처다.
   const equipmentNames = useMemo(
-    () =>
-      rows
-        .map((r) => r.equipment.trim())
-        .filter((n) => n.length > 0),
-    [rows],
+    () => equipmentCards.map((c) => c.equipment),
+    [equipmentCards],
   );
 
   // 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
@@ -1038,8 +954,8 @@ export function ChatContainer() {
     const trimmed = messages.slice(0, lastUserIndex + 1);
     setMessages(trimmed);
     setIsStreaming(true);
-    void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
-  }, [messages, rows, timeRange, sendToApi]);
+    void sendToApi(trimmed, timeRange);
+  }, [messages, timeRange, sendToApi]);
 
   /**
    * 충족된 요청을 가진 가장 최근 질문 — 있으면 입력창 위에 "등록 완료" chip 으로
@@ -1310,7 +1226,6 @@ export function ChatContainer() {
           />
           <SummaryPanel
             open={rightTab === "summary"}
-            rows={rows}
             timeRange={timeRange}
             compareDigest={lastCompareDigest}
           />
