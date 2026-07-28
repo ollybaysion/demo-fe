@@ -772,6 +772,10 @@ export function ChatContainer() {
     ],
   );
 
+  // 지금은 부르는 곳이 없다 — 빈 화면의 시나리오 목록을 걷어냈기 때문이다.
+  // 재생 기계(turn 진행·`다시 시작`·대화 저장의 demo)는 그대로 두었으므로,
+  // 진입 버튼만 다시 달면 데모가 되살아난다.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleScenarioStart = useCallback(
     async (scenario: Scenario) => {
       // Auto-fill context panel + optional time range
@@ -1179,10 +1183,7 @@ export function ChatContainer() {
             ].join(" ")}
           >
             {messages.length === 0 ? (
-              <ChatEmptyState
-                onScenarioStart={handleScenarioStart}
-                onQuickStart={handleQuickStart}
-              />
+              <ChatEmptyState onQuickStart={handleQuickStart} />
             ) : (
               <MessageList
                 messages={messages}

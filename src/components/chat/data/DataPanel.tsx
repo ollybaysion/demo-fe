@@ -361,7 +361,6 @@ export function DataPanel({
                 })`}
                 open={requestsOpen}
                 onToggle={() => setRequestsOpen((v) => !v)}
-                filter={<FilterRow label="요청 필터" />}
               >
                 <div className="flex flex-col gap-xs">
                   {inputRequests.map((p) => (
@@ -416,7 +415,6 @@ export function DataPanel({
               }
               open={dataOpen}
               onToggle={() => setDataOpen((v) => !v)}
-              filter={<FilterRow label="데이터 필터" />}
               action={
                 <CollapseCardsButton
                   collapsed={openGroupKeys?.length === 0}
@@ -709,28 +707,6 @@ function SnapshotGroup({
 }
 
 /**
- * 필터 줄 자리표시자 — 아직 기능이 없다. 점선으로 "여기 들어올 것"임을 알린다.
- * 단(섹션)마다 따로 두는 게 규칙이다: 요청과 데이터는 거르는 기준이 다르다.
- */
-function FilterRow({
-  label,
-  action,
-}: {
-  label: string;
-  /** 오른쪽 끝 동작 — 이 단에만 걸린다(예: 전체 축소). */
-  action?: ReactNode;
-}) {
-  return (
-    <div className="mb-xs flex items-center gap-xs rounded-md border border-dashed border-brand-hairline px-sm py-[6px]">
-      <span className="flex-1 min-w-0 text-caption text-brand-muted-soft truncate">
-        {label}
-      </span>
-      {action}
-    </div>
-  );
-}
-
-/**
  * 안쪽을 한 번에 접고 펴는 아이콘 버튼. 화살표가 **모이면 접기**, **벌어지면
  * 펴기** — 제목 줄은 좁아서 글자 대신 방향으로 말한다.
  */
@@ -814,15 +790,12 @@ function CollapsibleSection({
   title,
   open,
   onToggle,
-  filter,
   action,
   children,
 }: {
   title: string;
   open: boolean;
   onToggle: () => void;
-  /** 이 단에만 걸리는 필터 줄 — 펼쳐져 있을 때 목록 맨 위에 놓인다. */
-  filter?: ReactNode;
   /** 제목 줄 오른쪽 아이콘 — **이 단 안의 카드들**을 한 번에 접는다(단은 그대로). */
   action?: ReactNode;
   children: ReactNode;
@@ -860,12 +833,7 @@ function CollapsibleSection({
         </button>
         {action && <span className="shrink-0 pl-xs">{action}</span>}
       </div>
-      {open && (
-        <div className="px-lg">
-          {filter}
-          {children}
-        </div>
-      )}
+      {open && <div className="px-lg">{children}</div>}
     </section>
   );
 }

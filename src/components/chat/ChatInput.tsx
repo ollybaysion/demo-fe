@@ -53,6 +53,7 @@ export function ChatInput({
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Treat any string (including "") as locked. An empty locked value
   // shows the placeholder while still blocking typing — used for the
@@ -240,12 +241,26 @@ export function ChatInput({
           disabled ? "opacity-60" : "",
         ].join(" ")}
       >
-        <IconButton
-          aria-label="도구 / 첨부 (개발 예정)"
-          disabled={disabled}
-          onClick={() => {
-            // TODO: open tools / attachments menu
+        {/* 첨부 진입점 — 드래그·붙여넣기와 같은 `ingestFiles` 로 들어간다.
+            숨은 file input 을 버튼이 대신 누른다(브라우저 기본 모양을 쓰지 않으려고). */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={[...ALLOWED_MIME].join(",")}
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files?.length) void ingestFiles(files);
+            // 같은 파일을 연달아 고를 수 있게 값을 비운다.
+            e.target.value = "";
           }}
+        />
+        <IconButton
+          aria-label="이미지 첨부"
+          title="이미지 첨부 — 끌어다 놓거나 붙여넣어도 됩니다"
+          disabled={disabled || isLocked}
+          onClick={() => fileInputRef.current?.click()}
         >
           <PlusIcon />
         </IconButton>
@@ -280,16 +295,6 @@ export function ChatInput({
           ].join(" ")}
           style={{ minHeight: "40px", maxHeight: `${TEXTAREA_MAX_HEIGHT}px` }}
         />
-
-        <IconButton
-          aria-label="음성 입력 (개발 예정)"
-          disabled={disabled}
-          onClick={() => {
-            // TODO: voice input
-          }}
-        >
-          <MicIcon />
-        </IconButton>
       </div>
     </form>
   );
@@ -357,27 +362,6 @@ function PlusIcon() {
       aria-hidden
     >
       <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function MicIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="9" y="2" width="6" height="12" rx="3" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
     </svg>
   );
 }
