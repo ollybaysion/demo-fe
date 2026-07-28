@@ -2,6 +2,7 @@ import { CONTEXT_LABELS } from "@/config/contextColumns";
 import { SCENARIOS } from "@/demo/scenarios";
 import { IS_MOCK, forwardOrMock } from "@/lib/backend";
 import { makeRequestLogger, newRequestId } from "@/lib/logger";
+import type { ChatScope } from "@/lib/query-scope";
 import type {
   ChatDataSnapshot,
   ChatInputs,
@@ -65,6 +66,8 @@ type ChatRequestBody = {
   dataSnapshots?: ChatDataSnapshot[];
   /** 사용자가 입력 카드로 채운 스칼라 값 — 스킬 네임스페이스({skill:{key:value}}). */
   inputs?: ChatInputs;
+  /** 사용자가 질의 대상 트레이에 담은 것 — 이 질문이 무엇을 놓고 하는 질문인지. */
+  scope?: ChatScope;
 };
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
@@ -100,13 +103,33 @@ function formatContext(context: ContextRow[]): string {
   return context.map(formatContextRow).join("; ");
 }
 
+/**
+ * 담긴 질의 대상을 한 줄로 — 설비는 이름만, 분석은 그 아래 한 단으로.
+ * 실 백엔드의 `[질의 대상]` 섹션과 같은 것을 목에서도 되뇌기 위한 것이다.
+ */
+function formatScope(scope: ChatScope): string {
+  const parts = [
+    ...(scope.equipments ?? []),
+    ...(scope.analyses ?? []).map((a) =>
+      a.focus ? `${a.equipment} › ${a.focus}` : a.equipment,
+    ),
+  ].filter((s) => s && s.trim().length > 0);
+  return parts.join(", ");
+}
+
 function buildMockResponse(
   lastUserContent: string,
   context?: ContextRow[],
   timeRange?: ChatTimeRange,
+  scope?: ChatScope,
 ): string {
   const parts: string[] = [];
-  if (context && context.length > 0) {
+  // 담긴 대상이 있으면 그것이 이 질문의 범위다 — 폼 컨텍스트보다 우선한다.
+  // 둘 다 되뇌면 화면의 [질의 대상] 뱃지와 답이 서로 다른 설비를 말하게 된다.
+  const scopeText = scope ? formatScope(scope) : "";
+  if (scopeText) {
+    parts.push(`질의 대상: ${scopeText}`);
+  } else if (context && context.length > 0) {
     parts.push(`설비: ${formatContext(context)}`);
   }
   if (timeRange && (timeRange.start || timeRange.end)) {
@@ -248,7 +271,11 @@ export async function POST(request: Request): Promise<Response> {
     // 재생하는 것이라, 중간에 사용자 조달을 요구하면 흐름이 끊긴다.
     // 스킬 인자(스칼라)가 없으면 입력 요청을 먼저 — 조달 SQL 보다 선행이다.
     const missingInputs = missingInputRequests(lastUser.content, body.inputs);
-    const missing = missingDataRequests(lastUser.content, body.dataSnapshots);
+    const missing = missingDataRequests(
+      lastUser.content,
+      body.dataSnapshots,
+      body.scope,
+    );
     if (missingInputs.length > 0) {
       responseInputRequests = missingInputs;
       responseText = buildInputRequestResponse(missingInputs);
@@ -257,11 +284,16 @@ export async function POST(request: Request): Promise<Response> {
       responseText = buildDataRequestResponse(missing);
     } else {
       const supplied = suppliedLabels(body.dataSnapshots);
+      const answer = buildMockResponse(
+        lastUser.content,
+        body.context,
+        body.timeRange,
+        body.scope,
+      );
       responseText =
         supplied.length > 0
-          ? `제공해주신 ${supplied.join(", ")} 을(를) 근거로 답변합니다.\n\n` +
-            buildMockResponse(lastUser.content, body.context, body.timeRange)
-          : buildMockResponse(lastUser.content, body.context, body.timeRange);
+          ? `제공해주신 ${supplied.join(", ")} 을(를) 근거로 답변합니다.\n\n${answer}`
+          : answer;
     }
     responseRecommend = recommendNext(lastUser.content);
   }
@@ -384,15 +416,24 @@ function extractEquipment(question: string): string | null {
   return m ? m[1].toUpperCase() : null;
 }
 
+/** 담긴 대상의 설비 — 통째로 담긴 설비가 먼저, 없으면 담긴 분석의 설비. */
+function scopeEquipment(scope?: ChatScope): string | null {
+  return scope?.equipments?.[0] ?? scope?.analyses?.[0]?.equipment ?? null;
+}
+
 /** 질문이 건드리는 데이터 중, 아직 동봉되지 않은 것들. */
 function missingDataRequests(
   question: string,
   supplied: ChatRequestBody["dataSnapshots"],
+  scope?: ChatScope,
 ): DataRequest[] {
   const q = question.toLowerCase();
-  // 설비를 못 대면 데모 기본값으로 — mock 라우트라 늘 설비 카드가 서게 한다
-  // (실제 백엔드는 요청에 진짜 설비를 실어 보낸다).
-  const eq = extractEquipment(question) ?? "CVD-01";
+  // 질문이 설비를 대면 그 설비, 아니면 담긴 대상의 설비. 둘 다 없을 때만 데모
+  // 기본값으로 떨어진다 — mock 라우트라 늘 설비 카드가 서게 한다(실제 백엔드는
+  // 요청에 진짜 설비를 실어 보낸다). 담긴 대상을 무시하면 요청 카드가 엉뚱한
+  // 설비 밑으로 들어가 화면이 어긋난다.
+  const eq =
+    extractEquipment(question) ?? scopeEquipment(scope) ?? "CVD-01";
   const have = new Set((supplied ?? []).map((s) => s.queryKey));
   return REQUESTABLE.filter(
     (r) =>

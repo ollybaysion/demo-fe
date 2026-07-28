@@ -40,7 +40,12 @@ const TRACE: Skill = {
   ],
 };
 
-const SESSION: SkillSession = { id: "s1", equipment: "CVD-01", skill: TRACE };
+const SESSION: SkillSession = {
+  id: "s1",
+  equipment: "CVD-01",
+  skill: TRACE,
+  values: { equipment: "CVD-01" },
+};
 
 describe("equipmentInputKey", () => {
   it("설비명이 채울 인자를 찾는다", () => {
@@ -141,33 +146,51 @@ describe("missingArgs", () => {
 
 describe("skillDataRequests", () => {
   it("설비명은 등록 즉시 SQL 에 들어간다", () => {
-    const [first] = skillDataRequests(SESSION, {});
+    const [first] = skillDataRequests(SESSION);
     expect(first.sql).toContain("'CVD-01'");
     expect(first.label).toBe("CVD-01 · 측정 분포");
   });
 
   it("라벨이 '설비 · category' 라 파생이 그 설비 카드로 묶는다", () => {
-    const [first] = skillDataRequests(SESSION, {});
+    const [first] = skillDataRequests(SESSION);
     expect(first.label.startsWith("CVD-01 · ")).toBe(true);
   });
 
   it("채운 입력이 SQL 에 반영된다", () => {
-    const [first] = skillDataRequests(SESSION, {
-      fdc_trace_reading: { param_index: "7" },
+    const [first] = skillDataRequests({
+      ...SESSION,
+      values: { ...SESSION.values, param_index: "7" },
     });
     expect(first.sql).toContain("param_index = 7");
   });
 
   it("앞 스텝 결과에 매인 스텝은 카드로 세우지 않는다", () => {
     // 사용자가 채울 수 없는 요구라, 세워두면 영영 안 걷힌다.
-    expect(skillDataRequests(SESSION, {})).toHaveLength(1);
+    expect(skillDataRequests(SESSION)).toHaveLength(1);
   });
 
   it("queryKey 는 설비까지 넣어 다른 설비와 겹치지 않는다", () => {
     const other: SkillSession = { ...SESSION, id: "s2", equipment: "CVD-02" };
-    expect(skillDataRequests(SESSION, {})[0].queryKey).not.toBe(
-      skillDataRequests(other, {})[0].queryKey,
+    expect(skillDataRequests(SESSION)[0].queryKey).not.toBe(
+      skillDataRequests(other)[0].queryKey,
     );
+  });
+
+  it("같은 스킬을 두 설비에 걸어도 값이 서로 안 섞인다", () => {
+    // 값이 세션 안에 있는 이유 — 스킬로만 네임스페이스된 전역 맵에 두면 나중
+    // 등록이 먼저 세워 둔 요청 카드의 SQL 까지 자기 값으로 바꿔 버린다.
+    const a: SkillSession = {
+      ...SESSION,
+      values: { equipment: "CVD-01", param_index: "7" },
+    };
+    const b: SkillSession = {
+      ...SESSION,
+      id: "s2",
+      equipment: "CVD-02",
+      values: { equipment: "CVD-02", param_index: "9" },
+    };
+    expect(skillDataRequests(a)[0].sql).toContain("param_index = 7");
+    expect(skillDataRequests(b)[0].sql).toContain("param_index = 9");
   });
 });
 
