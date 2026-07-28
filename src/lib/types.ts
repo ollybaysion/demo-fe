@@ -137,6 +137,30 @@ export type MessageAttachment = {
   url?: string;
 };
 
+/**
+ * 답에 딸려 오는 이미지 — 계측 화면 캡처·설비 도면 같은 것.
+ *
+ * 실제로 어디서 읽어오는지는 백엔드가 진다(MCP 등). FE 는 받은 것을 그릴 뿐이라
+ * `dataUrl`(inline) 과 `url`(원격) 둘 다 받는다 — 사내 이미지 서버가 있으면 url,
+ * 없으면 inline 이 된다.
+ */
+export type MessageImage = {
+  /** 카드 이름. 비면 파일명·호스트에서 만든다. */
+  label: string;
+  dataUrl?: string;
+  url?: string;
+  /** 대체 텍스트 — 없으면 label 을 쓴다. */
+  alt?: string;
+};
+
+/** 답이 가리키는 바깥 문서 — 사내 위키·티켓·규격서. */
+export type MessageLink = {
+  label: string;
+  url: string;
+  /** 한 줄 설명(선택) — 왜 이 링크인지. */
+  description?: string;
+};
+
 export type Message = {
   id: string;
   role: MessageRole;
@@ -150,6 +174,10 @@ export type Message = {
   charts?: MessageChartEntry[];
   /** Paired event timelines — 어시스턴트 메시지에만. */
   eventTimelines?: MessageEventTimelineEntry[];
+  /** 답에 딸린 이미지 — 어시스턴트 메시지에만. */
+  images?: MessageImage[];
+  /** 답이 가리키는 바깥 문서 — 어시스턴트 메시지에만. */
+  links?: MessageLink[];
   /**
    * 이 답이 무엇을 놓고 나온 답인지 — 보낼 때의 질의 대상 이름들.
    *
@@ -198,30 +226,6 @@ export type Message = {
 };
 
 /**
- * 설비 정보 입력 — 설비 → 챔버 → 센서 3단계 트리.
- *
- * 한 설비는 여러 챔버를 가지고, 각 챔버는 여러 센서를 가진다.
- * 빈 문자열은 사용자가 비워둔 셀; 행/항목 순서를 보존하기 위해
- * 그대로 유지한다.
- */
-export type ContextSensor = {
-  id: string;
-  name: string;
-};
-
-export type ContextChamber = {
-  id: string;
-  name: string;
-  sensors: ContextSensor[];
-};
-
-export type ContextRow = {
-  id: string;
-  equipment: string;
-  chambers: ContextChamber[];
-};
-
-/**
  * 데이터 스냅샷 — DB 미접속 환경에서 사람이 직접 실행한 조회 결과.
  *
  * 표 내용(`columns`/`rows`)은 `data-provisioning` 엔진이 해석한 산출물을 그대로
@@ -251,6 +255,15 @@ export type DataSnapshot = {
   included: boolean;
   /** 등록 시점의 비치명 경고 코드들. 자유형은 `INTEGRITY_ABSENT` 가 정상. */
   warnings: string[];
+  /**
+   * 휴지통에 들어간 시각(ISO). 있으면 목록·요청 페이로드 어디에도 안 나오지만
+   * 저장소에는 남아 있어 되살릴 수 있다.
+   *
+   * 삭제를 즉시 확정하지 않는 이유는 스냅샷이 **SQL 재실행 없이는 다시 만들기
+   * 번거로운 데이터**라서다. 오클릭 한 번의 비용이 너무 크고, 그 사실은 탭을
+   * 닫는다고 달라지지 않는다 — 그래서 메모리가 아니라 저장소에 남긴다.
+   */
+  deletedAt?: string;
   /**
    * 이 데이터가 가리키는 구간(선택). 요청에서 그대로 물려받는 값이라 요청이
    * 아닌 경로(직접 붙여넣기)로 등록하면 없다. 카드에서 이름 아래 줄에 적는다.

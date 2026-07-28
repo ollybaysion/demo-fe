@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ContextRow } from "@/lib/types";
-import type { TimeRange } from "../context/useContextRows";
 import type { Conversation } from "./useConversations";
 
 /**
@@ -115,10 +113,6 @@ function ConversationItem({
   now: number | null;
   onClick: () => void;
 }) {
-  const contextLine = formatContextSummary(
-    conversation.context.rows,
-    conversation.context.timeRange,
-  );
   // now 가 아직 set 되지 않은 첫 렌더에서는 절대 날짜로 fallback.
   const timeLine =
     now === null
@@ -148,11 +142,6 @@ function ConversationItem({
         >
           {conversation.title}
         </div>
-        {contextLine && (
-          <div className="mt-xxs text-caption text-brand-muted truncate font-mono">
-            {contextLine}
-          </div>
-        )}
         <div className="mt-xxs text-caption text-brand-muted-soft">
           {timeLine}
         </div>
@@ -195,52 +184,3 @@ function formatDate(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function formatTime(d: Date): string {
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mi}`;
-}
-
-/**
- * 행/발생 시간을 한 줄 컨텍스트로 요약.
- * - 설비 1개 + 발생 시간: `ETCH-01 · 2026-05-02 13:00~14:00` (같은 날),
- *   `ETCH-01 · 2026-05-01 13:00 ~ 2026-05-02 14:00` (다른 날)
- * - 한쪽만 채워진 발생 시간: `2026-05-02 13:00`
- * - 여러 설비: `ETCH-01 외 2 · 2026-05-02 13:00~14:00`
- * - 발생 시간 비면 시간 부분 생략, 설비도 시간도 비면 빈 문자열
- */
-function formatContextSummary(
-  rows: ContextRow[],
-  range: TimeRange,
-): string {
-  const equipNames = rows
-    .map((r) => r.equipment.trim())
-    .filter((n) => n.length > 0);
-
-  let equipPart = "";
-  if (equipNames.length === 1) {
-    equipPart = equipNames[0];
-  } else if (equipNames.length > 1) {
-    equipPart = `${equipNames[0]} 외 ${equipNames.length - 1}`;
-  }
-
-  const start = range.start ? new Date(range.start) : null;
-  const end = range.end ? new Date(range.end) : null;
-  const startValid = start && !Number.isNaN(start.getTime());
-  const endValid = end && !Number.isNaN(end.getTime());
-
-  let timePart = "";
-  if (startValid && endValid) {
-    const sameDay = formatDate(start) === formatDate(end);
-    timePart = sameDay
-      ? `${formatDate(start)} ${formatTime(start)}~${formatTime(end)}`
-      : `${formatDate(start)} ${formatTime(start)} ~ ${formatDate(end)} ${formatTime(end)}`;
-  } else if (startValid) {
-    timePart = `${formatDate(start)} ${formatTime(start)}`;
-  } else if (endValid) {
-    timePart = `${formatDate(end)} ${formatTime(end)}`;
-  }
-
-  if (equipPart && timePart) return `${equipPart} · ${timePart}`;
-  return equipPart || timePart;
-}

@@ -93,11 +93,15 @@ function groupKeyOf(equipment: string, rangeKey: string, category: string): stri
  * 스냅샷도 아직 없을 수 있으니 **빈 카드**로 세워 준다(등록했는데 아무것도 안
  * 보이면 등록이 안 된 것처럼 읽힌다). 등록 순서대로 앞에 서고, 그 설비에 요청이
  * 붙으면 같은 카드에 줄이 쌓인다.
+ *
+ * `equipmentLines` 는 그 등록에서 사람이 고른 라인이다. 채팅에서 파생된 설비는
+ * 여기에 없고, 없으면 카드의 라인은 `null` 로 남는다 — 모르는 값을 지어내지 않는다.
  */
 export function derivePanel(
   requests: PendingRequest[],
   snapshots: DataSnapshot[],
   seedEquipments: string[] = [],
+  equipmentLines: Record<string, string> = {},
 ): DerivedPanel {
   const order: string[] = [];
   const byKey = new Map<string, Bucket>();
@@ -153,7 +157,7 @@ export function derivePanel(
   // 직접 등록한 설비를 먼저 세운다 — 줄은 아래 버킷 순회가 채운다.
   for (const eq of seedEquipments) {
     if (!eq || eq === UNCLASSIFIED || cardByEq.has(eq)) continue;
-    cardByEq.set(eq, emptyCard(eq, eqOrder.length + 1));
+    cardByEq.set(eq, emptyCard(eq, equipmentLines[eq] ?? null));
     eqOrder.push(eq);
   }
   for (const k of order) {
@@ -162,7 +166,7 @@ export function derivePanel(
     if (b.equipment === UNCLASSIFIED) continue;
     let card = cardByEq.get(b.equipment);
     if (!card) {
-      card = emptyCard(b.equipment, eqOrder.length + 1);
+      card = emptyCard(b.equipment, equipmentLines[b.equipment] ?? null);
       cardByEq.set(b.equipment, card);
       eqOrder.push(b.equipment);
     }
@@ -183,7 +187,7 @@ export function derivePanel(
 }
 
 /** 줄이 아직 없는 설비 카드 — 조회 전이라 설명값·상태는 비어 있다. */
-function emptyCard(equipment: string, line: number): EquipmentCardModel {
+function emptyCard(equipment: string, line: string | null): EquipmentCardModel {
   return {
     id: equipmentCardId(equipment),
     equipment,

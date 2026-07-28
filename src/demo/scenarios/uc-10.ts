@@ -21,7 +21,6 @@ const STEP_COMPARE: readonly Record<string, unknown>[] = Array.from(
 export const uc10: Scenario = {
   id: "uc-10",
   starter: "STEP 1과 STEP 2의 같은 센서 거동을 비교하고 싶습니다.",
-  contextPanel: [],
   turns: [
     {
       user: "STEP 1과 STEP 2의 같은 센서 거동을 비교하고 싶습니다.",
@@ -35,19 +34,6 @@ export const uc10: Scenario = {
     {
       user: "예시 STEP 비교",
       assistant: "STEP1 vs STEP2 APC_PRESSURE 거동입니다. **STEP2 에서 변동성이 30% 더 큽니다.**",
-      contextPanel: [
-        {
-          id: "uc10-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc10-ch-1",
-              name: "A",
-              sensors: [{ id: "uc10-sn-1", name: "APC_PRESSURE" }],
-            },
-          ],
-        },
-      ],
       charts: [
         {
           type: "line",

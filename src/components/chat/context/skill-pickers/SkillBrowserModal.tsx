@@ -196,9 +196,10 @@ function SkillDetail({ skill }: { skill: Skill }) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-md flex flex-col gap-sm">
       <div>
-        <h3 className="text-body-md text-brand-ink">{skill.focus}</h3>
+        {/* 제목은 이름 — 목록·칩·고른 뒤 한 줄과 같은 말로 세운다. */}
+        <h3 className="font-mono text-body-md text-brand-ink">{skill.name}</h3>
         <p className="text-caption text-brand-muted-soft">
-          {skill.name} · {skill.unit}
+          {skill.focus} · {skill.unit}
           {skill.anchorTable ? ` · ${skill.anchorTable}` : ""}
         </p>
       </div>

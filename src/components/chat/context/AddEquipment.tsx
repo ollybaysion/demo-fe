@@ -43,6 +43,8 @@ type Props = {
    */
   onAdd: (
     equipment: string,
+    /** 고른 라인. 안 골랐으면 null — 라인은 필수가 아니다. */
+    line: string | null,
     skill: Skill | null,
     values: Record<string, string>,
   ) => void;
@@ -58,6 +60,9 @@ type Props = {
 export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
   const [open, setOpen] = useState(false);
   const [equipment, setEquipment] = useState("");
+  /** 고를 수 있는 라인 — AKG 가 가진 목록. 못 받으면 null 로 남고 칸은 안 그린다. */
+  const [lines, setLines] = useState<string[] | null>(null);
+  const [line, setLine] = useState("");
   /** 스킬 목록을 펼쳤는가 — 자리는 늘 보이고, 목록만 접힌다. */
   const [pickerOpen, setPickerOpen] = useState(false);
   const [skills, setSkills] = useState<Skill[] | null>(null);
@@ -93,6 +98,29 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
     if (open) equipmentRef.current?.focus();
   }, [open]);
 
+  // 라인 목록은 폼을 열 때 한 번 — 고를 값이라 폼이 서기 전에 있어야 한다.
+  // 못 받으면 라인 칸을 아예 안 그린다: 빈 드롭다운은 고를 수 없는 칸이라
+  // 등록 자체를 막는 것처럼 읽힌다(라인은 필수가 아니다).
+  useEffect(() => {
+    if (!open || lines !== null) return;
+    let alive = true;
+    fetch("/api/fdc/v1/lines")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((body: { lines?: unknown }) => {
+        if (!alive) return;
+        const list = Array.isArray(body.lines)
+          ? body.lines.filter((v): v is string => typeof v === "string")
+          : [];
+        setLines(list);
+      })
+      .catch(() => {
+        if (alive) setLines([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, lines]);
+
   // 설비 카드에서 연 진입 — 설비는 이미 정해졌으니 스킬 칸을 펼친 채로 연다.
   // props 변화에 맞춘 상태 조정이라 effect 가 아니라 **렌더 중**에 한다: effect 로
   // 미루면 한 프레임 동안 닫힌 폼이 그려졌다가 열린다.
@@ -110,6 +138,7 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
   const close = useCallback(() => {
     setOpen(false);
     setEquipment("");
+    setLine("");
     setPickerOpen(false);
     setSelected("");
     setError(null);
@@ -149,7 +178,7 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
         .map(([k, v]) => [k, v.trim()] as const)
         .filter(([, v]) => v.length > 0),
     );
-    onAdd(name, selectedSkill, selectedSkill ? kept : {});
+    onAdd(name, line.trim() || null, selectedSkill, selectedSkill ? kept : {});
     // 방금 쓴 것이 다음 번 목록 맨 위에 온다.
     if (selectedSkill) setRecent(recordSkillUse(selectedSkill.skill));
     close();
@@ -243,6 +272,29 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
       </label>
 
       {/*
+        라인 — 타이핑이 아니라 **고르는 값**이다. 정해진 목록이 있는 것을 자유
+        입력으로 두면 같은 라인이 표기만 다른 여러 값으로 갈라진다. 목록이 비면
+        (못 받았거나 없으면) 칸을 아예 안 그린다.
+      */}
+      {lines !== null && lines.length > 0 && (
+        <label className="flex flex-col gap-xxs">
+          <span className="text-caption text-brand-muted">라인</span>
+          <select
+            value={line}
+            onChange={(e) => setLine(e.target.value)}
+            className="h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+          >
+            <option value="">선택 안 함</option>
+            {lines.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {/*
         스킬 칸 — 설비 칸과 **같은 무게**로 둔다: 라벨은 밖에, 필드는 같은 높이·
         같은 테두리. 둘은 이 폼의 두 축이고 어느 쪽이 더 중요하지 않다(설비만으로도,
         스킬을 붙여서도 시작할 수 있다). 접혀 있어도 자리가 늘 보여야 여기가
@@ -257,8 +309,11 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
           className="group w-full flex items-center gap-xs rounded-sm py-xxs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
         >
           <span className="shrink-0">분석 스킬</span>
-          <span className="flex-1 min-w-0 text-left truncate text-brand-ink">
-            {selectedSkill?.focus ?? ""}
+          {/* 고른 뒤에 남는 한 줄 — 목록에서 누른 것과 **같은 말**이어야 한다.
+              focus 를 세워 두면 "센서 측정값"을 골랐는데 붙는 건
+              `fdc-trace-reading` 이라, 고르고 나서도 무엇을 골랐는지 모른다. */}
+          <span className="flex-1 min-w-0 text-left truncate font-mono text-brand-ink">
+            {selectedSkill?.name ?? ""}
           </span>
           {/*
             누를 곳 표시는 **상태마다 하나만** 둔다. 고르기 전에는 "열린다"는

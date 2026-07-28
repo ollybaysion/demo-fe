@@ -51,15 +51,17 @@ export function SkillPicker({
                 type="button"
                 onClick={() => onSelect(s.skill)}
                 aria-pressed={on}
-                title={`${s.focus} · ${s.name}`}
+                title={`${s.name} · ${s.focus}`}
                 className={[
-                  "max-w-full truncate rounded-full border px-xs h-6 text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+                  "max-w-full truncate rounded-full border px-xs h-6 font-mono text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
                   on
                     ? "border-brand-primary bg-brand-primary text-brand-on-primary"
                     : "border-brand-hairline bg-brand-canvas text-brand-ink hover:border-brand-primary hover:text-brand-primary",
                 ].join(" ")}
               >
-                {s.focus}
+                {/* 칩도 이름이다 — 최근에 쓴 것을 다시 누르는 자리라, 목록에서
+                    본 것과 같은 말로 서 있어야 알아본다. */}
+                {s.name}
               </button>
             );
           })}

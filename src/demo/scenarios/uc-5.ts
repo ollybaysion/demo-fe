@@ -23,7 +23,6 @@ const EMO_TREND: readonly Record<string, unknown>[] = Array.from(
 export const uc5: Scenario = {
   id: "uc-5",
   starter: "설비가 갑자기 멈췄습니다. 원인이 궁금합니다.",
-  contextPanel: [],
   turns: [
     {
       user: "설비가 갑자기 멈췄습니다. 원인이 궁금합니다.",
@@ -37,23 +36,6 @@ export const uc5: Scenario = {
     {
       user: "예시 설비로 분석",
       assistant: "ETCH-01의 EMO 트리거 시점은 **13:45** 입니다. 직전 30분 알람 시퀀스와 주요 센서 추세입니다.",
-      contextPanel: [
-        {
-          id: "uc5-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc5-ch-1",
-              name: "A",
-              sensors: [
-                { id: "uc5-sn-1", name: "APC_PRESSURE" },
-                { id: "uc5-sn-2", name: "RF_FORWARD" },
-                { id: "uc5-sn-3", name: "TEMP" },
-              ],
-            },
-          ],
-        },
-      ],
       tables: [
         {
           title: "직전 알람 시퀀스",

@@ -18,13 +18,14 @@ import { parseSseStream } from "@/lib/sse";
 import { toChatInputs } from "@/lib/input-store";
 import type {
   ChatInputs,
-  ContextRow,
   DataRequest,
   DataSnapshot,
   InputRequest,
   Message,
   MessageChartEntry,
   MessageEventTimelineEntry,
+  MessageImage,
+  MessageLink,
   MessageTableEntry,
 } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -34,7 +35,7 @@ import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
-import { EquipmentPanel, useContextRows } from "./context";
+import { EquipmentPanel } from "./context";
 import { EquipmentDetailDrawer } from "./context/EquipmentDetailDrawer";
 import { derivePanel, equipmentCardId, parseLabel } from "./context/derive-cards";
 import { isFulfilledBy, type PendingRequest } from "@/lib/request-store";
@@ -51,6 +52,11 @@ import {
   useDataSnapshots,
   useInputRequests,
 } from "./data";
+import {
+  deriveArtifacts,
+  linkLabel,
+  type Artifact,
+} from "./data/artifacts";
 import { toChatPayload } from "@/lib/snapshot-store";
 import {
   addToScope,
@@ -78,18 +84,11 @@ type DonePayload = {
   tables?: MessageTableEntry[];
   charts?: MessageChartEntry[];
   eventTimelines?: MessageEventTimelineEntry[];
+  /** 답에 딸린 그림 — 백엔드가 MCP 등으로 읽어온 것. */
+  images?: MessageImage[];
+  /** 답이 가리키는 바깥 문서. */
+  links?: MessageLink[];
   recommendQuestion?: string[];
-  /**
-   * 백엔드가 사용자 메시지에서 추출한 컨텍스트. 비-데모 모드에서 우측
-   * 컨텍스트 패널을 자동 갱신. 데모 모드는 turn.contextPanel 우선이라
-   * 무시됨.
-   */
-  extractedContext?: {
-    rows?: ContextRow[];
-    /** default "replace". */
-    rowsMode?: "replace" | "append";
-    timeRange?: { start?: string; end?: string };
-  };
   /**
    * 답하는 데 필요한데 없는 데이터. DB 에 붙지 못하는 환경에서 모델이 지어내는
    * 대신 사용자에게 조달을 요청하는 통로.
@@ -127,26 +126,14 @@ const DUMMY_UNCLASSIFIED: DataSnapshot = {
   warnings: [],
 };
 
-function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
-  return rows
-    .map((r) => {
-      const chambers = r.chambers
-        .map((c) => ({
-          ...c,
-          sensors: c.sensors.filter((s) => s.name.trim().length > 0),
-        }))
-        .filter(
-          (c) => c.name.trim().length > 0 || c.sensors.length > 0,
-        );
-      return { ...r, chambers };
-    })
-    .filter(
-      (r) => r.equipment.trim().length > 0 || r.chambers.length > 0,
-    );
-}
-
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
+  /**
+   * 사용자가 직접 올린 그림·링크 — 모델이 내놓기를 기다리지 않고 근거 화면
+   * 캡처나 사내 문서를 붙이는 자리. 대화에서 파생되는 산출물과 같은 목록에
+   * 섞이되 어느 답에서 나온 것이 아니므로 `messageId` 가 없다.
+   */
+  const [userArtifacts, setUserArtifacts] = useState<Artifact[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   // 3분할 상주 레이아웃 — 좌 데이터·중앙 채팅은 항상, 우측은 설비/요약 탭.
   const [rightTab, setRightTab] = useState<"context" | "summary">("context");
@@ -251,25 +238,6 @@ export function ChatContainer() {
   // 왼쪽은 상시 그룹 — 목 그룹 + (있으면) 사용자가 직접 등록한 미분류 묶음.
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
-    rows,
-    timeRange,
-    setStart,
-    setEnd,
-    setEquipment,
-    addRow,
-    deleteRow,
-    addChamber,
-    setChamberName,
-    deleteChamber,
-    addSensor,
-    setSensorName,
-    deleteSensor,
-    replaceRows,
-    appendRows,
-    replaceTimeRange,
-    reset: resetContext,
-  } = useContextRows();
-  const {
     list: conversations,
     activeId,
     hydrated: conversationsHydrated,
@@ -284,6 +252,10 @@ export function ChatContainer() {
     remove: removeSnapshot,
     restoreLastRemoved: restoreSnapshot,
     lastRemoved: lastRemovedSnapshot,
+    trashed: trashedSnapshots,
+    restore: restoreSnapshotById,
+    purge: purgeSnapshot,
+    purgeAll: purgeAllSnapshots,
     toggleIncluded: toggleSnapshotIncluded,
     setLabel: setSnapshotLabel,
     setSourceSql: setSnapshotSourceSql,
@@ -311,32 +283,13 @@ export function ChatContainer() {
   // 직접 등록한 설비 — **스킬과 무관**하다. 설비만 넣고 채팅부터 시작할 수 있어야
   // 하므로(진입 1단), 우측 설비 카드의 씨앗은 세션이 아니라 이 목록이다.
   const [seedEquipments, setSeedEquipments] = useState<string[]>([]);
+  /** 설비 → 사람이 고른 라인. 채팅에서 파생된 설비는 여기 없다(라인을 모른다). */
+  const [equipmentLines, setEquipmentLines] = useState<Record<string, string>>(
+    {},
+  );
   // 질의 대상 — 사용자가 트레이에 담은 설비·분석. 이 질문이 무엇을 놓고 하는
   // 질문인지이며, 담긴 게 없으면 지금까지처럼 대화 맥락 전체를 본다.
   const [queryScope, setQueryScope] = useState<ScopeItem[]>([]);
-
-  /**
-   * 대화가 아는 설비를 카드로 세운다.
-   *
-   * 답이 ETCH-01 을 놓고 말하고 있는데 우측 패널이 "아직 설비가 없습니다"라고
-   * 하면, 화면 둘이 서로 다른 말을 한다. 게다가 카드가 없으면 담을 것도 없어
-   * 질의 대상 트레이가 아무 쓸모가 없다.
-   *
-   * 출처는 둘 — 데모 시나리오의 `contextPanel` 과 실 백엔드의
-   * `extractedContext.rows`. 둘 다 "이 대화가 무엇을 놓고 있는지"를 말한다.
-   * 초기 시드 행은 여기 안 온다: 대화가 정한 것만 카드가 된다.
-   */
-  const seedEquipmentsFromRows = useCallback((incoming: ContextRow[]) => {
-    const names = incoming
-      .map((r) => r.equipment.trim())
-      .filter((n) => n.length > 0);
-    if (names.length === 0) return;
-    setSeedEquipments((prev) => {
-      const next = [...prev];
-      for (const n of names) if (!next.includes(n)) next.push(n);
-      return next.length === prev.length ? prev : next;
-    });
-  }, []);
 
   const toggleQueryScope = useCallback((item: ScopeItem) => {
     setQueryScope((prev) => toggleScope(prev, item));
@@ -360,9 +313,40 @@ export function ChatContainer() {
    * 그대로 값 맵에 넣는 것으로 끝난다. 조회 스텝은 요청 카드로 서고, 그건
    * 파생이 그린다.
    */
+  /** 직접 올린 그림·링크를 산출물 목록 앞에 세운다 — 방금 올린 것이 위. */
+  const handleAddArtifact = useCallback(
+    (
+      entry:
+        | { kind: "image"; label: string; dataUrl: string }
+        | { kind: "link"; label: string; url: string },
+    ) => {
+      setUserArtifacts((prev) => {
+        const id = `user:${entry.kind}:${prev.length}:${entry.label}`;
+        const base = { id, messageId: null, turn: null } as const;
+        const next: Artifact =
+          entry.kind === "image"
+            ? {
+                ...base,
+                label: entry.label || "그림",
+                kind: "image",
+                payload: { label: entry.label, dataUrl: entry.dataUrl },
+              }
+            : {
+                ...base,
+                label: linkLabel({ label: entry.label, url: entry.url }),
+                kind: "link",
+                payload: { label: entry.label, url: entry.url },
+              };
+        return [next, ...prev];
+      });
+    },
+    [],
+  );
+
   const handleAddEquipment = useCallback(
     (
       equipment: string,
+      line: string | null,
       skill: Skill | null,
       values: Record<string, string>,
     ) => {
@@ -370,6 +354,13 @@ export function ChatContainer() {
       setSeedEquipments((prev) =>
         prev.includes(equipment) ? prev : [...prev, equipment],
       );
+      // 라인은 고른 사람이 있을 때만 기억한다 — 안 고른 것을 빈 값으로 덮어쓰면
+      // 앞서 고른 라인이 다시 등록 한 번에 사라진다.
+      if (line) {
+        setEquipmentLines((prev) =>
+          prev[equipment] === line ? prev : { ...prev, [equipment]: line },
+        );
+      }
       // 아직 아무것도 안 담겼으면 방금 등록한 설비를 담는다 — 등록하자마자 묻는
       // 사람에게 "어느 설비인지 모르겠습니다"가 돌아오면 안 된다. 이미 담아 둔 게
       // 있으면 건드리지 않는다: 그건 사용자가 정한 범위다.
@@ -428,9 +419,13 @@ export function ChatContainer() {
     [...openRequests, ...sessionRequests],
     [...scopedSnapshots, DUMMY_UNCLASSIFIED],
     seedEquipments,
+    equipmentLines,
   );
   const detailCard =
     equipmentCards.find((c) => c.id === detailCardId) ?? null;
+
+  // 답변 산출물 — 대화에서 파생된 것이 위(새 답이 먼저), 직접 올린 것이 아래.
+  const artifacts = [...deriveArtifacts(messages), ...userArtifacts];
 
   // 화면에서 사라진 대상은 담긴 채로 두지 않는다 — 보이지 않는 것을 근거로 답하게
   // 된다. 파생이 다시 돈 직후에 맞춰야 하므로 렌더 중에 정리한다.
@@ -498,15 +493,7 @@ export function ChatContainer() {
     if (!conv) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(conv.messages);
-    replaceRows(conv.context.rows);
-    replaceTimeRange(conv.context.timeRange);
-  }, [
-    activeId,
-    conversationsHydrated,
-    conversations,
-    replaceRows,
-    replaceTimeRange,
-  ]);
+  }, [activeId, conversationsHydrated, conversations]);
 
   // Persist: throttle local state writes to the active conversation. The
   // 300ms idle window collapses per-token streaming updates into a single
@@ -517,16 +504,11 @@ export function ChatContainer() {
     if (!conversationsHydrated) return;
     if (!activeId) return;
     const handle = setTimeout(() => {
-      updateConversation(activeId, {
-        messages,
-        context: { rows, timeRange },
-      });
+      updateConversation(activeId, { messages });
     }, 300);
     return () => clearTimeout(handle);
   }, [
     messages,
-    rows,
-    timeRange,
     activeId,
     conversationsHydrated,
     updateConversation,
@@ -535,8 +517,6 @@ export function ChatContainer() {
   const sendToApi = useCallback(
     async (
       history: Message[],
-      context: ContextRow[],
-      timeRangeSnapshot: { start: string; end: string },
       demoMeta?: DemoMeta,
       // 자동 재발사는 방금 채운 값 맵을 명시로 넘긴다(setState 직후라 클로저의
       // inputValues 는 아직 최신이 아니다). 일반 발화는 생략 → sticky inputValues.
@@ -544,9 +524,6 @@ export function ChatContainer() {
     ) => {
       const assistantId = newId();
       let assistantInserted = false;
-
-      const hasRange =
-        timeRangeSnapshot.start.length > 0 || timeRangeSnapshot.end.length > 0;
 
       // 응답 지연 시 AbortController 로 자르고 timeout 으로 분류.
       const controller = new AbortController();
@@ -558,8 +535,6 @@ export function ChatContainer() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: history,
-            context,
-            timeRange: hasRange ? timeRangeSnapshot : undefined,
             demo: demoMeta,
             // 동봉이 없으면 undefined 라 필드 자체가 빠진다 — 이 기능을 안 쓰는
             // 요청은 지금까지와 똑같은 본문으로 나간다. 데모 재생 중에는 아예
@@ -628,6 +603,10 @@ export function ChatContainer() {
               !!payload.dataRequests && payload.dataRequests.length > 0;
             const hasInputRequests =
               !!payload.inputRequests && payload.inputRequests.length > 0;
+            // 그림·링크 — 어디서 읽어왔는지는 백엔드가 진다(MCP 등). 여기는
+            // 받은 것을 답에 달아 둘 뿐이고, 그리는 것은 데이터 패널이 한다.
+            const hasImages = !!payload.images && payload.images.length > 0;
+            const hasLinks = !!payload.links && payload.links.length > 0;
             if (
               assistantInserted &&
               (hasTables ||
@@ -635,7 +614,9 @@ export function ChatContainer() {
                 hasTimelines ||
                 hasRecommend ||
                 hasDataRequests ||
-                hasInputRequests)
+                hasInputRequests ||
+                hasImages ||
+                hasLinks)
             ) {
               setMessages((prev) =>
                 prev.map((m) => {
@@ -649,6 +630,8 @@ export function ChatContainer() {
                   }
                   if (hasDataRequests) next.dataRequests = payload.dataRequests;
                   if (hasInputRequests) next.inputRequests = payload.inputRequests;
+                  if (hasImages) next.images = payload.images;
+                  if (hasLinks) next.links = payload.links;
                   return next;
                 }),
               );
@@ -681,25 +664,6 @@ export function ChatContainer() {
             if (hasInputRequests && !demoMeta) {
               receiveInputRequests(payload.inputRequests!);
             }
-            // 비-데모 모드에서만 extractedContext 적용. 데모는
-            // turn.contextPanel 흐름이 우선이라 스킵.
-            if (!demoMeta && payload.extractedContext) {
-              const ec = payload.extractedContext;
-              if (ec.rows && ec.rows.length > 0) {
-                if (ec.rowsMode === "append") {
-                  appendRows(ec.rows);
-                } else {
-                  replaceRows(ec.rows);
-                }
-                seedEquipmentsFromRows(ec.rows);
-              }
-              if (ec.timeRange) {
-                replaceTimeRange({
-                  start: ec.timeRange.start ?? "",
-                  end: ec.timeRange.end ?? "",
-                });
-              }
-            }
             break;
           } else if (ev.event === "error") {
             const raw =
@@ -719,10 +683,6 @@ export function ChatContainer() {
       }
     },
     [
-      appendRows,
-      replaceRows,
-      seedEquipmentsFromRows,
-      replaceTimeRange,
       sentSnapshots,
       prunedScope,
       skillSessions,
@@ -759,15 +719,13 @@ export function ChatContainer() {
       const nextHistory = [...messages, userMessage];
       setMessages(nextHistory);
       setIsStreaming(true);
-      void sendToApi(nextHistory, nonEmptyRows(rows), timeRange, undefined, next);
+      void sendToApi(nextHistory, undefined, next);
     },
     [
       openInputCards,
       openInputsWith,
       fillInput,
       messages,
-      rows,
-      timeRange,
       sendToApi,
     ],
   );
@@ -778,12 +736,6 @@ export function ChatContainer() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleScenarioStart = useCallback(
     async (scenario: Scenario) => {
-      // Auto-fill context panel + optional time range
-      replaceRows(scenario.contextPanel);
-      seedEquipmentsFromRows(scenario.contextPanel);
-      if (scenario.timeRange) {
-        replaceTimeRange(scenario.timeRange);
-      }
       const starterMsg: Message = {
         id: newId(),
         role: "user",
@@ -794,12 +746,10 @@ export function ChatContainer() {
       setIsStreaming(true);
       setDemoState({ scenarioId: scenario.id, turnIndex: 0, ended: false });
 
-      await sendToApi(
-        [starterMsg],
-        [],
-        scenario.timeRange ?? timeRange,
-        { scenarioId: scenario.id, turnIndex: 0 },
-      );
+      await sendToApi([starterMsg], {
+        scenarioId: scenario.id,
+        turnIndex: 0,
+      });
 
       const nextIdx = 1;
       setDemoState({
@@ -808,13 +758,7 @@ export function ChatContainer() {
         ended: nextIdx >= scenario.turns.length,
       });
     },
-    [
-      replaceRows,
-      seedEquipmentsFromRows,
-      replaceTimeRange,
-      sendToApi,
-      timeRange,
-    ],
+    [sendToApi],
   );
 
   const handleSubmit = useCallback(
@@ -837,33 +781,15 @@ export function ChatContainer() {
       // user message. Demo flows are ephemeral — their messages do not
       // populate the sidebar.
       if (!demoState && !activeId) {
-        createConversation({
-          messages: nextHistory,
-          context: { rows, timeRange },
-        });
+        createConversation({ messages: nextHistory });
       }
 
       if (demoState) {
         const scenario = SCENARIOS.find((s) => s.id === demoState.scenarioId);
-        const currentTurn = scenario?.turns[demoState.turnIndex];
-
-        let effectiveTimeRange = timeRange;
-        if (currentTurn?.contextPanel) {
-          replaceRows(currentTurn.contextPanel);
-          seedEquipmentsFromRows(currentTurn.contextPanel);
-          setRightTab("context");
-        }
-        if (currentTurn?.timeRange) {
-          replaceTimeRange(currentTurn.timeRange);
-          effectiveTimeRange = currentTurn.timeRange;
-        }
-
-        await sendToApi(
-          nextHistory,
-          [],
-          effectiveTimeRange,
-          { scenarioId: demoState.scenarioId, turnIndex: demoState.turnIndex },
-        );
+        await sendToApi(nextHistory, {
+          scenarioId: demoState.scenarioId,
+          turnIndex: demoState.turnIndex,
+        });
         const nextIdx = demoState.turnIndex + 1;
         setDemoState({
           scenarioId: demoState.scenarioId,
@@ -874,33 +800,22 @@ export function ChatContainer() {
         // 어떤 발화든 나가는 순간 충족된 요청의 소임이 끝난다 — 등록된
         // 스냅샷은 이 요청에 함께 실려 나간다. ("등록 완료" chip 도 사라진다.)
         clearFulfilledRequests();
-        await sendToApi(nextHistory, nonEmptyRows(rows), timeRange);
+        await sendToApi(nextHistory);
       }
     },
     [
       demoState,
       messages,
-      rows,
-      timeRange,
       activeId,
       sendToApi,
-      replaceRows,
-      seedEquipmentsFromRows,
-      replaceTimeRange,
       createConversation,
       clearFulfilledRequests,
     ],
   );
 
-  /**
-   * 데이터 요청 왕복 체험 시작 — 질문은 실 파이프라인으로 보내되 **컨텍스트를
-   * 비우고** 출발한다. 설비 정보가 남아 있으면 [분석 대상]으로 프롬프트에
-   * 주입되고, mock 의 설비 ID 분기가 데이터 요청 분기보다 먼저 잡아채
-   * 요청 카드가 만들어지지 않는다.
-   */
+  /** 데이터 요청 왕복 체험 시작 — 질문을 실 파이프라인으로 그대로 보낸다. */
   const handleQuickStart = useCallback(
     async (text: string) => {
-      replaceRows([]); // 화면의 설비 입력도 비운다 — 보내는 컨텍스트와 일치하게.
       const userMessage: Message = {
         id: newId(),
         role: "user",
@@ -911,21 +826,11 @@ export function ChatContainer() {
       setMessages(nextHistory);
       setIsStreaming(true);
       if (!activeId) {
-        createConversation({
-          messages: nextHistory,
-          context: { rows: [], timeRange },
-        });
+        createConversation({ messages: nextHistory });
       }
-      await sendToApi(nextHistory, [], timeRange);
+      await sendToApi(nextHistory);
     },
-    [
-      messages,
-      activeId,
-      timeRange,
-      sendToApi,
-      replaceRows,
-      createConversation,
-    ],
+    [messages, activeId, sendToApi, createConversation],
   );
 
   const handleNewConversation = useCallback(() => {
@@ -933,7 +838,6 @@ export function ChatContainer() {
     setIsStreaming(false);
     setDemoState(null);
     setDetailOpen(false);
-    resetContext();
     // 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라져야 한다.
     // 스냅샷은 반대로 남는다(대화와 독립된 보관물). 채운 입력도 대화에 매인 것이라
     // 함께 걷어낸다(sticky 지만 새 대화에는 이월하지 않는다).
@@ -946,7 +850,7 @@ export function ChatContainer() {
     // 새 세션 — 예전 대화가 등록한 스냅샷은 기본 스코프에서 빠진다('전체'에서만).
     setSessionSnapshotIds(new Set());
     startNewConversation();
-  }, [resetContext, startNewConversation, clearRequests, clearInputs]);
+  }, [startNewConversation, clearRequests, clearInputs]);
 
   const handleSidebarSelect = useCallback(
     (id: string) => {
@@ -967,12 +871,11 @@ export function ChatContainer() {
     [isStreaming, selectConversation, clearRequests, clearInputs],
   );
 
+  // 이 대화가 아는 설비 = 우측 카드가 선 설비. 폼이 따로 나르던 목록은 없어졌고,
+  // 카드는 등록·요청·스냅샷 어디에서 왔든 같은 답을 준다.
   const equipmentNames = useMemo(
-    () =>
-      rows
-        .map((r) => r.equipment.trim())
-        .filter((n) => n.length > 0),
-    [rows],
+    () => equipmentCards.map((c) => c.equipment),
+    [equipmentCards],
   );
 
   // 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
@@ -1060,8 +963,8 @@ export function ChatContainer() {
     const trimmed = messages.slice(0, lastUserIndex + 1);
     setMessages(trimmed);
     setIsStreaming(true);
-    void sendToApi(trimmed, nonEmptyRows(rows), timeRange);
-  }, [messages, rows, timeRange, sendToApi]);
+    void sendToApi(trimmed);
+  }, [messages, sendToApi]);
 
   /**
    * 충족된 요청을 가진 가장 최근 질문 — 있으면 입력창 위에 "등록 완료" chip 으로
@@ -1121,6 +1024,8 @@ export function ChatContainer() {
             ].join(" ")}
           >
             <DataPanel
+              artifacts={artifacts}
+              onAddArtifact={handleAddArtifact}
               snapshots={scopedSnapshots}
               // 현재 세션 요청 + 스냅샷에서 파생한 그룹. viewMode 로 설비별/유형별.
               groups={dataGroups}
@@ -1156,6 +1061,10 @@ export function ChatContainer() {
               onSetQuery={setSnapshotSourceSql}
               lastRemoved={lastRemovedSnapshot}
               onRestore={restoreSnapshot}
+              trashed={trashedSnapshots}
+              onRestoreOne={restoreSnapshotById}
+              onPurge={purgeSnapshot}
+              onPurgeAll={purgeAllSnapshots}
               expanded={dataExpandedInner}
               detailVisible={dataDetailVisible}
               onToggleExpanded={toggleDataExpanded}
@@ -1338,8 +1247,6 @@ export function ChatContainer() {
           />
           <SummaryPanel
             open={rightTab === "summary"}
-            rows={rows}
-            timeRange={timeRange}
             compareDigest={lastCompareDigest}
           />
         </div>

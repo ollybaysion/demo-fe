@@ -7,7 +7,6 @@ import type { Scenario } from "./types";
 export const uc13: Scenario = {
   id: "uc-13",
   starter: "데이터 수집 주기는 어떻게 정하나요?",
-  contextPanel: [],
   turns: [
     {
       user: "데이터 수집 주기는 어떻게 정하나요?",

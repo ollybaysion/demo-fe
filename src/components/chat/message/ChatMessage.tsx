@@ -1,17 +1,9 @@
 "use client";
 
-import { type ReactNode, useMemo, useRef, useState } from "react";
-import type {
-  Message,
-  MessageChartEntry,
-  MessageEventTimelineEntry,
-  MessageTableEntry,
-} from "@/lib/types";
+import { type ReactNode, useState } from "react";
+import type { Message } from "@/lib/types";
 import { MarkdownContent } from "./markdown/MarkdownContent";
 import { MarkdownErrorBoundary } from "./markdown/MarkdownErrorBoundary";
-import { MessageChart } from "../paired/MessageChart";
-import { MessageDataTable } from "../paired/MessageDataTable";
-import { MessageEventTimeline } from "../paired/MessageEventTimeline";
 
 /**
  * 메시지 단위 액션.
@@ -31,45 +23,13 @@ type Props = {
   onRegenerate?: () => void;
 };
 
+/**
+ * 답에 딸린 표·차트·이벤트 타임라인은 **여기서 그리지 않는다.** 왼쪽 데이터
+ * 패널의 `답변 산출물` 단이 받는다 — 대화가 길어지면 "아까 그 표"를 찾으러
+ * 스크롤을 거슬러야 했고, 패널에 이미 쌓인 데이터와 두 곳으로 갈라졌다.
+ * 풍선은 이제 말만 한다.
+ */
 export function ChatMessage({ message, streaming, onRegenerate }: Props) {
-  // 풍선 DOM ref — 표의 [확장] overlay 가 풍선 위치에 anchor
-  // 하기 위해 필요.
-  const bubbleRef = useRef<HTMLDivElement>(null);
-
-  // 메시지 단위 paired panel 토글. 두 종류:
-  //   1) paneCollapsed — 패널 자체를 hide/show (DOM 에서 제거 / 복원).
-  //      "패널 비활성화 / 활성화".
-  //   2) paneFoldCmd — 모든 자식 패널의 본문을 일괄 fold/unfold (헤더만
-  //      남김 / 다시 펼침). "패널 접기 / 펼치기". tick 으로 단발성 명령
-  //      을 자식 패널에 전달, 자식은 effect 로 sync 후 자체 토글 자유.
-  // 세션 메모리(컴포넌트 state) — 새로고침 시 default(노출/펼침) 로 reset.
-  const [paneCollapsed, setPaneCollapsed] = useState(false);
-  const [paneFoldCmd, setPaneFoldCmd] = useState<{
-    folded: boolean;
-    tick: number;
-  }>({ folded: false, tick: 0 });
-
-  // tables / charts / event timelines 를 좌·우 컬럼에 분배.
-  // 백엔드의 `side?` 힌트가 있으면 그쪽으로, 없으면 적은 쪽 우선
-  // (동률이면 type fallback: 표 → 좌, 차트 → 우, 타임라인 → 좌).
-  // 단수형 `table?` / `chart?` 는 backward-compat 으로 흡수.
-  // 훅은 early return 이전에 호출해야 하므로 isError / isUser 분기 전에 둠.
-  const distributed = useMemo(() => {
-    if (message.role !== "assistant") return { left: [], right: [] };
-    return distributePairedItems({
-      tables: message.tables ?? (message.table ? [message.table] : []),
-      charts: message.charts ?? (message.chart ? [message.chart] : []),
-      eventTimelines: message.eventTimelines ?? [],
-    });
-  }, [
-    message.role,
-    message.tables,
-    message.table,
-    message.charts,
-    message.chart,
-    message.eventTimelines,
-  ]);
-
   if (message.role === "error") {
     return (
       <li className="flex justify-start">
@@ -111,26 +71,14 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
   }
 
   const isUser = message.role === "user";
-  const hasLeft = distributed.left.length > 0;
-  const hasRight = distributed.right.length > 0;
-  const hasPaired = hasLeft || hasRight;
-  const showLeft = hasLeft && !paneCollapsed;
-  const showRight = hasRight && !paneCollapsed;
 
   return (
-    <li
-      className={[
-        "group grid gap-xs",
-        // xl+ : 좌측 gutter (1fr) | 풍선 (max 768) | 우측 gutter (1fr,
-        //   차트 자리). 풍선은 항상 중앙에 자리잡아 표 유무로 위치가
-        //   흔들리지 않음. xl 미만 viewport 에서는 단일 컬럼 스택 → 풍선
-        //   아래 표 인라인.
-        "xl:grid-cols-[minmax(0,1fr)_minmax(0,768px)_minmax(0,1fr)] xl:gap-md xl:items-start",
-      ].join(" ")}
-    >
+    // 좌·우 gutter 를 두던 3열 그리드를 걷어낸다 — 그 자리에 서던 표·차트가
+    // 데이터 패널로 갔으므로, 남은 것은 가운데 정렬된 풍선 하나뿐이다.
+    <li className="group flex flex-col gap-xs">
       <div
         className={[
-          "flex flex-col xl:col-start-2 xl:row-start-1 min-w-0",
+          "flex flex-col min-w-0 w-full",
           isUser ? "items-end" : "items-start",
         ].join(" ")}
       >
@@ -147,7 +95,6 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
           </span>
         )}
         <div
-          ref={bubbleRef}
           aria-busy={streaming || undefined}
           className={[
             "max-w-[85%] rounded-lg px-md py-sm font-sans text-chat-message-body",
@@ -200,105 +147,9 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
             message={message}
             isUser={isUser}
             onRegenerate={isUser ? undefined : onRegenerate}
-            paneToggle={
-              hasPaired
-                ? {
-                    collapsed: paneCollapsed,
-                    onToggle: () => setPaneCollapsed((c) => !c),
-                  }
-                : undefined
-            }
-            paneFoldToggle={
-              hasPaired && !paneCollapsed
-                ? {
-                    folded: paneFoldCmd.folded,
-                    onToggle: () =>
-                      setPaneFoldCmd((prev) => ({
-                        folded: !prev.folded,
-                        tick: prev.tick + 1,
-                      })),
-                  }
-                : undefined
-            }
           />
         )}
       </div>
-      {showLeft && (
-        <div className="xl:col-start-1 xl:row-start-1 min-w-0 flex flex-col gap-md">
-          {distributed.left.map((entry, idx) => {
-            const key = `left-${idx}`;
-            const defaultExpanded = idx === 0;
-            if (entry.kind === "table") {
-              return (
-                <MessageDataTable
-                  key={key}
-                  table={entry.payload}
-                  defaultExpanded={defaultExpanded}
-                  bubbleRef={bubbleRef}
-                  foldCmd={paneFoldCmd}
-                />
-              );
-            }
-            if (entry.kind === "chart") {
-              return (
-                <MessageChart
-                  key={key}
-                  chart={entry.payload}
-                  defaultExpanded={defaultExpanded}
-                  foldCmd={paneFoldCmd}
-                />
-              );
-            }
-            return (
-              <MessageEventTimeline
-                key={key}
-                timeline={entry.payload}
-                defaultExpanded={defaultExpanded}
-                bubbleRef={bubbleRef}
-                foldCmd={paneFoldCmd}
-              />
-            );
-          })}
-        </div>
-      )}
-      {showRight && (
-        <div className="xl:col-start-3 xl:row-start-1 min-w-0 flex flex-col gap-md">
-          {distributed.right.map((entry, idx) => {
-            const key = `right-${idx}`;
-            const defaultExpanded = idx === 0;
-            if (entry.kind === "table") {
-              return (
-                <MessageDataTable
-                  key={key}
-                  table={entry.payload}
-                  defaultExpanded={defaultExpanded}
-                  bubbleRef={bubbleRef}
-                  foldCmd={paneFoldCmd}
-                />
-              );
-            }
-            if (entry.kind === "chart") {
-              return (
-                <MessageChart
-                  key={key}
-                  chart={entry.payload}
-                  defaultExpanded={defaultExpanded}
-                  foldCmd={paneFoldCmd}
-                />
-              );
-            }
-            return (
-              <MessageEventTimeline
-                key={key}
-                timeline={entry.payload}
-                defaultExpanded={defaultExpanded}
-                bubbleRef={bubbleRef}
-                foldCmd={paneFoldCmd}
-              />
-            );
-          })}
-        </div>
-      )}
     </li>
   );
 }
@@ -623,61 +474,4 @@ function ThumbsDownIcon({ filled }: { filled: boolean }) {
       <line x1="17" y1="2" x2="17" y2="13" />
     </svg>
   );
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Paired items distribution
-// ────────────────────────────────────────────────────────────────────
-
-type DistributedEntry =
-  | { kind: "table"; payload: MessageTableEntry }
-  | { kind: "chart"; payload: MessageChartEntry }
-  | { kind: "timeline"; payload: MessageEventTimelineEntry };
-
-/**
- * tables / charts / event timelines 를 좌·우 컬럼에 분배.
- * - entry 의 `side?` 가 명시되어 있으면 그쪽으로
- * - 미지정 시 항목 수 적은 쪽 우선
- *   (동률이면 type fallback: 표→좌, 차트→우, 타임라인→좌)
- * - 입력 순서를 보존해 컬럼 안에서의 stack 순서 결정
- */
-function distributePairedItems({
-  tables,
-  charts,
-  eventTimelines,
-}: {
-  tables: readonly MessageTableEntry[];
-  charts: readonly MessageChartEntry[];
-  eventTimelines: readonly MessageEventTimelineEntry[];
-}): { left: DistributedEntry[]; right: DistributedEntry[] } {
-  const left: DistributedEntry[] = [];
-  const right: DistributedEntry[] = [];
-
-  const all: DistributedEntry[] = [
-    ...tables.map<DistributedEntry>((t) => ({ kind: "table", payload: t })),
-    ...charts.map<DistributedEntry>((c) => ({ kind: "chart", payload: c })),
-    ...eventTimelines.map<DistributedEntry>((tl) => ({
-      kind: "timeline",
-      payload: tl,
-    })),
-  ];
-
-  for (const entry of all) {
-    const explicit = entry.payload.side;
-    let chosen: "left" | "right";
-    if (explicit) {
-      chosen = explicit;
-    } else if (left.length < right.length) {
-      chosen = "left";
-    } else if (right.length < left.length) {
-      chosen = "right";
-    } else {
-      // 동률 — type fallback (table/timeline 좌, chart 우)
-      chosen = entry.kind === "chart" ? "right" : "left";
-    }
-    if (chosen === "left") left.push(entry);
-    else right.push(entry);
-  }
-
-  return { left, right };
 }

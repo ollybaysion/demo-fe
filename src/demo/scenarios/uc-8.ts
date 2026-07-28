@@ -9,7 +9,6 @@ import type { Scenario } from "./types";
 export const uc8: Scenario = {
   id: "uc-8",
   starter: "동종설비와 비교 분석을 원합니다.",
-  contextPanel: [],
   turns: [
     {
       user: "동종설비와 비교 분석을 원합니다.",
@@ -25,15 +24,6 @@ export const uc8: Scenario = {
       user: "예시 비교를 보여주세요",
       assistant:
         "ETCH-01과 ETCH-02 비교입니다. 주요 차이는 **챔버 A의 APC_PRESSURE** 에서 발견됩니다.",
-      contextPanel: [
-        {
-          id: "uc8-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            { id: "uc8-ch-1", name: "A", sensors: [] },
-          ],
-        },
-      ],
       tables: [
         {
           title: "두 설비 주요 센서 비교",

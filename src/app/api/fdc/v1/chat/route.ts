@@ -1,4 +1,3 @@
-import { CONTEXT_LABELS } from "@/config/contextColumns";
 import { SCENARIOS } from "@/demo/scenarios";
 import { IS_MOCK, forwardOrMock } from "@/lib/backend";
 import { makeRequestLogger, newRequestId } from "@/lib/logger";
@@ -6,10 +5,11 @@ import type { ChatScope } from "@/lib/query-scope";
 import type {
   ChatDataSnapshot,
   ChatInputs,
-  ContextRow,
   DataRequest,
   InputRequest,
   Message,
+  MessageImage,
+  MessageLink,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -28,7 +28,6 @@ const TOKEN_INTERVAL_MS = 30;
  */
 const MAX_MESSAGES = 100;
 const MAX_MESSAGE_CONTENT_CHARS = 10_000;
-const MAX_CONTEXT_ROWS = 50;
 
 function rejectTooLargeWithId(
   error: string,
@@ -42,8 +41,6 @@ function rejectTooLargeWithId(
   );
 }
 
-type ChatTimeRange = { start?: string; end?: string };
-
 type ChatDemoMeta = {
   scenarioId: string;
   /**
@@ -56,10 +53,6 @@ type ChatDemoMeta = {
 
 type ChatRequestBody = {
   messages: Message[];
-  /** Optional 설비 정보 table included by the client. */
-  context?: ContextRow[];
-  /** Optional 발생 시간 범위 (datetime-local strings). */
-  timeRange?: ChatTimeRange;
   /** Optional demo-mode metadata — bypasses echo with scripted text. */
   demo?: ChatDemoMeta;
   /** 사용자가 데이터 패널에서 동봉으로 켠 스냅샷들. */
@@ -73,34 +66,6 @@ type ChatRequestBody = {
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   return new TextEncoder().encode(payload);
-}
-
-function formatContextRow(row: ContextRow): string {
-  const head = row.equipment.trim() || "(미입력)";
-
-  const chamberParts: string[] = [];
-  for (const chamber of row.chambers) {
-    const cName = chamber.name.trim();
-    const sensors = chamber.sensors
-      .map((s) => s.name.trim())
-      .filter((s) => s.length > 0);
-
-    if (!cName && sensors.length === 0) continue;
-
-    const cLabel = cName || "(미입력)";
-    const sensorPart =
-      sensors.length > 0
-        ? ` ${CONTEXT_LABELS.sensor.label} ${sensors.join(", ")}`
-        : "";
-    chamberParts.push(`${cLabel}${sensorPart}`);
-  }
-
-  if (chamberParts.length === 0) return head;
-  return `${head} (${CONTEXT_LABELS.chamber.label} ${chamberParts.join(" · ")})`;
-}
-
-function formatContext(context: ContextRow[]): string {
-  return context.map(formatContextRow).join("; ");
 }
 
 /**
@@ -119,25 +84,12 @@ function formatScope(scope: ChatScope): string {
 
 function buildMockResponse(
   lastUserContent: string,
-  context?: ContextRow[],
-  timeRange?: ChatTimeRange,
   scope?: ChatScope,
 ): string {
-  const parts: string[] = [];
-  // 담긴 대상이 있으면 그것이 이 질문의 범위다 — 폼 컨텍스트보다 우선한다.
-  // 둘 다 되뇌면 화면의 [질의 대상] 뱃지와 답이 서로 다른 설비를 말하게 된다.
+  // 이 질문의 범위를 말하는 것은 **담긴 대상 하나**다. 폼이 따로 나르던 설비·시간은
+  // 더 이상 없다 — 화면의 [질의 대상] 뱃지와 답이 다른 설비를 말할 여지도 함께 사라진다.
   const scopeText = scope ? formatScope(scope) : "";
-  if (scopeText) {
-    parts.push(`질의 대상: ${scopeText}`);
-  } else if (context && context.length > 0) {
-    parts.push(`설비: ${formatContext(context)}`);
-  }
-  if (timeRange && (timeRange.start || timeRange.end)) {
-    const start = timeRange.start || "(미지정)";
-    const end = timeRange.end || "(미지정)";
-    parts.push(`발생 시간 ${start} ~ ${end}`);
-  }
-  const ctxNote = parts.length > 0 ? ` (${parts.join(", ")})` : "";
+  const ctxNote = scopeText ? ` (질의 대상: ${scopeText})` : "";
   return `'${lastUserContent}' 라고 물으셨네요${ctxNote}. 아직 백엔드가 연결되지 않았습니다.`;
 }
 
@@ -211,19 +163,6 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
   }
-  if (Array.isArray(body.context) && body.context.length > MAX_CONTEXT_ROWS) {
-    log.warn(
-      { limit: MAX_CONTEXT_ROWS, actual: body.context.length },
-      "context_too_large",
-    );
-    return rejectTooLargeWithId(
-      "context_too_large",
-      MAX_CONTEXT_ROWS,
-      body.context.length,
-      requestId,
-    );
-  }
-
   const lastUser = [...body.messages]
     .reverse()
     .find((m) => m.role === "user");
@@ -235,7 +174,6 @@ export async function POST(request: Request): Promise<Response> {
   log.info(
     {
       messageCount: body.messages.length,
-      contextRows: body.context?.length ?? 0,
       demo: body.demo
         ? { scenarioId: body.demo.scenarioId, turnIndex: body.demo.turnIndex }
         : undefined,
@@ -251,6 +189,8 @@ export async function POST(request: Request): Promise<Response> {
   let responseRecommend: string[] | undefined;
   let responseDataRequests: DataRequest[] | undefined;
   let responseInputRequests: InputRequest[] | undefined;
+  let responseImages: MessageImage[] | undefined;
+  let responseLinks: MessageLink[] | undefined;
   if (body.demo) {
     const scenario = SCENARIOS.find((s) => s.id === body.demo!.scenarioId);
     const turn = scenario?.turns[body.demo.turnIndex];
@@ -284,18 +224,21 @@ export async function POST(request: Request): Promise<Response> {
       responseText = buildDataRequestResponse(missing);
     } else {
       const supplied = suppliedLabels(body.dataSnapshots);
-      const answer = buildMockResponse(
-        lastUser.content,
-        body.context,
-        body.timeRange,
-        body.scope,
-      );
+      const answer = buildMockResponse(lastUser.content, body.scope);
       responseText =
         supplied.length > 0
           ? `제공해주신 ${supplied.join(", ")} 을(를) 근거로 답변합니다.\n\n${answer}`
           : answer;
     }
     responseRecommend = recommendNext(lastUser.content);
+    // 조달을 청하는 답에는 붙이지 않는다 — 없는 데이터를 말하면서 그림을
+    // 내미는 건 앞뒤가 안 맞는다.
+    if (!responseDataRequests && !responseInputRequests) {
+      const images = mockImages(lastUser.content);
+      const links = mockLinks(lastUser.content);
+      if (images.length > 0) responseImages = images;
+      if (links.length > 0) responseLinks = links;
+    }
   }
   const characters = [...responseText];
   const messageId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -331,6 +274,12 @@ export async function POST(request: Request): Promise<Response> {
               : {}),
             ...(responseInputRequests && responseInputRequests.length > 0
               ? { inputRequests: responseInputRequests }
+              : {}),
+            ...(responseImages && responseImages.length > 0
+              ? { images: responseImages }
+              : {}),
+            ...(responseLinks && responseLinks.length > 0
+              ? { links: responseLinks }
               : {}),
           }),
         );
@@ -380,6 +329,57 @@ export async function POST(request: Request): Promise<Response> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 그림·링크 — 실 백엔드에서는 모델이 MCP 로 읽어온 것이 여기 실린다. mock 은
+ * 그럴 수 없으므로 키워드로 흉내 낸다. 데이터 패널의 `답변 산출물` 단이 실제로
+ * 서는지 화면에서 걸어 볼 수 있게 하는 것이 목적이다.
+ *
+ * 이미지는 외부 요청 없이 그려지도록 inline SVG(data URL)로 둔다 — 사내망에서
+ * 바깥 호스트를 때리는 mock 은 그 자체로 거짓 신호다.
+ */
+const MOCK_DIAGRAM =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="200" viewBox="0 0 480 200">
+      <rect width="480" height="200" fill="#f6f4ef"/>
+      <rect x="24" y="40" width="120" height="120" rx="8" fill="none" stroke="#8a7f6d" stroke-width="2"/>
+      <rect x="180" y="40" width="120" height="120" rx="8" fill="none" stroke="#8a7f6d" stroke-width="2"/>
+      <rect x="336" y="40" width="120" height="120" rx="8" fill="none" stroke="#8a7f6d" stroke-width="2"/>
+      <text x="84" y="105" font-size="14" text-anchor="middle" fill="#4a4438">PM1</text>
+      <text x="240" y="105" font-size="14" text-anchor="middle" fill="#4a4438">PM2</text>
+      <text x="396" y="105" font-size="14" text-anchor="middle" fill="#4a4438">PM3</text>
+      <text x="240" y="184" font-size="12" text-anchor="middle" fill="#8a7f6d">챔버 배치 (예시)</text>
+    </svg>`,
+  );
+
+function mockImages(question: string): MessageImage[] {
+  const q = question.toLowerCase();
+  if (!["도면", "배치", "그림", "이미지", "챔버"].some((t) => q.includes(t))) {
+    return [];
+  }
+  return [
+    {
+      label: "챔버 배치도",
+      dataUrl: MOCK_DIAGRAM,
+      alt: "PM1·PM2·PM3 챔버가 나란히 놓인 배치도",
+    },
+  ];
+}
+
+function mockLinks(question: string): MessageLink[] {
+  const q = question.toLowerCase();
+  if (!["레시피", "규격", "문서", "절차", "센서"].some((t) => q.includes(t))) {
+    return [];
+  }
+  return [
+    {
+      label: "FDC 센서 명명 규칙",
+      url: "https://wiki.example.internal/fdc/sensor-naming",
+      description: "PARAM_INDEX 와 센서 이름이 어떻게 대응되는지",
+    },
+  ];
 }
 
 /**

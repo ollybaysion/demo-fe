@@ -9,10 +9,14 @@ import {
   autoLabel,
   findByContentHash,
   includedSnapshots,
+  liveSnapshots,
   removeSnapshot,
+  restoreSnapshot,
   setLabel as setLabelIn,
   setSourceSql as setSourceSqlIn,
   toggleIncluded as toggleIncludedIn,
+  trashSnapshot,
+  trashedSnapshots,
   upsertFulfilling,
   upsertSnapshot,
 } from "@/lib/snapshot-store";
@@ -37,14 +41,17 @@ export type AddSnapshotResult =
   | ({ ok: false } & Omit<SnapshotParseError, "ok">);
 
 export function useDataSnapshots() {
-  const [snapshots, setSnapshots] = useState<DataSnapshot[]>([]);
   /**
-   * 마지막으로 삭제된 스냅샷 — 실수로 지운 것을 한 번 되돌릴 수 있게 붙잡아 둔다.
-   * 스냅샷은 SQL 재실행 없이는 다시 만들기 번거로운 데이터라, 삭제가 즉시
-   * 확정되면 오클릭 한 번의 비용이 너무 크다. 메모리에만 든다(새로고침이면
-   * 사라진다) — 휴지통을 만들 일은 아니고, 직후의 "앗" 을 구제하면 된다.
+   * 버린 것까지 **전부** — 저장소에 나가는 집합이다. 화면과 요청 페이로드는
+   * 아래 `live` 만 본다.
    */
-  const [lastRemoved, setLastRemoved] = useState<DataSnapshot | null>(null);
+  const [all, setSnapshots] = useState<DataSnapshot[]>([]);
+  /**
+   * 방금 버린 스냅샷 — 목록 위 "되돌리기" 한 줄이 가리키는 대상. 휴지통이
+   * 생긴 뒤에도 이 줄은 남긴다: 직후의 "앗" 은 휴지통을 열지 않고 그 자리에서
+   * 풀리는 게 맞고, 휴지통은 한참 뒤에 생각나는 쪽을 받는다.
+   */
+  const [lastRemovedId, setLastRemovedId] = useState<string | null>(null);
 
   /**
    * 저장소에 반영된 마지막 상태 — 쓰기 diff 의 기준점.
@@ -77,10 +84,11 @@ export function useDataSnapshots() {
 
   useEffect(() => {
     const prev = persistedRef.current;
-    if (prev === null || prev === snapshots) return;
-    persistedRef.current = snapshots;
-    void persistSnapshots(prev, snapshots);
-  }, [snapshots]);
+    if (prev === null || prev === all) return;
+    persistedRef.current = all;
+    // 버린 것까지 통째로 나간다 — 휴지통이 새로고침을 넘어 살아 있는 이유다.
+    void persistSnapshots(prev, all);
+  }, [all]);
 
   /**
    * 붙여넣은 텍스트를 해석해 목록에 넣는다.
@@ -131,8 +139,11 @@ export function useDataSnapshots() {
 
       // 중복 여부는 업데이터 밖에서 본다 — 업데이터는 순수해야 하고, 그 안에서
       // 값을 새어 나오게 하면 읽는 시점이 렌더 타이밍에 묶인다.
+      // 중복은 살아 있는 것끼리만 본다 — 휴지통의 같은 내용 때문에 새 등록이
+      // "이미 있음"으로 접히면, 버린 데이터가 보이지 않는 곳에서 등록을 막는다.
       const replacedExisting =
-        findByContentHash(snapshots, snapshot.contentHash) !== undefined;
+        findByContentHash(liveSnapshots(all), snapshot.contentHash) !==
+        undefined;
       setSnapshots((prev) =>
         opts?.include
           ? upsertFulfilling(prev, snapshot)
@@ -140,24 +151,37 @@ export function useDataSnapshots() {
       );
       return { ok: true, snapshot, replacedExisting };
     },
-    [snapshots],
+    [all],
   );
 
-  const remove = useCallback(
-    (id: string) => {
-      const removed = snapshots.find((s) => s.id === id);
-      if (removed) setLastRemoved(removed);
-      setSnapshots((prev) => removeSnapshot(prev, id));
-    },
-    [snapshots],
-  );
+  /** 휴지통으로 — 목록에서 사라지되 저장소에는 남는다. */
+  const remove = useCallback((id: string) => {
+    setLastRemovedId(id);
+    setSnapshots((prev) => trashSnapshot(prev, id, new Date().toISOString()));
+  }, []);
 
-  /** 마지막 삭제를 되돌린다 — 토글 상태(동봉·📌)까지 지웠던 그대로. */
+  /** 휴지통에서 꺼낸다. */
+  const restore = useCallback((id: string) => {
+    setSnapshots((prev) => restoreSnapshot(prev, id));
+    setLastRemovedId((prev) => (prev === id ? null : prev));
+  }, []);
+
+  /** 영구 삭제 — 여기서만 데이터가 진짜 사라진다. */
+  const purge = useCallback((id: string) => {
+    setSnapshots((prev) => removeSnapshot(prev, id));
+    setLastRemovedId((prev) => (prev === id ? null : prev));
+  }, []);
+
+  /** 휴지통을 비운다. */
+  const purgeAll = useCallback(() => {
+    setSnapshots((prev) => liveSnapshots(prev));
+    setLastRemovedId(null);
+  }, []);
+
   const restoreLastRemoved = useCallback(() => {
-    if (!lastRemoved) return;
-    setSnapshots((prev) => upsertSnapshot(prev, lastRemoved));
-    setLastRemoved(null);
-  }, [lastRemoved]);
+    if (!lastRemovedId) return;
+    restore(lastRemovedId);
+  }, [lastRemovedId, restore]);
 
   const toggleIncluded = useCallback((id: string) => {
     setSnapshots((prev) => toggleIncludedIn(prev, id));
@@ -174,14 +198,23 @@ export function useDataSnapshots() {
 
   const clear = useCallback(() => {
     setSnapshots([]);
+    setLastRemovedId(null);
   }, []);
 
+  const live = liveSnapshots(all);
+  const trashed = trashedSnapshots(all);
+
   return {
-    snapshots,
-    included: includedSnapshots(snapshots),
-    lastRemoved,
+    /** 화면이 보는 목록 — 버린 것은 여기 없다. */
+    snapshots: live,
+    included: includedSnapshots(all),
+    trashed,
+    lastRemoved: trashed.find((s) => s.id === lastRemovedId) ?? null,
     addSnapshot,
     remove,
+    restore,
+    purge,
+    purgeAll,
     restoreLastRemoved,
     toggleIncluded,
     setLabel,
