@@ -46,11 +46,21 @@ export type Skill = {
   steps: SkillStep[];
 };
 
-/** 한 번의 "설비 추가" — 이 설비를 이 스킬로 본다. */
+/**
+ * 한 번의 "새 분석 추가" — 이 설비를 이 스킬로 본다.
+ *
+ * <p>`values` 가 세션 안에 있는 이유: 같은 스킬을 두 설비에 걸면 조회 키 값이 서로
+ * 달라야 한다(CVD-01 은 30일, CVD-02 는 7일). 스킬로만 네임스페이스된 전역 값 맵
+ * (`ChatInputs`)에 넣으면 두 세션이 한 칸을 두고 싸워 마지막 하나만 남고, 먼저 세워
+ * 둔 요청 카드의 SQL 까지 나중 값으로 바뀐다. 채팅이 되물어 채우는 값은 지금도
+ * 그 전역 맵에 있다 — 그건 스킬 단위가 맞다(대화 하나에 한 벌).
+ */
 export type SkillSession = {
   id: string;
   equipment: string;
   skill: Skill;
+  /** 진입 폼에서 사람이 정한 조회 키 — 이 세션에만 매인다. */
+  values: Record<string, string>;
 };
 
 /**
@@ -146,13 +156,8 @@ export function missingArgs(
  * 앞 스텝 결과에 묶인 bind(`priorStepBinds`)가 있는 스텝은 사용자가 채울 수
  * 없으므로 카드로 세우지 않는다 — 조달할 수 없는 요구를 세우면 영영 안 지워진다.
  */
-export function skillDataRequests(
-  session: SkillSession,
-  values: Record<string, Record<string, string>>,
-): DataRequest[] {
-  const args: Record<string, string> = {
-    ...(values[session.skill.skill] ?? {}),
-  };
+export function skillDataRequests(session: SkillSession): DataRequest[] {
+  const args: Record<string, string> = { ...session.values };
   const eq = equipmentInputKey(session.skill);
   if (eq) args[eq] = session.equipment;
 

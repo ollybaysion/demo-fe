@@ -52,6 +52,18 @@ import {
   useInputRequests,
 } from "./data";
 import { toChatPayload } from "@/lib/snapshot-store";
+import {
+  addToScope,
+  hasEquipment,
+  hasLine,
+  pruneScope,
+  removeFromScope,
+  type ScopeItem,
+  scopeLabel,
+  toChatScope,
+  toggleScope,
+} from "@/lib/query-scope";
+import { ScopeTray } from "./scope/ScopeTray";
 
 type TokenPayload = { content: string };
 type ErrorPayload = { message: string };
@@ -290,7 +302,6 @@ export function ChatContainer() {
     openWith: openInputsWith,
     receive: receiveInputRequests,
     fill: fillInput,
-    fillAll: fillAllInputs,
     clear: clearInputs,
   } = useInputRequests();
 
@@ -300,6 +311,19 @@ export function ChatContainer() {
   // 직접 등록한 설비 — **스킬과 무관**하다. 설비만 넣고 채팅부터 시작할 수 있어야
   // 하므로(진입 1단), 우측 설비 카드의 씨앗은 세션이 아니라 이 목록이다.
   const [seedEquipments, setSeedEquipments] = useState<string[]>([]);
+  // 질의 대상 — 사용자가 트레이에 담은 설비·분석. 이 질문이 무엇을 놓고 하는
+  // 질문인지이며, 담긴 게 없으면 지금까지처럼 대화 맥락 전체를 본다.
+  const [queryScope, setQueryScope] = useState<ScopeItem[]>([]);
+
+  const toggleQueryScope = useCallback((item: ScopeItem) => {
+    setQueryScope((prev) => toggleScope(prev, item));
+  }, []);
+  const addQueryScope = useCallback((item: ScopeItem) => {
+    setQueryScope((prev) => addToScope(prev, item));
+  }, []);
+  const removeQueryScope = useCallback((item: ScopeItem) => {
+    setQueryScope((prev) => removeFromScope(prev, item));
+  }, []);
 
   /**
    * 설비 등록 — 이 화면의 **진입**. 두 번 불린다.
@@ -323,6 +347,12 @@ export function ChatContainer() {
       setSeedEquipments((prev) =>
         prev.includes(equipment) ? prev : [...prev, equipment],
       );
+      // 아직 아무것도 안 담겼으면 방금 등록한 설비를 담는다 — 등록하자마자 묻는
+      // 사람에게 "어느 설비인지 모르겠습니다"가 돌아오면 안 된다. 이미 담아 둔 게
+      // 있으면 건드리지 않는다: 그건 사용자가 정한 범위다.
+      setQueryScope((prev) =>
+        prev.length === 0 ? [{ kind: "equipment", equipment }] : prev,
+      );
       // 방금 세운 설비 카드로 데려간다 — 등록이 무엇을 만들었는지 보이도록.
       setRightTab("context");
       setEquipmentFocus((prev) => ({
@@ -331,7 +361,14 @@ export function ChatContainer() {
       }));
       if (!skill) return;
 
-      const session: SkillSession = { id: newId(), equipment, skill };
+      const eqKey = equipmentInputKey(skill);
+      const session: SkillSession = {
+        id: newId(),
+        equipment,
+        skill,
+        // 값은 세션 안에 둔다 — 같은 스킬을 두 설비에 걸어도 서로 안 덮어쓰게.
+        values: { ...(eqKey ? { [eqKey]: equipment } : {}), ...values },
+      };
       setSkillSessions((prev) =>
         // 같은 설비를 같은 스킬로 두 번 등록하면 카드가 겹쳐 쌓이기만 한다.
         prev.some(
@@ -340,13 +377,8 @@ export function ChatContainer() {
           ? prev
           : [...prev, session],
       );
-      const eqKey = equipmentInputKey(skill);
-      fillAllInputs(skill.skill, {
-        ...(eqKey ? { [eqKey]: equipment } : {}),
-        ...values,
-      });
     },
-    [fillAllInputs],
+    [],
   );
 
   // 현재 세션이 등록한 스냅샷만 기본으로 본다 — 전역 저장분(예전 세션 잔여)은
@@ -360,7 +392,7 @@ export function ChatContainer() {
   // 들어가고(고정해 두면 낡은 SQL 이 남는다), 결과를 붙여넣으면 같은 queryKey 의
   // 스냅샷이 생겨 카드가 저절로 걷힌다.
   const sessionRequests: PendingRequest[] = skillSessions.flatMap((session) =>
-    skillDataRequests(session, inputValues)
+    skillDataRequests(session)
       .filter((request) => !isFulfilledBy(scopedSnapshots, request.queryKey))
       .map((request) => ({
         request,
@@ -376,6 +408,40 @@ export function ChatContainer() {
   );
   const detailCard =
     equipmentCards.find((c) => c.id === detailCardId) ?? null;
+
+  // 화면에서 사라진 대상은 담긴 채로 두지 않는다 — 보이지 않는 것을 근거로 답하게
+  // 된다. 파생이 다시 돈 직후에 맞춰야 하므로 렌더 중에 정리한다.
+  const prunedScope = pruneScope(
+    queryScope,
+    equipmentCards.map((c) => c.equipment),
+    equipmentCards.flatMap((c) => c.lines.map((l) => l.key)),
+  );
+  if (prunedScope !== queryScope) setQueryScope(prunedScope);
+
+  /**
+   * 채팅에 실어 보낼 스냅샷 — 담긴 대상의 것만.
+   *
+   * 담긴 게 없으면 지금까지처럼 전부 나간다(스코프는 좁히는 장치다). 설비를 못
+   * 읽는 스냅샷(직접 붙여넣기·미분류)은 스코프와 무관하게 남긴다 — 어느 설비에도
+   * 매이지 않은 것을 설비 기준으로 걷어내면 사용자가 방금 붙여넣은 표가 조용히
+   * 사라진다.
+   */
+  const sentSnapshots =
+    prunedScope.length === 0
+      ? scopedSnapshots
+      : scopedSnapshots.filter((s) => {
+          const { equipment, category } = parseLabel(s.label);
+          if (!equipment) return true;
+          return (
+            hasEquipment(prunedScope, equipment) ||
+            prunedScope.some(
+              (i) =>
+                i.kind === "analysis" &&
+                i.equipment === equipment &&
+                i.category === category,
+            )
+          );
+        });
 
   // ── Conversation ↔ local state sync ─────────────────────────
   // Load: when activeId transitions to a real id, hydrate local chat state
@@ -458,7 +524,10 @@ export function ChatContainer() {
             // 요청은 지금까지와 똑같은 본문으로 나간다. 데모 재생 중에는 아예
             // 싣지 않는다: 시나리오는 정해진 답을 내야 하는데, 사용자가 보관해 둔
             // 스냅샷이 끼어들면 재생이 결정론을 잃는다.
-            dataSnapshots: demoMeta ? undefined : toChatPayload(scopedSnapshots),
+            dataSnapshots: demoMeta ? undefined : toChatPayload(sentSnapshots),
+            // 사용자가 담은 질의 대상 — 이 질문이 무엇을 놓고 하는 질문인지.
+            // 담긴 게 없으면 필드가 빠져 지금까지와 같은 본문으로 나간다.
+            scope: demoMeta ? undefined : toChatScope(prunedScope, skillSessions),
             // 채운 스칼라 입력 — 스킬 네임스페이스. sticky 라 대화 내내 실려 나가
             // 백엔드가 후속 턴마다 그 값으로 스킬을 이어간다. 데모는 싣지 않는다.
             inputs: demoMeta
@@ -481,6 +550,11 @@ export function ChatContainer() {
             role: "assistant",
             content: "",
             createdAt: Date.now(),
+            // 보낼 때의 대상을 답에 새긴다 — 트레이는 지금 담긴 것만 보여주므로,
+            // 이게 없으면 스크롤을 올렸을 때 근거가 사라진다.
+            ...(prunedScope.length > 0
+              ? { scopeLabels: prunedScope.map(scopeLabel) }
+              : {}),
           },
         ]);
         assistantInserted = true;
@@ -606,7 +680,9 @@ export function ChatContainer() {
       appendRows,
       replaceRows,
       replaceTimeRange,
-      scopedSnapshots,
+      sentSnapshots,
+      prunedScope,
+      skillSessions,
       inputValues,
       receiveRequests,
       receiveInputRequests,
@@ -810,6 +886,7 @@ export function ChatContainer() {
     // 등록한 설비·스킬도 그 대화의 것이다 — 카드가 새 대화로 넘어오면 안 된다.
     setSkillSessions([]);
     setSeedEquipments([]);
+    setQueryScope([]);
     // 새 세션 — 예전 대화가 등록한 스냅샷은 기본 스코프에서 빠진다('전체'에서만).
     setSessionSnapshotIds(new Set());
     startNewConversation();
@@ -827,6 +904,7 @@ export function ChatContainer() {
       clearInputs();
       setSkillSessions([]);
       setSeedEquipments([]);
+      setQueryScope([]);
       setSessionSnapshotIds(new Set());
       selectConversation(id);
     },
@@ -1100,6 +1178,15 @@ export function ChatContainer() {
                   enabledQuestion={enabledFollowUp}
                 />
               )}
+            {/* 질의 대상 — 입력창 바로 위. 데모 재생 중에는 안 띄운다: 시나리오는
+                정해진 답을 내야 하는데 스코프가 끼어들면 재생이 흔들린다. */}
+            {!demoState && (
+              <ScopeTray
+                items={prunedScope}
+                onRemove={removeQueryScope}
+                onDropItem={addQueryScope}
+              />
+            )}
             <ChatInput
               onSubmit={handleSubmit}
               disabled={isStreaming}
@@ -1188,6 +1275,12 @@ export function ChatContainer() {
             focusCardId={equipmentFocus.key}
             focusNonce={equipmentFocus.n}
             onAddEquipment={handleAddEquipment}
+            onToggleScope={demoState ? undefined : toggleQueryScope}
+            inScope={(item) =>
+              item.kind === "equipment"
+                ? hasEquipment(prunedScope, item.equipment)
+                : hasLine(prunedScope, item.equipment, item.lineKey)
+            }
           />
           <SummaryPanel
             open={rightTab === "summary"}

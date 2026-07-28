@@ -134,6 +134,18 @@ export function ChatMessage({ message, streaming, onRegenerate }: Props) {
           isUser ? "items-end" : "items-start",
         ].join(" ")}
       >
+        {/* 이 답이 무엇을 놓고 나온 답인지 — 풍선 위 한 줄. 트레이는 지금 담긴
+            것만 보여주므로, 스크롤을 올렸을 때 근거는 여기에만 남아 있다. */}
+        {!isUser && message.scopeLabels && message.scopeLabels.length > 0 && (
+          <span className="mb-xxs inline-flex max-w-[85%] flex-wrap items-center gap-xxs rounded-sm bg-brand-surface-soft px-xs py-[3px] text-[11px] leading-[1.5] text-brand-muted">
+            <span className="text-brand-muted-soft">질의 대상</span>
+            {message.scopeLabels.map((label) => (
+              <span key={label} className="font-medium text-brand-body">
+                {label}
+              </span>
+            ))}
+          </span>
+        )}
         <div
           ref={bubbleRef}
           aria-busy={streaming || undefined}

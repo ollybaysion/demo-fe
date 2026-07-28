@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatRange } from "@/lib/format-range";
+import type { ScopeItem } from "@/lib/query-scope";
 import type { Skill } from "@/lib/skills";
+import {
+  ScopeToggle,
+  scopeDragProps,
+} from "@/components/chat/scope/ScopeToggle";
 import { AddEquipment } from "./AddEquipment";
 import type { EquipmentCardModel, EquipmentLine } from "./equipment-cards.mock";
 
@@ -44,6 +49,12 @@ type Props = {
     skill: Skill | null,
     values: Record<string, string>,
   ) => void;
+  /**
+   * 질의 대상 담기 — 안 넘기면 담기 버튼을 아예 안 그린다(스코프를 안 쓰는 화면).
+   * 담김 판정은 `inScope` 가 한다: 설비가 통째로 담기면 그 아래 줄도 담긴 것이다.
+   */
+  onToggleScope?: (item: ScopeItem) => void;
+  inScope?: (item: ScopeItem) => boolean;
 };
 
 export function EquipmentPanel({
@@ -55,6 +66,8 @@ export function EquipmentPanel({
   focusCardId = null,
   focusNonce = 0,
   onAddEquipment,
+  onToggleScope,
+  inScope,
 }: Props) {
   // 첫 카드는 펼쳐 둔다 — 빈 목록처럼 보이지 않게.
   const [expanded, setExpanded] = useState<string[]>(() =>
@@ -135,6 +148,8 @@ export function EquipmentPanel({
                         }))
                     : undefined
                 }
+                onToggleScope={onToggleScope}
+                inScope={inScope}
               />
             ))
           )}
@@ -166,6 +181,8 @@ function EquipmentCard({
   focused = false,
   focusNonce = 0,
   onAddSkill,
+  onToggleScope,
+  inScope,
 }: {
   card: EquipmentCardModel;
   open: boolean;
@@ -177,9 +194,13 @@ function EquipmentCard({
   focusNonce?: number;
   /** 이 설비에 분석을 더한다 — 하단 폼이 스킬 단계로 열린다. */
   onAddSkill?: () => void;
+  onToggleScope?: (item: ScopeItem) => void;
+  inScope?: (item: ScopeItem) => boolean;
 }) {
   const known = card.descriptors.length > 0;
   const ref = useRef<HTMLDivElement | null>(null);
+  const scopeItem: ScopeItem = { kind: "equipment", equipment: card.equipment };
+  const picked = inScope ? inScope(scopeItem) : false;
 
   // 요청 도착 안내 — 화면 안으로 끌어오고 잠깐 깜빡인다. 지속 상태가 아니라
   // 클래스로 처리해 끝나면 흔적이 남지 않게 한다(왼쪽 그룹 안내와 같은 규칙).
@@ -202,14 +223,20 @@ function EquipmentCard({
   return (
     <div
       ref={ref}
+      {...(onToggleScope ? scopeDragProps(scopeItem) : {})}
       className={[
         "rounded-lg border bg-brand-surface-soft overflow-hidden transition-[box-shadow,border-color] duration-500",
         detailOpen
           ? "border-brand-primary ring-1 ring-brand-primary/30"
-          : "border-brand-hairline",
+          : picked
+            ? "border-brand-primary ring-2 ring-brand-primary/10"
+            : "border-brand-hairline",
       ].join(" ")}
     >
-      {/* 본문 = 자세히. 카드에서 가장 넓은 면이 가장 흔한 동작을 갖는다. */}
+      {/* 본문 = 자세히. 카드에서 가장 넓은 면이 가장 흔한 동작을 갖는다.
+          담기는 그 옆에 따로 선다 — 버튼 안에 버튼을 넣을 수 없기도 하지만,
+          "보기"와 "고르기"는 애초에 다른 동작이다. */}
+      <div className="flex items-start">
       <button
         type="button"
         onClick={onOpenDetail}
@@ -218,7 +245,7 @@ function EquipmentCard({
         title={
           detailOpen ? "상세 닫기" : "자세히 — 왼쪽에 상세 화면이 열립니다"
         }
-        className="group w-full px-sm pt-sm pb-xs text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+        className="group flex-1 min-w-0 px-sm pt-sm pb-xs text-left hover:bg-brand-surface-cream-strong focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
       >
         <span className="flex items-baseline gap-xs">
           {/* ‹ 가 왼쪽을 가리켜 "결과가 왼쪽에 열린다"를 미리 말한다.
@@ -262,6 +289,16 @@ function EquipmentCard({
           )}
         </span>
       </button>
+        {onToggleScope && (
+          <span className="shrink-0 pt-sm pr-sm">
+            <ScopeToggle
+              item={scopeItem}
+              on={picked}
+              onToggle={() => onToggleScope(scopeItem)}
+            />
+          </span>
+        )}
+      </div>
 
       {/* 펼침 = 라벨이 붙은 disclosure. 무엇이 열리는지 글자로 말한다.
           그 오른쪽의 [+]는 **이 설비에** 분석을 더한다 — 이미 이 카드를 보고 있는
@@ -297,7 +334,10 @@ function EquipmentCard({
             <LineRow
               key={line.key}
               line={line}
+              equipment={card.equipment}
               onSelect={() => onFocusLine(line.key)}
+              onToggleScope={onToggleScope}
+              inScope={inScope}
             />
           ))}
         </div>
@@ -313,14 +353,27 @@ function EquipmentCard({
  */
 function LineRow({
   line,
+  equipment,
   onSelect,
+  onToggleScope,
+  inScope,
 }: {
   line: EquipmentLine;
+  equipment: string;
   onSelect: () => void;
+  onToggleScope?: (item: ScopeItem) => void;
+  inScope?: (item: ScopeItem) => boolean;
 }) {
   const waiting = line.status === "pending";
+  const scopeItem: ScopeItem = {
+    kind: "analysis",
+    equipment,
+    lineKey: line.key,
+    category: line.category,
+  };
+  const picked = inScope ? inScope(scopeItem) : false;
 
-  return (
+  const row = (
     <button
       type="button"
       onClick={onSelect}
@@ -332,12 +385,14 @@ function LineRow({
           : "왼쪽에서 이 데이터 보기"
       }
       className={[
-        "group/line w-full flex flex-col gap-[2px] rounded-md px-xs py-xs text-left",
+        "group/line flex-1 min-w-0 flex flex-col gap-[2px] rounded-md px-xs py-xs text-left",
         "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
         "active:border-brand-primary active:bg-brand-primary/10",
-        waiting
-          ? "border border-dashed border-brand-hairline bg-brand-canvas/60 hover:border-brand-muted-soft"
-          : "border border-brand-hairline bg-brand-canvas hover:border-brand-muted-soft",
+        picked
+          ? "border border-brand-primary bg-brand-primary/[0.07]"
+          : waiting
+            ? "border border-dashed border-brand-hairline bg-brand-canvas/60 hover:border-brand-muted-soft"
+            : "border border-brand-hairline bg-brand-canvas hover:border-brand-muted-soft",
       ].join(" ")}
     >
       {/* 무엇을 봤는지(category)가 먼저, 언제인지(구간)가 그 아래.
@@ -372,6 +427,23 @@ function LineRow({
         </span>
       )}
     </button>
+  );
+
+  if (!onToggleScope) return row;
+
+  return (
+    <div
+      {...scopeDragProps(scopeItem)}
+      className="flex items-center gap-xxs"
+    >
+      {row}
+      <ScopeToggle
+        item={scopeItem}
+        on={picked}
+        onToggle={() => onToggleScope(scopeItem)}
+        size="sm"
+      />
+    </div>
   );
 }
 

@@ -151,6 +151,14 @@ export type Message = {
   /** Paired event timelines — 어시스턴트 메시지에만. */
   eventTimelines?: MessageEventTimelineEntry[];
   /**
+   * 이 답이 무엇을 놓고 나온 답인지 — 보낼 때의 질의 대상 이름들.
+   *
+   * 트레이는 지금 담긴 것만 보여주므로, 대화를 거슬러 올라가면 "아까 그 답은 뭘
+   * 보고 한 거였지"가 안 풀린다. 그래서 답에 그때의 대상을 붙여 둔다. 비면
+   * 미표기(담은 것 없이 물은 답).
+   */
+  scopeLabels?: string[];
+  /**
    * @deprecated `tables` 사용. 기존 localStorage 호환용.
    * 렌더 시 `tables ?? [table]` 로 coalesce.
    */
