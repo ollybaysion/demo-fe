@@ -284,6 +284,10 @@ export function ChatContainer() {
     remove: removeSnapshot,
     restoreLastRemoved: restoreSnapshot,
     lastRemoved: lastRemovedSnapshot,
+    trashed: trashedSnapshots,
+    restore: restoreSnapshotById,
+    purge: purgeSnapshot,
+    purgeAll: purgeAllSnapshots,
     toggleIncluded: toggleSnapshotIncluded,
     setLabel: setSnapshotLabel,
     setSourceSql: setSnapshotSourceSql,
@@ -1169,6 +1173,10 @@ export function ChatContainer() {
               onSetQuery={setSnapshotSourceSql}
               lastRemoved={lastRemovedSnapshot}
               onRestore={restoreSnapshot}
+              trashed={trashedSnapshots}
+              onRestoreOne={restoreSnapshotById}
+              onPurge={purgeSnapshot}
+              onPurgeAll={purgeAllSnapshots}
               expanded={dataExpandedInner}
               detailVisible={dataDetailVisible}
               onToggleExpanded={toggleDataExpanded}
