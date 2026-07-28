@@ -7,7 +7,6 @@ import type { Scenario } from "./types";
 export const uc12: Scenario = {
   id: "uc-12",
   starter: "알람 threshold는 어떻게 조정하나요?",
-  contextPanel: [],
   turns: [
     {
       user: "알람 threshold는 어떻게 조정하나요?",

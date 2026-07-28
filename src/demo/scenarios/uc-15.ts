@@ -12,7 +12,6 @@ import type { Scenario } from "./types";
 export const uc15: Scenario = {
   id: "uc-15",
   starter: "AI 답변이 부족합니다. 운영자에게 전달하고 싶습니다.",
-  contextPanel: [],
   turns: [
     {
       user: "AI 답변이 부족합니다. 운영자에게 전달하고 싶습니다.",

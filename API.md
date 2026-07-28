@@ -46,12 +46,6 @@ type ChatRequestBody = {
   /** 대화 history (가장 최근 메시지가 끝). 사용자/어시스턴트/에러 메시지 모두 포함. */
   messages: Message[];
 
-  /** 우측 컨텍스트 패널의 설비 정보 — 비어 있을 수 있음. */
-  context?: ContextRow[];
-
-  /** 발생 시간 범위 (둘 다 datetime-local string `YYYY-MM-DDTHH:MM`). */
-  timeRange?: { start?: string; end?: string };
-
   /**
    * 데모 모드 메타 — 클라이언트가 정해진 시나리오를 재생할 때.
    * 백엔드 운영 환경에서는 무시 또는 거부 가능.
@@ -108,7 +102,6 @@ type ChatDataSnapshot = {
 |---|---|---|
 | `messages` 배열 길이 | ≤ 100 | `messages_too_many` |
 | 메시지당 `content` 길이 | ≤ 10,000 chars | `message_content_too_long` |
-| `context` 행 수 | ≤ 50 | `context_too_large` |
 
 위반 시 400 + `{ error, limit, actual }` (§[에러 형식](#에러-형식)).
 
@@ -157,26 +150,6 @@ type DonePayload = {
 
   /** 추천 후속 질문. 비면 미동봉. */
   recommendQuestion?: string[];
-
-  /**
-   * 사용자 메시지에서 백엔드가 추출한 컨텍스트. 비-데모 모드에서 우측
-   * 컨텍스트 패널을 자동 갱신한다. 데모 모드는 시나리오의
-   * `turn.contextPanel` 흐름이 우선이라 무시.
-   *
-   * - `rows` — 추출된 설비/챔버/센서 행. 비면 변경 없음.
-   * - `rowsMode` — `"replace"` (default, 통째 교체) 또는 `"append"`
-   *   (기존 행 끝에 추가). "ETCH-03 도 같이 봐줘" 같이 의도가 추가일 때
-   *   `"append"` 로 보낸다.
-   * - `timeRange` — 새 발생 시간. 미동봉 시 변경 없음. 항상 replace.
-   *
-   * 추출 자체는 백엔드 책임 (LLM / NLU / rule). 미동봉이거나 빈 객체면
-   * 클라이언트는 패널을 건드리지 않는다.
-   */
-  extractedContext?: {
-    rows?: ContextRow[];
-    rowsMode?: "replace" | "append";
-    timeRange?: { start?: string; end?: string };
-  };
 
   /**
    * 답하는 데 필요한데 없는 데이터. DB 에 붙지 못하는 환경에서 모델이 스스로
@@ -263,8 +236,6 @@ data: {"messageId":"msg_xyz","finishReason":"stop","tables":[{"title":"...","col
 ```typescript
 type SummaryRequestBody = {
   messages: Message[];           // 대화 history
-  context?: ContextRow[];        // 설비 정보
-  timeRange?: { start?: string; end?: string };
 };
 ```
 
@@ -564,18 +535,6 @@ type MessageAttachment = {
 };
 ```
 
-### ContextRow (설비 정보 입력)
-
-```typescript
-type ContextSensor = { id: string; name: string };
-type ContextChamber = { id: string; name: string; sensors: ContextSensor[] };
-type ContextRow = {
-  id: string;
-  equipment: string;
-  chambers: ContextChamber[];
-};
-```
-
 ---
 
 ## 에러 형식
@@ -599,7 +558,6 @@ type ErrorResponse = {
 | `messages_required` | 400 | `messages` 누락 |
 | `messages_too_many` | 400 | 메시지 배열 ≤ 100 위반 |
 | `message_content_too_long` | 400 | 메시지 content ≤ 10,000 chars 위반 |
-| `context_too_large` | 400 | context 행 ≤ 50 위반 |
 | `unauthorized` | 401 | 인증 도입 후 |
 | `forbidden` | 403 | |
 | `not_found` | 404 | 설비/run id 등 |

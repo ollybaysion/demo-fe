@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readJson, removeKey, writeJson } from "@/lib/storage";
-import type { ContextRow, Message } from "@/lib/types";
-import type { TimeRange } from "../context/useContextRows";
+import type { Message } from "@/lib/types";
 
 /**
  * 대화 이력 의 데이터 레이어.
@@ -24,10 +23,6 @@ export type Conversation = {
   createdAt: number;
   updatedAt: number;
   messages: Message[];
-  context: {
-    rows: ContextRow[];
-    timeRange: TimeRange;
-  };
 };
 
 function newConversationId(): string {
@@ -59,13 +54,6 @@ function isConversation(v: unknown): v is Conversation {
     typeof c.updatedAt !== "number" ||
     !Array.isArray(c.messages)
   ) {
-    return false;
-  }
-  const ctx = c.context as Record<string, unknown> | undefined;
-  if (!ctx || typeof ctx !== "object") return false;
-  if (!Array.isArray(ctx.rows)) return false;
-  const tr = ctx.timeRange as Record<string, unknown> | undefined;
-  if (!tr || typeof tr.start !== "string" || typeof tr.end !== "string") {
     return false;
   }
   return true;
@@ -139,10 +127,7 @@ export function useConversations() {
    * 호출 측에서 "메시지 0건이면 호출 X" 정책을 지킨다 (빈 항목 방지).
    */
   const createConversation = useCallback(
-    (params: {
-      messages: Message[];
-      context: { rows: ContextRow[]; timeRange: TimeRange };
-    }): Conversation => {
+    (params: { messages: Message[] }): Conversation => {
       const now = Date.now();
       const created: Conversation = {
         id: newConversationId(),
@@ -150,7 +135,6 @@ export function useConversations() {
         createdAt: now,
         updatedAt: now,
         messages: params.messages,
-        context: params.context,
       };
       setList((prev) => [created, ...prev]);
       setActiveId(created.id);
@@ -160,39 +144,22 @@ export function useConversations() {
   );
 
   /**
-   * 특정 conversation 의 messages / context 를 덮어쓰기.
-   * - 모든 inner reference가 그대로면 no-op (load 직후 sync 효과의
-   *   updatedAt bump 를 막아 정렬 순서가 흐트러지지 않게 함)
-   * - 그 외엔 updatedAt 갱신, messages 가 바뀌면 title 재계산
+   * 특정 conversation 의 messages 를 덮어쓰기.
+   * - reference 가 그대로면 no-op (load 직후 sync 효과의 updatedAt bump 를
+   *   막아 정렬 순서가 흐트러지지 않게 함)
+   * - 그 외엔 updatedAt 갱신 + title 재계산
    */
   const updateConversation = useCallback(
-    (
-      id: string,
-      patch: {
-        messages?: Message[];
-        context?: { rows: ContextRow[]; timeRange: TimeRange };
-      },
-    ) => {
+    (id: string, patch: { messages?: Message[] }) => {
       setList((prev) =>
         prev.map((c) => {
           if (c.id !== id) return c;
           const newMessages = patch.messages ?? c.messages;
-          const newRows = patch.context?.rows ?? c.context.rows;
-          const newRange = patch.context?.timeRange ?? c.context.timeRange;
-          if (
-            newMessages === c.messages &&
-            newRows === c.context.rows &&
-            newRange === c.context.timeRange
-          ) {
-            return c;
-          }
-          const title =
-            newMessages !== c.messages ? deriveTitle(newMessages) : c.title;
+          if (newMessages === c.messages) return c;
           return {
             ...c,
             messages: newMessages,
-            context: { rows: newRows, timeRange: newRange },
-            title,
+            title: deriveTitle(newMessages),
             updatedAt: Date.now(),
           };
         }),

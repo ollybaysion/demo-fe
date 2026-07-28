@@ -7,7 +7,6 @@ import type { Scenario } from "./types";
 export const uc14: Scenario = {
   id: "uc-14",
   starter: "이 챗봇은 어떤 일을 할 수 있나요?",
-  contextPanel: [],
   turns: [
     {
       user: "이 챗봇은 어떤 일을 할 수 있나요?",

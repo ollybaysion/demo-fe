@@ -21,7 +21,6 @@ const PRESSURE_12H: readonly Record<string, unknown>[] = Array.from(
 export const uc7: Scenario = {
   id: "uc-7",
   starter: "챔버 압력이 평소와 달라 분석을 원합니다.",
-  contextPanel: [],
   turns: [
     {
       user: "챔버 압력이 평소와 달라 분석을 원합니다.",
@@ -36,19 +35,6 @@ export const uc7: Scenario = {
       user: "예시 챔버 분석",
       assistant:
         "Chamber A 압력 추세입니다. **최근 12시간 평균이 평소 대비 8% 상승** 되어 있습니다.",
-      contextPanel: [
-        {
-          id: "uc7-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc7-ch-1",
-              name: "A",
-              sensors: [{ id: "uc7-sn-1", name: "APC_PRESSURE" }],
-            },
-          ],
-        },
-      ],
       charts: [
         {
           type: "line",

@@ -9,7 +9,6 @@ import type { Scenario } from "./types";
 export const uc3: Scenario = {
   id: "uc-3",
   starter: "센서 데이터가 들어오지 않습니다. 원인이 궁금합니다.",
-  contextPanel: [],
   turns: [
     {
       user: "센서 데이터가 들어오지 않습니다. 원인이 궁금합니다.",
@@ -23,19 +22,6 @@ export const uc3: Scenario = {
     {
       user: "예시 컨텍스트로 시작",
       assistant: "데이터 수집 상태를 점검합니다. 가능 원인을 우선순위 순으로 정리했습니다.",
-      contextPanel: [
-        {
-          id: "uc3-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc3-ch-1",
-              name: "B",
-              sensors: [{ id: "uc3-sn-1", name: "RF_REFLECTED" }],
-            },
-          ],
-        },
-      ],
       tables: [
         {
           title: "점검 항목 우선순위",

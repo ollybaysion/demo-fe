@@ -9,7 +9,6 @@ import type { Scenario } from "./types";
 export const uc2: Scenario = {
   id: "uc-2",
   starter: "특정 시점의 스파이크 원인이 궁금합니다.",
-  contextPanel: [],
   turns: [
     {
       user: "특정 시점의 스파이크 원인이 궁금합니다.",
@@ -23,20 +22,6 @@ export const uc2: Scenario = {
     {
       user: "예시 스파이크 데이터로 시작",
       assistant: "14:20 경 평소 대비 1.8배 높은 스파이크가 관측됩니다. 직전·직후 5분 이벤트는 다음과 같습니다.",
-      contextPanel: [
-        {
-          id: "uc2-eq-1",
-          equipment: "ETCH-01",
-          chambers: [
-            {
-              id: "uc2-ch-1",
-              name: "A",
-              sensors: [{ id: "uc2-sn-1", name: "APC_PRESSURE" }],
-            },
-          ],
-        },
-      ],
-      timeRange: { start: "2026-05-03T14:00", end: "2026-05-03T15:00" },
       charts: [
         {
           type: "line",
