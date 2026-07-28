@@ -1,6 +1,5 @@
 "use client";
 
-import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import { SNAPSHOT_DEMO_QUESTION } from "./data/request-samples";
 
 /**
@@ -11,7 +10,6 @@ import { SNAPSHOT_DEMO_QUESTION } from "./data/request-samples";
 const INPUT_DEMO_QUESTION = "CVD-01 측정값 분석해줘";
 
 type Props = {
-  onScenarioStart?: (scenario: Scenario) => void;
   /**
    * 데이터 요청 왕복 체험 — 시나리오 재생이 아니라 **실 파이프라인**(백엔드
    * 또는 FE mock)으로 질문을 그대로 보낸다. 데모 모드는 결정론 보존을 위해
@@ -20,7 +18,7 @@ type Props = {
   onQuickStart?: (question: string) => void;
 };
 
-export function ChatEmptyState({ onScenarioStart, onQuickStart }: Props) {
+export function ChatEmptyState({ onQuickStart }: Props) {
   return (
     <div className="py-section">
       <div className="text-center">
@@ -28,35 +26,16 @@ export function ChatEmptyState({ onScenarioStart, onQuickStart }: Props) {
           무엇을 도와드릴까요?
         </h2>
         <p className="mt-md text-body-md text-brand-muted">
-          아래에서 시나리오를 선택하거나, 입력창에 질문을 입력하세요.
+          입력창에 질문을 입력하거나, 아래 왕복을 눌러 흐름을 확인하세요.
         </p>
       </div>
 
-      {SCENARIOS.length > 0 && onScenarioStart && (
-        <ul
-          className="mt-xl mx-auto grid w-full gap-md grid-cols-1 sm:grid-cols-2"
-          style={{ maxWidth: "640px" }}
-        >
-          {SCENARIOS.map((scenario) => (
-            <li key={scenario.id}>
-              <button
-                type="button"
-                onClick={() => onScenarioStart(scenario)}
-                className="block w-full h-full text-left rounded-lg border border-brand-hairline bg-brand-canvas px-md py-md text-body-md text-brand-ink hover:border-brand-primary hover:bg-brand-surface-card focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-              >
-                {scenario.starter}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
       {onQuickStart && (
         <div
-          className="mt-md mx-auto w-full flex flex-col gap-sm"
+          className="mt-xl mx-auto w-full flex flex-col gap-sm"
           style={{ maxWidth: "640px" }}
         >
-          {/* 점선 테두리 — 위 시나리오(정해진 대사 재생)와 다른 종류(실 파이프라인)임을 표시. */}
+          {/* 점선 테두리 — 정해진 대사 재생이 아니라 실 파이프라인을 그대로 탄다는 표시. */}
           <button
             type="button"
             onClick={() => onQuickStart(SNAPSHOT_DEMO_QUESTION)}

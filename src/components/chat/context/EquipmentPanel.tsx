@@ -100,24 +100,23 @@ export function EquipmentPanel({
     >
       <div className="w-full h-full flex flex-col">
         <div className="flex-1 overflow-y-auto scrollbar-none px-lg py-lg flex flex-col gap-sm">
-          {/* 이 목록에만 걸리는 필터 줄(자리표시자) — 데이터 패널의 단별 필터와
-              같은 어법이다. */}
-          <div className="flex items-center gap-xs rounded-md border border-dashed border-brand-hairline px-sm py-[6px]">
-            <span className="flex-1 min-w-0 text-caption text-brand-muted-soft truncate">
-              설비 필터
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                setExpanded((prev) =>
-                  prev.length > 0 ? [] : cards.map((c) => c.id),
-                )
-              }
-              className="shrink-0 text-caption text-brand-muted hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
-            >
-              {expanded.length > 0 ? "전체 축소" : "전체 펼침"}
-            </button>
-          </div>
+          {/* 접고 펴기는 목록이 있을 때만 — 빈 목록 위에 걸린 컨트롤은 누를 것이
+              없으면서 자리만 차지한다. */}
+          {cards.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() =>
+                  setExpanded((prev) =>
+                    prev.length > 0 ? [] : cards.map((c) => c.id),
+                  )
+                }
+                className="text-caption text-brand-muted-soft hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+              >
+                {expanded.length > 0 ? "전체 축소" : "전체 펼침"}
+              </button>
+            </div>
+          )}
           {cards.length === 0 ? (
             <p className="text-caption text-brand-muted-soft leading-relaxed">
               {onAddEquipment

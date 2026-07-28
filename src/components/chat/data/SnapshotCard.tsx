@@ -501,10 +501,13 @@ function QueryModal({
  */
 function Chips({ snapshot }: { snapshot: DataSnapshot }) {
   const [expanded, setExpanded] = useState(false);
-  const chipCols = expanded
-    ? snapshot.columns
-    : snapshot.columns.slice(0, CHIP_COLS);
-  const restCols = snapshot.columns.slice(CHIP_COLS);
+  // 이름 없는 컬럼은 칩으로 세우지 않는다 — 글자 없는 빈 상자만 남아 목록이
+  // 지저분해진다. 붙여넣은 그리드의 끝 탭·빈 헤더 칸에서 실제로 들어온다.
+  // 거르는 건 **표시뿐**이다: `snapshot.columns` 자체는 엔진이 준 그대로 두어야
+  // 행의 열 순서와 어긋나지 않는다(파싱은 data-provisioning 의 몫).
+  const namedCols = snapshot.columns.filter((c) => c.trim().length > 0);
+  const chipCols = expanded ? namedCols : namedCols.slice(0, CHIP_COLS);
+  const restCols = namedCols.slice(CHIP_COLS);
   const zeroRows = snapshot.warnings.includes("ZERO_ROWS");
   const sourceTable = tableFromSql(snapshot.sourceSql);
   return (
