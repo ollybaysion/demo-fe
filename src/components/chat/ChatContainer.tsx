@@ -1204,15 +1204,15 @@ export function ChatContainer() {
                   enabledQuestion={enabledFollowUp}
                 />
               )}
-            {/* 질의 대상 — 입력창 바로 위. 데모 재생 중에는 안 띄운다: 시나리오는
-                정해진 답을 내야 하는데 스코프가 끼어들면 재생이 흔들린다. */}
-            {!demoState && (
-              <ScopeTray
-                items={prunedScope}
-                onRemove={removeQueryScope}
-                onDropItem={addQueryScope}
-              />
-            )}
+            {/* 질의 대상 — 입력창 바로 위. 늘 있다: 대화 중에 사라지는 자리는
+                "내가 뭘 잘못 눌렀나"가 된다. 데모 재생 중에도 보이되, 실려
+                나가지는 않는다(시나리오는 정해진 답을 내야 한다 — 스냅샷·입력과
+                같은 규율). 데모 중에는 입력창도 잠겨 있어 결이 어긋나지 않는다. */}
+            <ScopeTray
+              items={prunedScope}
+              onRemove={removeQueryScope}
+              onDropItem={addQueryScope}
+            />
             <ChatInput
               onSubmit={handleSubmit}
               disabled={isStreaming}
@@ -1301,7 +1301,7 @@ export function ChatContainer() {
             focusCardId={equipmentFocus.key}
             focusNonce={equipmentFocus.n}
             onAddEquipment={handleAddEquipment}
-            onToggleScope={demoState ? undefined : toggleQueryScope}
+            onToggleScope={toggleQueryScope}
             inScope={(item) =>
               item.kind === "equipment"
                 ? hasEquipment(prunedScope, item.equipment)
