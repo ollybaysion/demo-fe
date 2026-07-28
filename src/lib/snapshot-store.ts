@@ -67,11 +67,53 @@ export function upsertFulfilling(
   );
 }
 
+/** 영구 삭제 — 되돌릴 수 없다. 휴지통에서 비울 때만 쓴다. */
 export function removeSnapshot(
   list: DataSnapshot[],
   id: string,
 ): DataSnapshot[] {
   return list.filter((s) => s.id !== id);
+}
+
+/**
+ * 휴지통으로 — 목록에서는 사라지되 저장소에는 남는다.
+ *
+ * 동봉(`included`)은 끈다: 지운 데이터가 요청에 계속 실리면 "지웠는데 답이
+ * 그걸 근거로 말하는" 일이 생긴다. 되살릴 때 다시 켜는 건 사용자 몫이다.
+ */
+export function trashSnapshot(
+  list: DataSnapshot[],
+  id: string,
+  at: string,
+): DataSnapshot[] {
+  return list.map((s) =>
+    s.id === id ? { ...s, deletedAt: at, included: false } : s,
+  );
+}
+
+/** 휴지통에서 꺼낸다 — 지웠던 그대로(동봉은 꺼진 채)로 목록에 돌아온다. */
+export function restoreSnapshot(
+  list: DataSnapshot[],
+  id: string,
+): DataSnapshot[] {
+  return list.map((s) => {
+    if (s.id !== id || s.deletedAt === undefined) return s;
+    const rest = { ...s };
+    delete rest.deletedAt;
+    return rest;
+  });
+}
+
+/** 살아 있는 것들 — 화면의 목록과 요청 페이로드가 보는 유일한 집합. */
+export function liveSnapshots(list: DataSnapshot[]): DataSnapshot[] {
+  return list.filter((s) => s.deletedAt === undefined);
+}
+
+/** 휴지통 — 최근에 버린 것이 위로. */
+export function trashedSnapshots(list: DataSnapshot[]): DataSnapshot[] {
+  return list
+    .filter((s) => s.deletedAt !== undefined)
+    .sort((a, b) => (a.deletedAt! < b.deletedAt! ? 1 : -1));
 }
 
 /** 포함 체크 토글. */
@@ -131,9 +173,9 @@ export function autoLabel(columns: string[]): string {
   return columns.slice(0, 2).join(" · ");
 }
 
-/** 요청에 실릴 것들 — 체크된 스냅샷. */
+/** 요청에 실릴 것들 — 체크됐고 **버려지지 않은** 스냅샷. */
 export function includedSnapshots(list: DataSnapshot[]): DataSnapshot[] {
-  return list.filter((s) => s.included);
+  return list.filter((s) => s.included && s.deletedAt === undefined);
 }
 
 /**
@@ -216,6 +258,11 @@ function coerceSnapshot(raw: unknown): DataSnapshot | null {
       : [],
     ...(typeof r.sourceSql === "string" && r.sourceSql.trim().length > 0
       ? { sourceSql: r.sourceSql }
+      : {}),
+    // 휴지통 상태는 저장소를 건너오는 값이다 — 안 접으면 새로고침 한 번에
+    // 버린 것이 전부 목록으로 돌아온다.
+    ...(typeof r.deletedAt === "string" && r.deletedAt.length > 0
+      ? { deletedAt: r.deletedAt }
       : {}),
   };
 }

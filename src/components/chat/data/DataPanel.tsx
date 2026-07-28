@@ -52,6 +52,13 @@ type Props = {
   /** 마지막으로 삭제된 스냅샷 — 있으면 목록 위에 되돌리기 스트립이 뜬다. */
   lastRemoved: DataSnapshot | null;
   onRestore: () => void;
+  /** 휴지통에 든 것들 — 최근에 버린 것이 위. */
+  trashed: DataSnapshot[];
+  /** 휴지통에서 꺼내기. */
+  onRestoreOne: (id: string) => void;
+  /** 영구 삭제 — 여기서만 데이터가 진짜 사라진다. */
+  onPurge: (id: string) => void;
+  onPurgeAll: () => void;
   /** 확장 모드(70% 마스터-디테일) 여부 — 레이아웃 양보가 걸려 있어 부모 소유. */
   expanded: boolean;
   onToggleExpanded: () => void;
@@ -104,6 +111,10 @@ export function DataPanel({
   onSetQuery,
   lastRemoved,
   onRestore,
+  trashed,
+  onRestoreOne,
+  onPurge,
+  onPurgeAll,
   expanded,
   onToggleExpanded,
   detailVisible,
@@ -130,6 +141,8 @@ export function DataPanel({
   const [requestsOpen, setRequestsOpen] = useState(true);
   // 보관 목록도 같은 급의 단이다 — 요청 단만 접히면 대등하지 않다.
   const [dataOpen, setDataOpen] = useState(true);
+  // 휴지통은 **접힌 채로** 시작한다 — 버린 것은 찾을 때만 보이면 된다.
+  const [trashOpen, setTrashOpen] = useState(false);
   // 요청 카드 접힘 — null = 전부 펼침. 단 제목 줄의 아이콘이 여기를 쥔다.
   const [openRequestKeys, setOpenRequestKeys] = useState<string[] | null>(null);
   /**
@@ -432,7 +445,7 @@ export function DataPanel({
               {lastRemoved && (
                 <div className="mb-xs flex items-center justify-between gap-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs">
                   <span className="min-w-0 truncate text-caption text-brand-muted">
-                    “{lastRemoved.label}” 삭제됨
+                    “{lastRemoved.label}” 휴지통으로
                   </span>
                   <button
                     type="button"
@@ -552,6 +565,67 @@ export function DataPanel({
                 </div>
               )}
             </CollapsibleSection>
+
+            {/*
+              휴지통 — 비어 있으면 단 자체가 없다. 늘 떠 있는 빈 서랍은 채울
+              것이 있다는 신호로 읽혀 목록만 길어진다.
+
+              영구 삭제를 이 안에만 두는 이유: 카드의 [삭제]가 곧바로 지우면
+              오클릭 하나로 SQL 을 다시 돌려야 한다. 진짜 사라지는 문은 하나면
+              되고, 그 문은 버린 것들을 눈으로 보는 자리에 있어야 한다.
+            */}
+            {trashed.length > 0 && (
+              <CollapsibleSection
+                title={`휴지통 (${trashed.length})`}
+                open={trashOpen}
+                onToggle={() => setTrashOpen((v) => !v)}
+                action={
+                  trashOpen ? (
+                    <button
+                      type="button"
+                      onClick={onPurgeAll}
+                      title="휴지통을 비웁니다 — 되돌릴 수 없습니다"
+                      className="text-caption text-brand-muted-soft hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+                    >
+                      비우기
+                    </button>
+                  ) : undefined
+                }
+              >
+                <ul className="flex flex-col gap-xxs">
+                  {trashed.map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex items-center gap-xs rounded-md border border-brand-hairline-soft bg-brand-canvas px-sm py-xs"
+                    >
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate text-caption text-brand-muted">
+                          {s.label}
+                        </span>
+                        <span className="block text-[11px] leading-[1.5] text-brand-muted-soft">
+                          {s.columns.length}열 · {s.rows.length}행
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onRestoreOne(s.id)}
+                        className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+                      >
+                        되돌리기
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onPurge(s.id)}
+                        title="영구 삭제 — 되돌릴 수 없습니다"
+                        className="shrink-0 text-caption text-brand-muted-soft hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+                      >
+                        영구 삭제
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </CollapsibleSection>
+            )}
           </div>
 
           {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
