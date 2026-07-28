@@ -22,11 +22,14 @@ export function ScopeTray({
   items,
   onRemove,
   onDropItem,
+  hasData,
 }: {
   items: ScopeItem[];
   onRemove: (item: ScopeItem) => void;
   /** 트레이에 놓였다 — 흡수 규칙은 호출자(스코프 상태)가 적용한다. */
   onDropItem: (item: ScopeItem) => void;
+  /** 이 대상에 붙일 데이터가 실제로 있는가 — 없으면 칩의 점이 빈 원이 된다. */
+  hasData: (item: ScopeItem) => boolean;
 }) {
   const [over, setOver] = useState(false);
 
@@ -83,6 +86,7 @@ export function ScopeTray({
             <ScopeChip
               key={scopeKey(item)}
               item={item}
+              filled={hasData(item)}
               onRemove={() => onRemove(item)}
             />
           ))}
@@ -98,20 +102,41 @@ export function ScopeTray({
 /**
  * 담긴 것 하나. 설비든 분석이든 **같은 칩**이다 — 성격이 같고 넓이만 다르므로,
  * 분석은 앞에 설비를 한 단 달아 경로로 보인다.
+ *
+ * <p>앞의 점은 **붙일 데이터가 있는지**를 말한다. 요청만 서 있고 아직 결과를
+ * 안 붙여넣은 대상도 담을 수 있는데(조회 키는 이미 정해져 있으니 백엔드가 되묻지
+ * 않는다), 그때 점이 채워져 있으면 "데이터가 없다"는 답이 왜 나오는지 알 수 없다.
  */
 function ScopeChip({
   item,
+  filled,
   onRemove,
 }: {
   item: ScopeItem;
+  filled: boolean;
   onRemove: () => void;
 }) {
   return (
-    <span className="inline-flex items-center gap-xxs rounded-full border border-brand-hairline bg-brand-canvas pl-sm pr-xxs py-[5px] text-caption">
+    <span
+      className="inline-flex items-center gap-xxs rounded-full border border-brand-hairline bg-brand-canvas pl-sm pr-xxs py-[5px] text-caption"
+      title={
+        filled
+          ? `${scopeLabel(item)} — 붙여넣은 데이터가 있습니다`
+          : `${scopeLabel(item)} — 아직 데이터가 없습니다(요청만 서 있음)`
+      }
+    >
       <span
-        className="w-[6px] h-[6px] rounded-full bg-brand-accent-teal shrink-0"
+        className={[
+          "w-[6px] h-[6px] rounded-full shrink-0",
+          filled
+            ? "bg-brand-accent-teal"
+            : "border border-brand-muted-soft bg-transparent",
+        ].join(" ")}
         aria-hidden
       />
+      <span className="sr-only">
+        {filled ? "데이터 있음" : "데이터 없음"}
+      </span>
       {item.kind === "analysis" && (
         <>
           <span className="text-brand-muted-soft">{item.equipment}</span>

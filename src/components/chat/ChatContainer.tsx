@@ -410,6 +410,24 @@ export function ChatContainer() {
   if (prunedScope !== queryScope) setQueryScope(prunedScope);
 
   /**
+   * 이 대상에 붙일 데이터가 실제로 있는가 — 트레이 칩의 점이 이걸로 갈린다.
+   *
+   * 요청만 서 있는 대상도 담을 수 있다(조회 키는 이미 정해져 있어 백엔드가
+   * 되묻지 않는다). 그래서 점이 늘 채워져 있으면 "데이터가 없다"는 답이 왜
+   * 나오는지 알 수 없다 — 담긴 것과 쥔 것은 다른 얘기다.
+   */
+  function scopeHasData(item: ScopeItem): boolean {
+    if (item.kind === "equipment") {
+      const card = equipmentCards.find((c) => c.equipment === item.equipment);
+      return !!card && card.lines.some((l) => l.status === "filled");
+    }
+    const line = equipmentCards
+      .flatMap((c) => c.lines)
+      .find((l) => l.key === item.lineKey);
+    return line?.status === "filled";
+  }
+
+  /**
    * 채팅에 실어 보낼 스냅샷 — 담긴 대상의 것만.
    *
    * 담긴 게 없으면 지금까지처럼 전부 나간다(스코프는 좁히는 장치다). 설비를 못
@@ -1128,6 +1146,7 @@ export function ChatContainer() {
               items={prunedScope}
               onRemove={removeQueryScope}
               onDropItem={addQueryScope}
+              hasData={scopeHasData}
             />
             <ChatInput
               onSubmit={handleSubmit}
