@@ -5,6 +5,8 @@ import type { PendingInput } from "@/lib/input-store";
 import type { DerivedGroup } from "../context/derive-cards";
 import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
+import { ArtifactCard } from "./ArtifactCard";
+import type { Artifact } from "./artifacts";
 import { InputCard } from "./InputCard";
 import { RequestCard } from "./RequestCard";
 import { SnapshotCard } from "./SnapshotCard";
@@ -52,6 +54,17 @@ type Props = {
   /** 마지막으로 삭제된 스냅샷 — 있으면 목록 위에 되돌리기 스트립이 뜬다. */
   lastRemoved: DataSnapshot | null;
   onRestore: () => void;
+  /**
+   * 답변 산출물 — 모델이 답과 함께 내놓은 표·차트·이력·그림·링크, 그리고 사용자가
+   * 직접 올린 그림·링크. 스냅샷(근거)과 섞지 않고 별도 단으로 산다.
+   */
+  artifacts: Artifact[];
+  /** 사용자가 직접 올리는 그림·링크. */
+  onAddArtifact: (
+    entry:
+      | { kind: "image"; label: string; dataUrl: string }
+      | { kind: "link"; label: string; url: string },
+  ) => void;
   /** 휴지통에 든 것들 — 최근에 버린 것이 위. */
   trashed: DataSnapshot[];
   /** 휴지통에서 꺼내기. */
@@ -111,6 +124,8 @@ export function DataPanel({
   onSetQuery,
   lastRemoved,
   onRestore,
+  artifacts,
+  onAddArtifact,
   trashed,
   onRestoreOne,
   onPurge,
@@ -143,6 +158,9 @@ export function DataPanel({
   const [dataOpen, setDataOpen] = useState(true);
   // 휴지통은 **접힌 채로** 시작한다 — 버린 것은 찾을 때만 보이면 된다.
   const [trashOpen, setTrashOpen] = useState(false);
+  // 산출물 단은 펼친 채로 — 방금 나온 답의 표·차트가 여기 서므로 접혀 있으면
+  // 답이 나와도 화면이 안 움직인 것처럼 보인다.
+  const [artifactsOpen, setArtifactsOpen] = useState(true);
   // 요청 카드 접힘 — null = 전부 펼침. 단 제목 줄의 아이콘이 여기를 쥔다.
   const [openRequestKeys, setOpenRequestKeys] = useState<string[] | null>(null);
   /**
@@ -567,6 +585,34 @@ export function DataPanel({
             </CollapsibleSection>
 
             {/*
+              답변 산출물 — 원래 대화 옆 페어 패널에 붙던 것들이 여기로 왔다.
+              스냅샷과 **섞지 않는다**: 스냅샷은 사람이 올린 근거고 이쪽은 모델이
+              만든 결과라, 한 목록이 되면 "이 답의 근거가 뭐였지"를 못 되짚는다.
+            */}
+            <CollapsibleSection
+              title={`답변 산출물 (${artifacts.length})`}
+              open={artifactsOpen}
+              onToggle={() => setArtifactsOpen((v) => !v)}
+            >
+              <AddArtifact onAdd={onAddArtifact} />
+              {artifacts.length === 0 ? (
+                <p className="text-caption text-brand-muted-soft">
+                  아직 없습니다. 답이 표·차트·그림을 내놓으면 여기에 쌓이고,
+                  위에서 그림·링크를 직접 올릴 수도 있습니다.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-xs">
+                  {artifacts.map((a, i) => (
+                    // 맨 위(가장 최근 답의 첫 산출물)만 펼쳐 둔다 — 방금 나온
+                    // 것은 누르지 않고 보이는 게 맞고, 나머지까지 펼치면 목록이
+                    // 스크롤 덩어리가 된다.
+                    <ArtifactCard key={a.id} artifact={a} defaultOpen={i === 0} />
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            {/*
               휴지통 — 비어 있으면 단 자체가 없다. 늘 떠 있는 빈 서랍은 채울
               것이 있다는 신호로 읽혀 목록만 길어진다.
 
@@ -856,6 +902,123 @@ function FoldIcon({ collapsed }: { collapsed: boolean }) {
         </>
       )}
     </svg>
+  );
+}
+
+/**
+ * 그림·링크 직접 올리기 — 모델이 내놓기를 기다리지 않고 사람이 근거 화면 캡처나
+ * 사내 문서를 이 자리에 붙일 수 있어야 한다.
+ *
+ * 이미지는 base64 로 접어 넣는다(첨부와 같은 방식) — 사내 이미지 서버가 붙기
+ * 전까지는 브라우저 안에서 끝나야 한다.
+ */
+function AddArtifact({
+  onAdd,
+}: {
+  onAdd: (
+    entry:
+      | { kind: "image"; label: string; dataUrl: string }
+      | { kind: "link"; label: string; url: string },
+  ) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState("");
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  if (!open) {
+    return (
+      <div className="mb-xs flex justify-end">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-caption text-brand-muted-soft hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+        >
+          + 그림·링크
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-xs flex flex-col gap-xxs rounded-md border border-brand-primary/40 bg-brand-surface-soft p-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-caption font-medium text-brand-ink">
+          그림·링크 추가
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setUrl("");
+            setLabel("");
+          }}
+          className="text-caption text-brand-muted-soft hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+        >
+          닫기
+        </button>
+      </div>
+      <input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder="이름 (비우면 주소에서 만듭니다)"
+        className="h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink placeholder:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+      />
+      <div className="flex items-center gap-xxs">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || !url.trim()) return;
+            onAdd({ kind: "link", label: label.trim(), url: url.trim() });
+            setUrl("");
+            setLabel("");
+          }}
+          placeholder="https://..."
+          className="flex-1 min-w-0 h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink placeholder:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+        />
+        <button
+          type="button"
+          disabled={!url.trim()}
+          onClick={() => {
+            onAdd({ kind: "link", label: label.trim(), url: url.trim() });
+            setUrl("");
+            setLabel("");
+          }}
+          className="shrink-0 h-8 px-sm rounded-sm text-caption bg-brand-primary text-brand-on-primary hover:bg-brand-primary-active disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-colors"
+        >
+          링크 추가
+        </button>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            onAdd({
+              kind: "image",
+              label: label.trim() || file.name,
+              dataUrl: String(reader.result ?? ""),
+            });
+            setLabel("");
+          };
+          reader.readAsDataURL(file);
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        className="h-8 rounded-sm border border-brand-hairline text-caption text-brand-ink hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+      >
+        이미지 고르기
+      </button>
+    </div>
   );
 }
 

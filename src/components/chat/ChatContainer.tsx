@@ -25,6 +25,8 @@ import type {
   Message,
   MessageChartEntry,
   MessageEventTimelineEntry,
+  MessageImage,
+  MessageLink,
   MessageTableEntry,
 } from "@/lib/types";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -51,6 +53,11 @@ import {
   useDataSnapshots,
   useInputRequests,
 } from "./data";
+import {
+  deriveArtifacts,
+  linkLabel,
+  type Artifact,
+} from "./data/artifacts";
 import { toChatPayload } from "@/lib/snapshot-store";
 import {
   addToScope,
@@ -78,6 +85,10 @@ type DonePayload = {
   tables?: MessageTableEntry[];
   charts?: MessageChartEntry[];
   eventTimelines?: MessageEventTimelineEntry[];
+  /** 답에 딸린 그림 — 백엔드가 MCP 등으로 읽어온 것. */
+  images?: MessageImage[];
+  /** 답이 가리키는 바깥 문서. */
+  links?: MessageLink[];
   recommendQuestion?: string[];
   /**
    * 백엔드가 사용자 메시지에서 추출한 컨텍스트. 비-데모 모드에서 우측
@@ -147,6 +158,12 @@ function nonEmptyRows(rows: ContextRow[]): ContextRow[] {
 
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
+  /**
+   * 사용자가 직접 올린 그림·링크 — 모델이 내놓기를 기다리지 않고 근거 화면
+   * 캡처나 사내 문서를 붙이는 자리. 대화에서 파생되는 산출물과 같은 목록에
+   * 섞이되 어느 답에서 나온 것이 아니므로 `messageId` 가 없다.
+   */
+  const [userArtifacts, setUserArtifacts] = useState<Artifact[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   // 3분할 상주 레이아웃 — 좌 데이터·중앙 채팅은 항상, 우측은 설비/요약 탭.
   const [rightTab, setRightTab] = useState<"context" | "summary">("context");
@@ -368,6 +385,36 @@ export function ChatContainer() {
    * 그대로 값 맵에 넣는 것으로 끝난다. 조회 스텝은 요청 카드로 서고, 그건
    * 파생이 그린다.
    */
+  /** 직접 올린 그림·링크를 산출물 목록 앞에 세운다 — 방금 올린 것이 위. */
+  const handleAddArtifact = useCallback(
+    (
+      entry:
+        | { kind: "image"; label: string; dataUrl: string }
+        | { kind: "link"; label: string; url: string },
+    ) => {
+      setUserArtifacts((prev) => {
+        const id = `user:${entry.kind}:${prev.length}:${entry.label}`;
+        const base = { id, messageId: null, turn: null } as const;
+        const next: Artifact =
+          entry.kind === "image"
+            ? {
+                ...base,
+                label: entry.label || "그림",
+                kind: "image",
+                payload: { label: entry.label, dataUrl: entry.dataUrl },
+              }
+            : {
+                ...base,
+                label: linkLabel({ label: entry.label, url: entry.url }),
+                kind: "link",
+                payload: { label: entry.label, url: entry.url },
+              };
+        return [next, ...prev];
+      });
+    },
+    [],
+  );
+
   const handleAddEquipment = useCallback(
     (
       equipment: string,
@@ -448,6 +495,9 @@ export function ChatContainer() {
   );
   const detailCard =
     equipmentCards.find((c) => c.id === detailCardId) ?? null;
+
+  // 답변 산출물 — 대화에서 파생된 것이 위(새 답이 먼저), 직접 올린 것이 아래.
+  const artifacts = [...deriveArtifacts(messages), ...userArtifacts];
 
   // 화면에서 사라진 대상은 담긴 채로 두지 않는다 — 보이지 않는 것을 근거로 답하게
   // 된다. 파생이 다시 돈 직후에 맞춰야 하므로 렌더 중에 정리한다.
@@ -645,6 +695,10 @@ export function ChatContainer() {
               !!payload.dataRequests && payload.dataRequests.length > 0;
             const hasInputRequests =
               !!payload.inputRequests && payload.inputRequests.length > 0;
+            // 그림·링크 — 어디서 읽어왔는지는 백엔드가 진다(MCP 등). 여기는
+            // 받은 것을 답에 달아 둘 뿐이고, 그리는 것은 데이터 패널이 한다.
+            const hasImages = !!payload.images && payload.images.length > 0;
+            const hasLinks = !!payload.links && payload.links.length > 0;
             if (
               assistantInserted &&
               (hasTables ||
@@ -652,7 +706,9 @@ export function ChatContainer() {
                 hasTimelines ||
                 hasRecommend ||
                 hasDataRequests ||
-                hasInputRequests)
+                hasInputRequests ||
+                hasImages ||
+                hasLinks)
             ) {
               setMessages((prev) =>
                 prev.map((m) => {
@@ -666,6 +722,8 @@ export function ChatContainer() {
                   }
                   if (hasDataRequests) next.dataRequests = payload.dataRequests;
                   if (hasInputRequests) next.inputRequests = payload.inputRequests;
+                  if (hasImages) next.images = payload.images;
+                  if (hasLinks) next.links = payload.links;
                   return next;
                 }),
               );
@@ -1138,6 +1196,8 @@ export function ChatContainer() {
             ].join(" ")}
           >
             <DataPanel
+              artifacts={artifacts}
+              onAddArtifact={handleAddArtifact}
               snapshots={scopedSnapshots}
               // 현재 세션 요청 + 스냅샷에서 파생한 그룹. viewMode 로 설비별/유형별.
               groups={dataGroups}
