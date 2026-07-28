@@ -93,7 +93,7 @@ export function SnapshotDetail({ snapshot }: { snapshot: DataSnapshot }) {
 
       {snapshot.rows.length === 0 ? (
         <p className="px-lg py-md text-caption text-brand-muted-soft">
-          행이 없습니다 — 표의 존재만 전달되고 값은 실리지 않습니다.
+          조회 결과가 0행입니다 — 데이터가 없다는 사실로 전달됩니다.
         </p>
       ) : (
         <div className="flex-1 min-h-0 overflow-auto">

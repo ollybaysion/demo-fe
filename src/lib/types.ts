@@ -248,8 +248,20 @@ export type DataSnapshot = {
    */
   capturedAt: string;
   columns: string[];
+  /**
+   * 표 내용. **빈 배열은 "아직 안 받았다"가 아니라 "조회했더니 0행"이다** — 사용자가
+   * 요청 카드에 [결과 없음]으로 답했거나 헤더만 붙여넣은 경우다. 백엔드도 같은
+   * 기준으로 읽어(`rows: []` + `rowCount: 0`) 미첨부와 구분하고, 그 조회 절차를
+   * 거기서 정상 종료시킨다.
+   */
   rows: (string | null)[][];
-  /** 엔진 `provenance.sha256`. 중복 감지 전용. */
+  /**
+   * 엔진 `provenance.sha256`. 중복 감지 전용.
+   *
+   * 0행 등록에는 해석할 내용이 없어 엔진 해시도 없다 — 대신 어느 조회의 없음인지를
+   * 정체로 삼는다(`emptyResultHash`). 없음끼리는 컬럼이 같아도 조회가 다르면 다른
+   * 사실이라, 중복 판정이 `queryKey` 까지 본다.
+   */
   contentHash: string;
   /** 요청에 실을지 — 체크된 스냅샷은 내용(rows)까지 함께 나간다. */
   included: boolean;
@@ -337,8 +349,11 @@ export type ChatInputs = Record<string, Record<string, string>>;
  * 채팅 요청에 실리는 스냅샷 — `POST /api/fdc/v1/chat` 의 `dataSnapshots[]`.
  *
  * 체크된 스냅샷이 내용(rows)까지 담아 나간다 — 체크했다는 건 근거로 쓰라는
- * 뜻이다. `rows` 가 optional 인 것은 BE 계약 호환 때문이다(BE 는 rows 없는
+ * 뜻이다. `rows` 가 optional 인 것은 BE 계약 호환 때문이다(BE 는 rows 가 아예 없는
  * 항목을 카탈로그 알림으로 처리한다). FE 는 항상 채워 보낸다.
+ *
+ * **빈 배열은 카탈로그가 아니다.** BE 는 `rows: []` + `rowCount: 0` 을 "조회 결과가
+ * 0행임이 확인됨"으로 읽고, 미첨부와 구분해 프롬프트에 싣는다.
  */
 export type ChatDataSnapshot = {
   queryKey: string;

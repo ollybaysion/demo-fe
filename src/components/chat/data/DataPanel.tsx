@@ -46,6 +46,11 @@ type Props = {
     label: string,
     opts: { include: boolean; queryKey: string; sourceSql?: string },
   ) => AddSnapshotResult;
+  /** 조회했는데 0행이었다 — 요청 카드가 텍스트 없이 그 사실만 등록하는 길. */
+  onRegisterEmpty: (
+    label: string,
+    opts: { queryKey: string; columns?: string[]; sourceSql?: string },
+  ) => AddSnapshotResult;
   onToggleIncluded: (id: string) => void;
   onRemove: (id: string) => void;
   onRename: (id: string, label: string) => void;
@@ -118,6 +123,7 @@ export function DataPanel({
   onSubmitInput,
   onAdd,
   onFulfill,
+  onRegisterEmpty,
   onToggleIncluded,
   onRemove,
   onRename,
@@ -238,6 +244,18 @@ export function DataPanel({
       return result;
     },
     [onFulfill, flash],
+  );
+
+  const handleRegisterEmpty = useCallback(
+    (
+      label: string,
+      opts: { queryKey: string; columns?: string[]; sourceSql?: string },
+    ) => {
+      const result = onRegisterEmpty(label, opts);
+      if (result.ok) flash(result.snapshot.id);
+      return result;
+    },
+    [onRegisterEmpty, flash],
   );
 
   /** 텍스트 한 덩이를 등록한다 — 실패하면 그 텍스트를 안고 모달을 연다. */
@@ -421,6 +439,7 @@ export function DataPanel({
                         focused={p.request.queryKey === focusRequestKey}
                         focusNonce={requestFocusNonce}
                         onFulfill={handleFulfill}
+                        onRegisterEmpty={handleRegisterEmpty}
                       />
                     ))}
                 </div>
@@ -527,6 +546,7 @@ export function DataPanel({
                               focused={p.request.queryKey === focusRequestKey}
                               focusNonce={requestFocusNonce}
                               onFulfill={handleFulfill}
+                              onRegisterEmpty={handleRegisterEmpty}
                             />
                           ))}
                         {g.snapshots.map((s) => (
