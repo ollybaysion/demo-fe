@@ -7,7 +7,8 @@ import { parseSnapshot, toQueryKey } from "@/lib/snapshot-parse";
 import type { SnapshotParseError } from "@/lib/snapshot-parse";
 import {
   autoLabel,
-  findByContentHash,
+  emptyResultHash,
+  findSameContent,
   includedSnapshots,
   liveSnapshots,
   removeSnapshot,
@@ -91,6 +92,28 @@ export function useDataSnapshots() {
   }, [all]);
 
   /**
+   * 만들어진 스냅샷을 목록에 넣는다 — 붙여넣기든 "결과 없음"이든 여기로 모인다.
+   *
+   * 중복 여부는 업데이터 밖에서 본다: 업데이터는 순수해야 하고, 그 안에서 값을
+   * 새어 나오게 하면 읽는 시점이 렌더 타이밍에 묶인다. 중복은 살아 있는 것끼리만
+   * 본다 — 휴지통의 같은 내용 때문에 새 등록이 "이미 있음"으로 접히면, 버린
+   * 데이터가 보이지 않는 곳에서 등록을 막는다.
+   */
+  const commit = useCallback(
+    (snapshot: DataSnapshot, include: boolean): AddSnapshotResult => {
+      const replacedExisting =
+        findSameContent(liveSnapshots(all), snapshot) !== undefined;
+      setSnapshots((prev) =>
+        include
+          ? upsertFulfilling(prev, snapshot)
+          : upsertSnapshot(prev, snapshot),
+      );
+      return { ok: true, snapshot, replacedExisting };
+    },
+    [all],
+  );
+
+  /**
    * 붙여넣은 텍스트를 해석해 목록에 넣는다.
    *
    * 파싱이 치명적으로 실패하면 목록을 건드리지 않고 실패를 그대로 돌려준다 —
@@ -137,21 +160,43 @@ export function useDataSnapshots() {
         ...(opts?.sourceSql?.trim() ? { sourceSql: opts.sourceSql.trim() } : {}),
       };
 
-      // 중복 여부는 업데이터 밖에서 본다 — 업데이터는 순수해야 하고, 그 안에서
-      // 값을 새어 나오게 하면 읽는 시점이 렌더 타이밍에 묶인다.
-      // 중복은 살아 있는 것끼리만 본다 — 휴지통의 같은 내용 때문에 새 등록이
-      // "이미 있음"으로 접히면, 버린 데이터가 보이지 않는 곳에서 등록을 막는다.
-      const replacedExisting =
-        findByContentHash(liveSnapshots(all), snapshot.contentHash) !==
-        undefined;
-      setSnapshots((prev) =>
-        opts?.include
-          ? upsertFulfilling(prev, snapshot)
-          : upsertSnapshot(prev, snapshot),
-      );
-      return { ok: true, snapshot, replacedExisting };
+      return commit(snapshot, opts?.include ?? false);
     },
-    [all],
+    [commit],
+  );
+
+  /**
+   * 조회했는데 결과가 없었다 — 그걸 <b>사실로</b> 등록한다.
+   *
+   * 붙여넣기 경로와 달리 <b>해석할 텍스트가 없다</b>. 그래서 엔진을 타지 않는다:
+   * 파서의 일은 사용자가 붙여넣은 것을 읽는 것인데 여기엔 읽을 것이 없고, 없음의
+   * 정체는 내용이 아니라 어느 조회의 없음인가다(`emptyResultHash`).
+   *
+   * 컬럼은 요청 카드가 알려 준 기대 컬럼을 그대로 적어 둔다 — 없으면 빈 목록이다.
+   * 어느 쪽이든 `rows: []` 로 나가고, 백엔드는 그것을 미첨부가 아니라 0행으로 읽는다.
+   */
+  const addEmptyResult = useCallback(
+    (
+      label: string,
+      opts: { queryKey: string; columns?: string[]; sourceSql?: string },
+    ): AddSnapshotResult => {
+      const snapshot: DataSnapshot = {
+        id: newId(),
+        queryKey: opts.queryKey,
+        label: label.trim() || opts.queryKey,
+        capturedAt: new Date().toISOString(),
+        columns: opts.columns ?? [],
+        rows: [],
+        contentHash: emptyResultHash(opts.queryKey),
+        included: true,
+        // 엔진이 0행에 붙이는 코드를 그대로 쓴다 — 화면의 "결과 없음" 칩은 붙여넣기로
+        // 들어온 0행과 여기서 등록한 0행을 구분할 이유가 없다.
+        warnings: ["ZERO_ROWS"],
+        ...(opts.sourceSql?.trim() ? { sourceSql: opts.sourceSql.trim() } : {}),
+      };
+      return commit(snapshot, true);
+    },
+    [commit],
   );
 
   /** 휴지통으로 — 목록에서 사라지되 저장소에는 남는다. */
@@ -211,6 +256,7 @@ export function useDataSnapshots() {
     trashed,
     lastRemoved: trashed.find((s) => s.id === lastRemovedId) ?? null,
     addSnapshot,
+    addEmptyResult,
     remove,
     restore,
     purge,

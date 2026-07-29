@@ -16,6 +16,11 @@
  *    새 항목을 만들지 않고 기존 항목을 **갱신**한다 — 사용자가 쥔 체크 상태
  *    (`included`)는 보존하고 라벨·시각만 새 것으로 덮는다. 다시 붙여넣는
  *    행위의 의도는 "이게 최신"이지 "하나 더"가 아니기 때문이다.
+ *
+ *    단 **행이 없는 스냅샷은 예외다.** 내용이 없으니 내용으로 같다고 말할 수 없다 —
+ *    "S-0004 로는 결과가 없다"와 "CVD-01 로는 결과가 없다"는 서로 다른 사실인데,
+ *    컬럼 구성만 같으면 해시가 같아진다. 없음의 정체는 내용이 아니라 **어느 조회의
+ *    없음인가**라서, 이쪽은 `queryKey` 까지 같아야 한 항목으로 접는다.
  *  - **체크 = 내용까지 실린다.** 상태 축은 하나다(포함/제외) — 체크된 스냅샷은
  *    rows 전문이 요청에 실리고, 해제하면 아예 실리지 않는다. 카탈로그-온리 중간
  *    상태는 두지 않는다: "표가 있다"만 알리는 상태는 모델이 값을 못 보는데 사용자는
@@ -38,7 +43,7 @@ export function upsertSnapshot(
   list: DataSnapshot[],
   next: DataSnapshot,
 ): DataSnapshot[] {
-  const dupIndex = list.findIndex((s) => s.contentHash === next.contentHash);
+  const dupIndex = list.findIndex((s) => isSameContent(s, next));
   if (dupIndex === -1) return [...list, next];
 
   const existing = list[dupIndex];
@@ -49,6 +54,32 @@ export function upsertSnapshot(
     included: existing.included,
   };
   return list.map((s, i) => (i === dupIndex ? merged : s));
+}
+
+/**
+ * 조회는 했는데 결과가 0행이었나 — **"아직 안 받았다"가 아니라 "없다는 사실"** 이다.
+ *
+ * 백엔드도 같은 기준으로 읽는다(`rows: []` + `rowCount: 0`): 미첨부와 구분해
+ * 프롬프트에 싣고, 그 조회 절차를 거기서 정상 종료시킨다.
+ */
+export function isEmptyResult(snapshot: DataSnapshot): boolean {
+  return snapshot.rows.length === 0;
+}
+
+/**
+ * 없음의 내용 해시 — 내용이 없으니 엔진이 줄 해시도 없다. 대신 **어느 조회의
+ * 없음인가**를 정체로 삼는다. 같은 조회를 다시 "결과 없음"으로 등록하면 한 항목으로
+ * 접히고, 다른 조회의 없음은 따로 선다.
+ */
+export function emptyResultHash(queryKey: string): string {
+  return `empty:${queryKey}`;
+}
+
+/** 같은 항목인가 — 없음끼리는 컬럼이 같아도 조회가 다르면 다른 사실이다. */
+function isSameContent(a: DataSnapshot, b: DataSnapshot): boolean {
+  if (a.contentHash !== b.contentHash) return false;
+  if (!isEmptyResult(a) && !isEmptyResult(b)) return true;
+  return a.queryKey === b.queryKey;
 }
 
 /**
@@ -63,7 +94,7 @@ export function upsertFulfilling(
   next: DataSnapshot,
 ): DataSnapshot[] {
   return upsertSnapshot(list, next).map((s) =>
-    s.contentHash === next.contentHash ? { ...s, included: true } : s,
+    isSameContent(s, next) ? { ...s, included: true } : s,
   );
 }
 
@@ -159,6 +190,14 @@ export function findByContentHash(
   contentHash: string,
 ): DataSnapshot | undefined {
   return list.find((s) => s.contentHash === contentHash);
+}
+
+/** 이미 같은 항목이 있나 — `upsertSnapshot` 이 갱신으로 접을 대상과 같은 판정. */
+export function findSameContent(
+  list: DataSnapshot[],
+  next: DataSnapshot,
+): DataSnapshot | undefined {
+  return list.find((s) => isSameContent(s, next));
 }
 
 /**

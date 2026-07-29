@@ -230,6 +230,7 @@ export function ChatContainer() {
   const {
     snapshots,
     addSnapshot,
+    addEmptyResult,
     remove: removeSnapshot,
     restoreLastRemoved: restoreSnapshot,
     lastRemoved: lastRemovedSnapshot,
@@ -921,6 +922,27 @@ export function ChatContainer() {
     [addSnapshot, fulfillRequest, rememberSessionSnapshot],
   );
 
+  /**
+   * 요청 카드에 "결과 없음"으로 답한다 — 조회는 했고 0행이었다는 사실을 등록한다.
+   *
+   * 채운 것과 같은 자리에 놓는다: 요청은 충족되고, 스냅샷은 `rows: []` 로 실려 나가
+   * 백엔드가 미첨부와 구분해 읽는다. 못 채운 것이 아니라 채운 것이다.
+   */
+  const handleRegisterEmptyResult = useCallback(
+    (
+      label: string,
+      opts: { queryKey: string; columns?: string[]; sourceSql?: string },
+    ) => {
+      const result = addEmptyResult(label, opts);
+      if (result.ok) {
+        fulfillRequest(opts.queryKey);
+        rememberSessionSnapshot(result.snapshot.id);
+      }
+      return result;
+    },
+    [addEmptyResult, fulfillRequest, rememberSessionSnapshot],
+  );
+
   /** 수동 등록 — 이름을 묻지 않는다. 라벨은 내용에서 자동으로 만들어진다. */
   const handleAddSnapshot = useCallback(
     (input: string) => {
@@ -1035,6 +1057,7 @@ export function ChatContainer() {
               onSubmitInput={handleSubmitInput}
               onAdd={handleAddSnapshot}
               onFulfill={handleFulfillRequest}
+              onRegisterEmpty={handleRegisterEmptyResult}
               onToggleIncluded={toggleSnapshotIncluded}
               onRemove={removeSnapshot}
               onRename={setSnapshotLabel}

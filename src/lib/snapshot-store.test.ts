@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   autoLabel,
+  emptyResultHash,
   includedSnapshots,
+  isEmptyResult,
   migrateSnapshots,
   removeSnapshot,
   setSourceSql,
@@ -245,5 +247,54 @@ describe("migrateSnapshots", () => {
     const out = migrateSnapshots([withSql, blankSql]);
     expect(out[0].sourceSql).toBe("SELECT 1 FROM t");
     expect("sourceSql" in out[1]).toBe(false);
+  });
+});
+
+describe("결과 없음(0행) 스냅샷", () => {
+  /** 요청 카드 [결과 없음] 이 만드는 모양 — 해석할 내용이 없어 rows 가 빈 배열이다. */
+  function empty(queryKey: string, over: Partial<DataSnapshot> = {}): DataSnapshot {
+    return snap({
+      queryKey,
+      rows: [],
+      contentHash: emptyResultHash(queryKey),
+      warnings: ["ZERO_ROWS"],
+      ...over,
+    });
+  }
+
+  it("0행은 '아직 안 받음'이 아니라 '없다는 사실'이다", () => {
+    expect(isEmptyResult(empty("q1"))).toBe(true);
+    expect(isEmptyResult(snap())).toBe(false);
+  });
+
+  it("조회가 다르면 컬럼이 같아도 각각 남는다 — 없음의 정체는 어느 조회인가다", () => {
+    // 두 단계가 같은 컬럼을 내는 일은 흔하다(설비 조회는 어느 스킬에서든 같은 SELECT).
+    // 내용으로만 접으면 뒤에 등록한 없음이 앞의 것을 덮어써, 한쪽 요청이 영영 안 채워진다.
+    const list = upsertSnapshot([empty("skill#0__id=A")], empty("skill#1__id=A"));
+    expect(list).toHaveLength(2);
+    expect(list.map((s) => s.queryKey)).toEqual(["skill#0__id=A", "skill#1__id=A"]);
+  });
+
+  it("같은 조회를 다시 없음으로 등록하면 한 항목으로 접힌다", () => {
+    const list = upsertSnapshot(
+      [empty("skill#0__id=A", { capturedAt: "2026-07-01T00:00:00.000Z" })],
+      empty("skill#0__id=A", { capturedAt: "2026-07-29T00:00:00.000Z" }),
+    );
+    expect(list).toHaveLength(1);
+    expect(list[0].capturedAt).toBe("2026-07-29T00:00:00.000Z");
+  });
+
+  it("요청에 rows:[] 와 rowCount:0 으로 실린다 — 백엔드가 미첨부와 구분하는 신호", () => {
+    const payload = toChatPayload([empty("skill#0__id=A", { included: true })]);
+    expect(payload).toEqual([
+      {
+        queryKey: "skill#0__id=A",
+        label: "센서 목록",
+        capturedAt: "2026-07-21T00:00:00.000Z",
+        columns: ["A", "B"],
+        rowCount: 0,
+        rows: [],
+      },
+    ]);
   });
 });

@@ -223,12 +223,8 @@ export async function POST(request: Request): Promise<Response> {
       responseDataRequests = missing;
       responseText = buildDataRequestResponse(missing);
     } else {
-      const supplied = suppliedLabels(body.dataSnapshots);
       const answer = buildMockResponse(lastUser.content, body.scope);
-      responseText =
-        supplied.length > 0
-          ? `제공해주신 ${supplied.join(", ")} 을(를) 근거로 답변합니다.\n\n${answer}`
-          : answer;
+      responseText = [...suppliedNotes(body.dataSnapshots), answer].join("\n\n");
     }
     responseRecommend = recommendNext(lastUser.content);
     // 조달을 청하는 답에는 붙이지 않는다 — 없는 데이터를 말하면서 그림을
@@ -449,8 +445,28 @@ function missingDataRequests(
   }));
 }
 
-function suppliedLabels(supplied: ChatRequestBody["dataSnapshots"]): string[] {
-  return (supplied ?? []).map((s) => s.label);
+/**
+ * 동봉된 데이터를 답 앞에 한 줄로 밝힌다 — **0행은 따로 말한다**.
+ *
+ * 실제 백엔드도 둘을 구분해 프롬프트에 싣는다: 0행은 못 받은 것이 아니라 "그
+ * 조건으로는 없다"는 사실이라, 근거 목록에 뭉뚱그리면 화면과 답이 어긋난다.
+ */
+function suppliedNotes(supplied: ChatRequestBody["dataSnapshots"]): string[] {
+  const all = supplied ?? [];
+  const isEmpty = (s: ChatDataSnapshot) =>
+    s.rows ? s.rows.length === 0 : s.rowCount === 0;
+  const filled = all.filter((s) => !isEmpty(s)).map((s) => s.label);
+  const empty = all.filter(isEmpty).map((s) => s.label);
+  const notes: string[] = [];
+  if (filled.length > 0) {
+    notes.push(`제공해주신 ${filled.join(", ")} 을(를) 근거로 답변합니다.`);
+  }
+  if (empty.length > 0) {
+    notes.push(
+      `${empty.join(", ")} 은(는) 조회 결과가 0행이었습니다 — 그 조건으로는 데이터가 없습니다.`,
+    );
+  }
+  return notes;
 }
 
 /**

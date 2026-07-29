@@ -496,8 +496,9 @@ function QueryModal({
  * 출처 테이블은 SQL 에서 결정론적으로 아는 경우에만 붙는다(추측 금지).
  * 컬럼은 앞 몇 개만 칩으로, 나머지는 "+N" 버튼 — 누르면 카드가 늘어나며
  * 전체 컬럼이 펼쳐지고, 다시 누르면 접힌다(툴팁은 hover 미리보기로 유지).
- * 행이 없는 스냅샷은 값이 안 실린다는 사실을 카드에서 바로 말한다 —
- * "모델이 왜 내 데이터를 못 보지?"의 원인을 회색 캡션 뒤에 숨기지 않는다.
+ * 행이 없는 스냅샷은 그 사실을 카드에서 바로 말한다. 0행은 못 받은 것이 아니라
+ * **받은 사실**이다 — 백엔드도 미첨부와 구분해 "그 조건으로는 데이터가 없다"의
+ * 근거로 쓴다. 회색 캡션 뒤에 숨기면 사용자가 등록에 실패했다고 오해한다.
  */
 function Chips({ snapshot }: { snapshot: DataSnapshot }) {
   const [expanded, setExpanded] = useState(false);
@@ -556,9 +557,9 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
       {zeroRows && (
         <span
           className="inline-flex items-center rounded-[4px] bg-brand-warning/15 px-[6px] py-[3px] text-[11px] leading-none font-medium text-brand-warning"
-          title="행이 없어 표의 존재만 전달됩니다 — 값은 실리지 않습니다"
+          title="조회 결과가 0행입니다 — 데이터가 없다는 사실로 전달됩니다"
         >
-          값 없음
+          결과 없음
         </span>
       )}
       <span className="text-[11px] leading-none text-brand-muted-soft">

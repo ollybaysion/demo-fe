@@ -20,6 +20,11 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  * 요구에 대한 응답이라, 표가 있다는 알림(카탈로그)만으로는 부족하고 값이 실려야
  * 한다. 등록 뒤에는 별도 버튼 없이 — 사용자가 채팅에 "등록 완료"라고 말하면
  * 보통의 발화로 이어서 분석한다(히스토리 보존).
+ *
+ * **답이 "없음"일 수도 있다.** 돌려 봤더니 0행인 것은 못 채운 게 아니라 채운
+ * 것이다 — "그 조건으로는 데이터가 없다"는 답의 근거이고, 그 조회 절차는 거기서
+ * 끝난다. 붙여넣을 것이 없다고 카드가 영영 남으면 사용자는 답할 방법이 없으므로,
+ * 텍스트 없이 그 사실만 등록하는 길을 나란히 둔다.
  */
 type Props = {
   request: DataRequest;
@@ -33,6 +38,11 @@ type Props = {
     input: string,
     label: string,
     opts: { include: boolean; queryKey: string; sourceSql?: string },
+  ) => AddSnapshotResult;
+  /** 조회했는데 0행이었다 — 붙여넣을 텍스트 없이 그 사실만 등록한다. */
+  onRegisterEmpty: (
+    label: string,
+    opts: { queryKey: string; columns?: string[]; sourceSql?: string },
   ) => AddSnapshotResult;
 };
 
@@ -52,6 +62,7 @@ export function RequestCard({
   focused = false,
   focusNonce = 0,
   onFulfill,
+  onRegisterEmpty,
 }: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<{ code: string; message: string } | null>(
@@ -85,6 +96,20 @@ export function RequestCard({
       queryKey: request.queryKey,
       // 요청이 쥔 SQL 이 이 데이터의 출처다 — 스냅샷 카드의 테이블 칩·쿼리
       // 복사가 여기서 이어진다.
+      ...(request.sql ? { sourceSql: request.sql } : {}),
+    });
+    if (!result.ok) {
+      setError({ code: result.code, message: result.message });
+      return;
+    }
+    setError(null);
+    setText("");
+  }
+
+  function submitEmpty() {
+    const result = onRegisterEmpty(request.label, {
+      queryKey: request.queryKey,
+      ...(request.columns ? { columns: request.columns } : {}),
       ...(request.sql ? { sourceSql: request.sql } : {}),
     });
     if (!result.ok) {
@@ -204,14 +229,29 @@ export function RequestCard({
         <p className="text-caption text-brand-muted-soft min-w-0">
           등록 후 채팅에 “등록 완료”라고 입력하면 이어서 분석합니다.
         </p>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={text.trim().length === 0}
-          className="shrink-0 inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
-        >
-          등록
-        </button>
+        <div className="shrink-0 flex items-center gap-xs">
+          {/* 붙여넣을 것이 없는 답 — 0행도 등록되어야 이 요청이 끝난다.
+              붙여넣기를 시작한 뒤에는 감춘다: 채우던 중에 "없음"을 누르면
+              쓰던 것을 버리게 되고, 그건 실수로만 일어난다. */}
+          {text.trim().length === 0 && (
+            <button
+              type="button"
+              onClick={submitEmpty}
+              title="이 조회를 실행했으나 결과가 0행이었다면 — 그 사실을 등록합니다."
+              className="inline-flex items-center h-8 px-sm rounded-md border border-brand-hairline text-brand-muted text-body-sm hover:text-brand-ink hover:border-brand-primary/40 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              결과 없음
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={text.trim().length === 0}
+            className="inline-flex items-center h-8 px-md rounded-md bg-brand-primary text-brand-on-primary text-body-sm font-medium hover:bg-brand-primary-active disabled:bg-brand-canvas disabled:text-brand-muted-soft disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-colors"
+          >
+            등록
+          </button>
+        </div>
       </div>
         </div>
       )}
