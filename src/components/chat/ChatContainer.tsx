@@ -19,7 +19,6 @@ import { toChatInputs } from "@/lib/input-store";
 import type {
   ChatInputs,
   DataRequest,
-  DataSnapshot,
   InputRequest,
   Message,
   MessageChartEntry,
@@ -108,23 +107,6 @@ type DemoState = DemoMeta & { ended: boolean };
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
-
-/**
- * 미분류 더미 — 설비 메타가 없는 데이터가 어디로 모이는지 늘 한 자리 보여준다.
- * `included:false` 라 LLM 에 실려 나가지 않고(id 접두사 `dummy-` 로 페이로드에서도
- * 거른다), 라벨에 ` · ` 가 없어 파생이 "미분류" 그룹으로 떨군다.
- */
-const DUMMY_UNCLASSIFIED: DataSnapshot = {
-  id: "dummy-unclassified",
-  queryKey: "dummy-unclassified",
-  label: "예시 — 직접 붙여넣은 표(설비 미상)",
-  capturedAt: "2026-05-11T00:00:00.000Z",
-  columns: ["MEMO"],
-  rows: [["설비를 알 수 없는 데이터는 여기로 모입니다"]],
-  contentHash: "dummy-unclassified".padEnd(64, "0"),
-  included: false,
-  warnings: [],
-};
 
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -235,7 +217,6 @@ export function ChatContainer() {
       return next;
     });
   }, []);
-  // 왼쪽은 상시 그룹 — 목 그룹 + (있으면) 사용자가 직접 등록한 미분류 묶음.
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const {
     list: conversations,
@@ -414,10 +395,9 @@ export function ChatContainer() {
         fulfilled: false,
       })),
   );
-  // 표시용엔 미분류 더미를 얹는다(LLM 페이로드엔 안 실린다 — 아래 scopedSnapshots 사용).
   const { equipmentCards, groups: dataGroups } = derivePanel(
     [...openRequests, ...sessionRequests],
-    [...scopedSnapshots, DUMMY_UNCLASSIFIED],
+    scopedSnapshots,
     seedEquipments,
     equipmentLines,
   );
