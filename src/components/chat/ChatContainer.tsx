@@ -45,6 +45,14 @@ import {
   type Skill,
   type SkillSession,
 } from "@/lib/skills";
+import {
+  clearPendingWorkbench,
+  EMPTY_WORKBENCH,
+  isEmptyWorkbench,
+  loadPendingWorkbench,
+  savePendingWorkbench,
+  type Workbench,
+} from "@/lib/workbench";
 import { ConversationsSidebar, useConversations } from "./history";
 import {
   DataPanel,
@@ -480,6 +488,34 @@ export function ChatContainer() {
         });
 
   // ── Conversation ↔ local state sync ─────────────────────────
+  // 지금 화면에 선 작업판 — 우측 설비 카드의 씨앗이다. 매 렌더 새로 만들지만
+  // 저장 쪽이 내용으로 비교하므로(`sameWorkbench`) 되쓰기가 나지 않는다.
+  const workbench: Workbench = useMemo(
+    () => ({
+      seedEquipments,
+      equipmentLines,
+      skillSessions,
+      sessionSnapshotIds: [...sessionSnapshotIds],
+      queryScope,
+    }),
+    [
+      seedEquipments,
+      equipmentLines,
+      skillSessions,
+      sessionSnapshotIds,
+      queryScope,
+    ],
+  );
+
+  /** 대화에 붙은 작업판을 화면에 세운다. 없으면 빈 작업판 — 전부 비운다. */
+  const applyWorkbench = useCallback((next: Workbench) => {
+    setSeedEquipments(next.seedEquipments);
+    setEquipmentLines(next.equipmentLines);
+    setSkillSessions(next.skillSessions);
+    setSessionSnapshotIds(new Set(next.sessionSnapshotIds));
+    setQueryScope(next.queryScope);
+  }, []);
+
   // Load: when activeId transitions to a real id, hydrate local chat state
   // from that conversation. The ref tracks the last-loaded id so this
   // effect only fires on actual transitions (not on every list update).
@@ -493,7 +529,22 @@ export function ChatContainer() {
     if (!conv) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(conv.messages);
-  }, [activeId, conversationsHydrated, conversations]);
+    // 설비 카드는 저장물이 아니라 파생물이다 — 씨앗을 되돌려야 카드가 다시 선다.
+    applyWorkbench(conv.workbench ?? EMPTY_WORKBENCH);
+  }, [activeId, conversationsHydrated, conversations, applyWorkbench]);
+
+  // 아직 대화가 없을 때(첫 메시지 전) 세워 둔 작업판을 되살린다. 대화가 생기면
+  // 그 대화가 안고 가므로 이 자리는 그때 비워진다.
+  const pendingLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!conversationsHydrated || pendingLoadedRef.current) return;
+    pendingLoadedRef.current = true;
+    if (activeId) return;
+    const pending = loadPendingWorkbench();
+    if (isEmptyWorkbench(pending)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    applyWorkbench(pending);
+  }, [activeId, conversationsHydrated, applyWorkbench]);
 
   // Persist: throttle local state writes to the active conversation. The
   // 300ms idle window collapses per-token streaming updates into a single
@@ -502,13 +553,19 @@ export function ChatContainer() {
   // conv contents) is a no-op — updatedAt is not bumped.
   useEffect(() => {
     if (!conversationsHydrated) return;
-    if (!activeId) return;
     const handle = setTimeout(() => {
-      updateConversation(activeId, { messages });
+      if (!activeId) {
+        // 붙일 대화가 아직 없다 — 첫 메시지가 올 때까지만 따로 맡아 둔다.
+        savePendingWorkbench(workbench);
+        return;
+      }
+      updateConversation(activeId, { messages, workbench });
+      clearPendingWorkbench();
     }, 300);
     return () => clearTimeout(handle);
   }, [
     messages,
+    workbench,
     activeId,
     conversationsHydrated,
     updateConversation,
@@ -781,7 +838,13 @@ export function ChatContainer() {
       // user message. Demo flows are ephemeral — their messages do not
       // populate the sidebar.
       if (!demoState && !activeId) {
-        createConversation({ messages: nextHistory });
+        // 세워 둔 작업판을 안고 태어난다. 방금 만든 대화를 load 효과가 다시
+        // 읽어 빈 작업판으로 덮지 않도록 "이미 읽은 것"으로 표시한다.
+        loadedIdRef.current = createConversation({
+          messages: nextHistory,
+          workbench,
+        }).id;
+        clearPendingWorkbench();
       }
 
       if (demoState) {
@@ -807,6 +870,7 @@ export function ChatContainer() {
       demoState,
       messages,
       activeId,
+      workbench,
       sendToApi,
       createConversation,
       clearFulfilledRequests,
@@ -826,11 +890,15 @@ export function ChatContainer() {
       setMessages(nextHistory);
       setIsStreaming(true);
       if (!activeId) {
-        createConversation({ messages: nextHistory });
+        loadedIdRef.current = createConversation({
+          messages: nextHistory,
+          workbench,
+        }).id;
+        clearPendingWorkbench();
       }
       await sendToApi(nextHistory);
     },
-    [messages, activeId, sendToApi, createConversation],
+    [messages, activeId, workbench, sendToApi, createConversation],
   );
 
   const handleNewConversation = useCallback(() => {

@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readJson, removeKey, writeJson } from "@/lib/storage";
 import type { Message } from "@/lib/types";
+import {
+  EMPTY_WORKBENCH,
+  isEmptyWorkbench,
+  parseWorkbench,
+  sameWorkbench,
+  type Workbench,
+} from "@/lib/workbench";
 
 /**
  * 대화 이력 의 데이터 레이어.
@@ -23,6 +30,12 @@ export type Conversation = {
   createdAt: number;
   updatedAt: number;
   messages: Message[];
+  /**
+   * 이 대화에서 사람이 세워 둔 것들 — 등록한 설비·라인·스킬, 담은 질의 대상,
+   * 이 대화가 등록한 스냅샷. 우측 설비 카드는 여기서 파생되므로, 이게 없으면
+   * 대화를 다시 열어도 카드가 서지 않는다. 예전 저장분엔 없어 optional 이다.
+   */
+  workbench?: Workbench;
 };
 
 function newConversationId(): string {
@@ -62,7 +75,15 @@ function isConversation(v: unknown): v is Conversation {
 function loadAll(): Conversation[] {
   const raw = readJson<unknown>(CONVERSATIONS_KEY, []);
   if (!Array.isArray(raw)) return [];
-  return raw.filter(isConversation);
+  // 작업판은 저장분마다 있을 수도 없을 수도 있다 — 있는 것만 훑어 못 읽는
+  // 조각을 접는다. 대화 자체는 작업판이 깨져도 열려야 한다.
+  return raw
+    .filter(isConversation)
+    .map((c) =>
+      c.workbench === undefined
+        ? c
+        : { ...c, workbench: parseWorkbench(c.workbench) },
+    );
 }
 
 function saveAll(list: Conversation[]) {
@@ -127,7 +148,7 @@ export function useConversations() {
    * 호출 측에서 "메시지 0건이면 호출 X" 정책을 지킨다 (빈 항목 방지).
    */
   const createConversation = useCallback(
-    (params: { messages: Message[] }): Conversation => {
+    (params: { messages: Message[]; workbench?: Workbench }): Conversation => {
       const now = Date.now();
       const created: Conversation = {
         id: newConversationId(),
@@ -135,6 +156,11 @@ export function useConversations() {
         createdAt: now,
         updatedAt: now,
         messages: params.messages,
+        // 대화가 서기 전에 세워 둔 작업판을 그대로 안고 태어난다 — 첫 메시지
+        // 하나로 등록해 둔 설비 카드를 잃으면 안 된다.
+        ...(params.workbench && !isEmptyWorkbench(params.workbench)
+          ? { workbench: params.workbench }
+          : {}),
       };
       setList((prev) => [created, ...prev]);
       setActiveId(created.id);
@@ -144,21 +170,28 @@ export function useConversations() {
   );
 
   /**
-   * 특정 conversation 의 messages 를 덮어쓰기.
-   * - reference 가 그대로면 no-op (load 직후 sync 효과의 updatedAt bump 를
-   *   막아 정렬 순서가 흐트러지지 않게 함)
+   * 특정 conversation 의 messages·작업판을 덮어쓰기.
+   * - 둘 다 그대로면 no-op (load 직후 sync 효과의 updatedAt bump 를
+   *   막아 정렬 순서가 흐트러지지 않게 함). messages 는 reference,
+   *   작업판은 내용으로 본다 — 매 렌더 새로 만들어지는 객체라 reference 로는
+   *   늘 "바뀜"이 된다.
    * - 그 외엔 updatedAt 갱신 + title 재계산
    */
   const updateConversation = useCallback(
-    (id: string, patch: { messages?: Message[] }) => {
+    (id: string, patch: { messages?: Message[]; workbench?: Workbench }) => {
       setList((prev) =>
         prev.map((c) => {
           if (c.id !== id) return c;
           const newMessages = patch.messages ?? c.messages;
-          if (newMessages === c.messages) return c;
+          const prevWorkbench = c.workbench ?? EMPTY_WORKBENCH;
+          const newWorkbench = patch.workbench ?? prevWorkbench;
+          const messagesSame = newMessages === c.messages;
+          const workbenchSame = sameWorkbench(newWorkbench, prevWorkbench);
+          if (messagesSame && workbenchSame) return c;
           return {
             ...c,
             messages: newMessages,
+            workbench: newWorkbench,
             title: deriveTitle(newMessages),
             updatedAt: Date.now(),
           };
