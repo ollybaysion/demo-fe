@@ -1544,9 +1544,9 @@ export function ChatContainer() {
             {/* 다음 할 일 안내 — 조달 루프 상태에서 파생. 입력창 바로 위가
                 "이제 뭘 하지"를 보는 자리다(채팅 버블 아님). */}
             {panelGuide && !demoState && (
-              // 팔레트에 파랑은 없다 — 한색 계열은 teal 액센트가 정본이라
-              // 그 틴트를 쓰고, 글씨는 잉크(고대비)로 문장을 읽게 한다.
-              <p className="mb-xs rounded-md border border-brand-accent-teal/25 bg-brand-accent-teal/10 px-sm py-xs text-caption text-brand-ink">
+              // 한색 계열은 teal 액센트가 정본 — 배경은 그 틴트, 글씨는
+              // teal-ink(글씨용 진한 변형)로 색을 유지한 채 대비를 얻는다.
+              <p className="mb-xs rounded-md border border-brand-accent-teal/25 bg-brand-accent-teal/10 px-sm py-xs text-caption text-brand-accent-teal-ink">
                 {panelGuide}
               </p>
             )}

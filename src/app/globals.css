@@ -14,6 +14,8 @@
   --color-brand-primary-active: #a9583e;
   --color-brand-primary-disabled: #e6dfd8;
   --color-brand-accent-teal: #5db8a6;
+  /* teal 위 글씨용 진한 변형 — 밝은 배경(teal 틴트)에서 문장을 읽을 대비. */
+  --color-brand-accent-teal-ink: #256b5e;
   --color-brand-accent-amber: #e8a55a;
 
   /* Text */
@@ -304,6 +306,8 @@
   --color-brand-primary-active: #b86a52;
   --color-brand-primary-disabled: #4a423a;
   --color-brand-on-primary: #1a1814;
+  /* 어두운 캔버스 위 teal 틴트에서는 밝은 쪽이 읽힌다. */
+  --color-brand-accent-teal-ink: #7ccbb9;
   --color-brand-primary-translucent-15: rgba(214, 136, 112, 0.15);
   --color-brand-error-soft: rgba(220, 100, 100, 0.18);
   --color-brand-ink-translucent-04: rgba(245, 241, 232, 0.06);
