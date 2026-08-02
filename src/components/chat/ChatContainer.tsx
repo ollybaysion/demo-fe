@@ -233,10 +233,8 @@ export function ChatContainer() {
     key: string;
     n: number;
   }>({ key: "", n: 0 });
-  // 좌측 데이터 패널 뷰 모드 — 설비별 통합 vs 요청/데이터 유형별.
-  const [dataView, setDataView] = useState<"equipment" | "type">("equipment");
-  // 데이터 스코프 — 현재 세션이 등록한 것만(기본) vs 전역 저장분 전부.
-  // 예전 세션의 잔여 스냅샷이 현재 채팅에 실려 나가는 걸 막는다.
+  // 전체 보기 — 기본은 질의 대상(오른쪽 설비 패널에서 담은 것)·현재 세션
+  // 기준으로 좁혀 보이고, 켜면 저장분 전부가 보인다.
   const [scopeAll, setScopeAll] = useState(false);
   const [sessionSnapshotIds, setSessionSnapshotIds] = useState<Set<string>>(
     () => new Set(),
@@ -481,7 +479,7 @@ export function ChatContainer() {
    * 스코프에 걷혀 조용히 사라지면 등록이 무반응처럼 보인다.
    */
   const visibleGroups =
-    prunedScope.length === 0
+    scopeAll || prunedScope.length === 0
       ? dataGroups
       : dataGroups.filter(
           (g) =>
@@ -1370,10 +1368,6 @@ export function ChatContainer() {
               snapshots={scopedSnapshots}
               // 작업판 트리에서 파생한 그룹 — 질의 대상이 담겨 있으면 그 범위만.
               groups={visibleGroups}
-              viewMode={dataView}
-              onToggleView={() =>
-                setDataView((v) => (v === "equipment" ? "type" : "equipment"))
-              }
               scopeAll={scopeAll}
               onToggleScope={() => setScopeAll((v) => !v)}
               focusGroupKey={groupFocus.key}

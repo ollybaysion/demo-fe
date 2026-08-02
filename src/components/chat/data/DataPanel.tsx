@@ -105,12 +105,9 @@ type Props = {
    */
   groups?: DerivedGroup[];
   /**
-   * 좌측 그룹을 묶는 축. `equipment` = 설비별 통합(요청+데이터 한 그룹),
-   * `type` = 요청/데이터 유형별 분리(요청은 상단, 데이터는 아래 그룹).
+   * 전체 보기 — 참이면 선택(질의 대상)·세션 필터를 풀고 저장분 전부를 보인다.
+   * 기본(거짓)은 오른쪽 설비 패널에서 담은 것들만.
    */
-  viewMode?: "equipment" | "type";
-  onToggleView?: () => void;
-  /** 데이터 스코프 — 참이면 전역 저장분 전부, 거짓이면 현재 세션 등록분만. */
   scopeAll?: boolean;
   onToggleScope?: () => void;
   /**
@@ -153,8 +150,6 @@ export function DataPanel({
   onToggleExpanded,
   detailVisible,
   groups,
-  viewMode = "equipment",
-  onToggleView,
   scopeAll = false,
   onToggleScope,
   focusGroupKey,
@@ -222,13 +217,7 @@ export function DataPanel({
   const allRequestKeys = (groups ?? []).flatMap((g) =>
     g.requests.map((r) => r.request.queryKey),
   );
-  // 유형별 모드에서 상단으로 끌어올릴 데이터 요청(그룹에서 평탄화).
-  const flatRequests = (groups ?? []).flatMap((g) => g.requests);
-  // 유형별 모드에선 요청만 있는 그룹(데이터 없음)은 상단에서 다루므로 감춘다.
-  const shownGroups =
-    viewMode === "type"
-      ? (groups ?? []).filter((g) => g.snapshots.length > 0)
-      : (groups ?? []);
+  const shownGroups = groups ?? [];
 
   /**
    * 확장 모드의 상세 대상 — 스냅샷의 표이거나 산출물의 그림이다. 명시 선택이
@@ -421,26 +410,20 @@ export function DataPanel({
           )}
         </h2>
         <div className="shrink-0 flex items-center gap-xxs">
-        {/* 스코프 토글 — 현재 세션 등록분만(기본) vs 전역 저장분 전부. */}
+        {/* 전체 보기 토글 — 기본은 오른쪽 설비 패널에서 담은 것만. 버튼은 누르면
+            일어날 일을 적는다(상태가 아니라 행동). */}
         {onToggleScope && (
           <button
             type="button"
             onClick={onToggleScope}
-            title={scopeAll ? "현재 세션 데이터만 보기" : "전체 데이터 보기"}
+            title={
+              scopeAll
+                ? "선택한 것만 보기 (질의 대상 기준)"
+                : "저장분 전부 보기 (선택·세션 필터 해제)"
+            }
             className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
-            {scopeAll ? "전체" : "현재 세션"}
-          </button>
-        )}
-        {/* 뷰 토글 — 설비별 통합 vs 요청/데이터 유형별. */}
-        {onToggleView && (
-          <button
-            type="button"
-            onClick={onToggleView}
-            title={viewMode === "equipment" ? "유형별로 보기" : "설비별로 보기"}
-            className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          >
-            {viewMode === "equipment" ? "설비별" : "유형별"}
+            {scopeAll ? "선택만 보기" : "전체 보기"}
           </button>
         )}
         {/*
@@ -533,15 +516,11 @@ export function DataPanel({
           ].join(" ")}
         >
           <div className="flex-1 overflow-y-auto scrollbar-none">
-            {/* 상단 요청 섹션. 설비별 모드에선 스칼라 입력 요청만(데이터 요청은
-                각 설비 그룹 안으로). 유형별 모드에선 데이터 요청도 여기로 모은다. */}
-            {(inputRequests.length > 0 ||
-              (viewMode === "type" && flatRequests.length > 0)) && (
+            {/* 상단 요청 섹션 — 스칼라 입력 요청만. 데이터 요청 카드는 각 설비·
+                분석 그룹 안에 산다. */}
+            {inputRequests.length > 0 && (
               <CollapsibleSection
-                title={`요청받은 데이터 (${
-                  inputRequests.length +
-                  (viewMode === "type" ? flatRequests.length : 0)
-                })`}
+                title={`요청받은 데이터 (${inputRequests.length})`}
                 open={requestsOpen}
                 onToggle={() => setRequestsOpen((v) => !v)}
               >
@@ -553,50 +532,22 @@ export function DataPanel({
                       onSubmit={onSubmitInput}
                     />
                   ))}
-                  {viewMode === "type" &&
-                    flatRequests.map((p) => (
-                      <RequestCard
-                        key={p.request.queryKey}
-                        request={p.request}
-                        open={
-                          openRequestKeys === null ||
-                          openRequestKeys.includes(p.request.queryKey)
-                        }
-                        onToggle={() =>
-                          setOpenRequestKeys((prev) => {
-                            const base = prev ?? allRequestKeys;
-                            return base.includes(p.request.queryKey)
-                              ? base.filter((k) => k !== p.request.queryKey)
-                              : [...base, p.request.queryKey];
-                          })
-                        }
-                        focused={p.request.queryKey === focusRequestKey}
-                        focusNonce={requestFocusNonce}
-                        onFulfill={handleFulfill}
-                        onRegisterEmpty={handleRegisterEmpty}
-                      />
-                    ))}
                 </div>
               </CollapsibleSection>
             )}
 
             {/*
-              설비별 모드에선 이 섹션에 **아직 조달 전인 요청 카드도 함께** 산다
-              (설비 하나를 한 자리에서 보려고 그렇게 묶는다). 그래서 제목을
-              "등록된 데이터"라고 하면 요청됨 카드가 등록된 것처럼 읽힌다 —
-              내용에 맞춰 이름과 수를 나눈다. 유형별 모드에선 요청이 위 섹션으로
-              올라가므로 여기 남는 것은 정말 등록분뿐이다.
+              이 섹션에는 **아직 조달 전인 요청 카드도 함께** 산다(설비 하나를
+              한 자리에서 보려고 그렇게 묶는다). 그래서 제목을 "등록된
+              데이터"라고 하면 요청됨 카드가 등록된 것처럼 읽힌다 — 내용에 맞춰
+              이름과 수를 나눈다.
             */}
             <CollapsibleSection
-              title={
-                viewMode === "equipment"
-                  ? `설비별 데이터 (등록 ${dataCount}${
-                      allRequestKeys.length > 0
-                        ? ` · 요청 ${allRequestKeys.length}`
-                        : ""
-                    })`
-                  : `등록된 데이터 (${dataCount})`
-              }
+              title={`설비별 데이터 (등록 ${dataCount}${
+                allRequestKeys.length > 0
+                  ? ` · 요청 ${allRequestKeys.length}`
+                  : ""
+              })`}
               open={dataOpen}
               onToggle={() => setDataOpen((v) => !v)}
               action={
@@ -626,11 +577,7 @@ export function DataPanel({
                       <SnapshotGroup
                         key={g.key}
                         label={g.label}
-                        count={
-                          viewMode === "type"
-                            ? g.snapshots.length
-                            : g.snapshots.length + g.requests.length
-                        }
+                        count={g.snapshots.length + g.requests.length}
                         open={
                           openGroupKeys === null || openGroupKeys.includes(g.key)
                         }
@@ -638,11 +585,9 @@ export function DataPanel({
                         focused={g.key === focusGroupKey}
                         focusNonce={focusNonce}
                       >
-                        {/* 설비별 통합 모드에서만 대기 요청 카드를 그룹 안에 얹는다
-                            ('아직 오는 것'이 위, 가진 데이터가 아래). 유형별 모드에선
-                            요청은 상단 섹션에 있으니 여기선 데이터만 보인다. */}
-                        {viewMode === "equipment" &&
-                          g.requests.map((p) => (
+                        {/* 대기 요청 카드를 그룹 안에 얹는다 — '아직 오는 것'이
+                            위, 가진 데이터가 아래. */}
+                        {g.requests.map((p) => (
                             <RequestCard
                               key={p.request.queryKey}
                               request={p.request}
