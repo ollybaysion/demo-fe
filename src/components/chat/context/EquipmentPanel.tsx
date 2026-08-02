@@ -418,13 +418,13 @@ function LineRow({
         picked
           ? "border border-brand-primary ring-1 ring-inset ring-brand-primary bg-brand-canvas"
           : waiting
-            ? "border border-dashed border-brand-hairline bg-brand-canvas/60 hover:border-brand-muted-soft"
+            ? "border border-brand-hairline bg-brand-canvas/60 hover:border-brand-muted-soft"
             : "border border-brand-hairline bg-brand-canvas hover:border-brand-muted-soft",
       ].join(" ")}
     >
       {/* 무엇을 봤는지(category)가 먼저, 언제인지(구간)가 그 아래.
           표 수는 싣지 않는다 — 누르면 왼쪽에 그 카드들이 그대로 보이고,
-          정작 필요한 구분(채워짐/대기)은 `요청됨` 표시가 이미 한다. */}
+          채워짐/대기 구분은 글자 색(잉크/뮤트)으로만 말한다. */}
       <span className="flex items-baseline gap-xs">
         <span
           className={[
@@ -434,11 +434,6 @@ function LineRow({
         >
           {line.category}
         </span>
-        {waiting && (
-          <span className="shrink-0 text-[11px] leading-none text-brand-muted-soft">
-            요청됨
-          </span>
-        )}
       </span>
       {line.sub && (
         <span className="text-caption text-brand-muted-soft truncate">

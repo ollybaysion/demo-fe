@@ -143,9 +143,6 @@ export function RequestCard({
         aria-expanded={open}
         className="w-full px-sm py-xs flex items-start gap-xxs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
-        <span className="shrink-0 inline-flex items-center h-5 px-xs rounded-full bg-brand-primary/15 text-brand-primary text-caption font-medium">
-          요청됨
-        </span>
         <span className="flex-1 min-w-0">
           <span className="block text-body-sm text-brand-ink truncate">
             {request.label}
