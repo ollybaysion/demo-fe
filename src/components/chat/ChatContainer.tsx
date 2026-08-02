@@ -1319,6 +1319,30 @@ export function ChatContainer() {
     [tree],
   );
 
+  /**
+   * 다음 할 일 안내(패널 상단 스트립) — 조달 루프의 현재 상태에서만 파생한다.
+   * "등록했는데 이제 뭘 하지"의 답이 화면 어딘가에는 서 있어야 한다(#163 UX).
+   */
+  const panelGuide = useMemo(() => {
+    const analyses = allAnalyses(tree);
+    const openCount =
+      treeOpenRequestCount + openRequests.filter((p) => !p.fulfilled).length;
+    if (openCount > 0) {
+      return `다음 할 일 — 열린 요청 카드 ${openCount}장의 SQL을 실행해 결과를 등록하세요. 조회 결과가 없으면 [결과 없음]으로 등록해도 됩니다.`;
+    }
+    const arrived = analyses.reduce(
+      (n, a) => n + a.cards.filter((c) => c.type === "data").length,
+      0,
+    );
+    if (analyses.length > 0 && arrived > 0) {
+      return "필요한 조회가 모두 채워졌습니다 — 채팅의 결론을 확인하거나 이어서 질문하세요.";
+    }
+    if (tree.equipments.length > 0 && analyses.length === 0) {
+      return "설비 카드에서 분석을 추가하면 필요한 조회가 요청 카드로 열립니다.";
+    }
+    return null;
+  }, [tree, treeOpenRequestCount, openRequests]);
+
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
   if (demoState) {
@@ -1368,6 +1392,7 @@ export function ChatContainer() {
               snapshots={scopedSnapshots}
               // 작업판 트리에서 파생한 그룹 — 질의 대상이 담겨 있으면 그 범위만.
               groups={visibleGroups}
+              guide={panelGuide}
               scopeAll={scopeAll}
               onToggleScope={() => setScopeAll((v) => !v)}
               focusGroupKey={groupFocus.key}
