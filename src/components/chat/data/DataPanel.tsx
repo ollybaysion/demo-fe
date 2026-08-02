@@ -410,20 +410,23 @@ export function DataPanel({
           )}
         </h2>
         <div className="shrink-0 flex items-center gap-xxs">
-        {/* 전체 보기 토글 — 기본은 오른쪽 설비 패널에서 담은 것만. 버튼은 누르면
-            일어날 일을 적는다(상태가 아니라 행동). */}
+        {/* 전체 보기 토글 — 기본은 오른쪽 설비 패널에서 담은 것만. 문구는 늘
+            같고, 켜져 있음은 선택 표시(색·배경)로만 말한다. */}
         {onToggleScope && (
           <button
             type="button"
+            aria-pressed={scopeAll}
             onClick={onToggleScope}
-            title={
+            title="저장분 전부 보기 — 선택·세션 필터 해제"
+            className={[
+              "shrink-0 h-7 px-xs rounded-sm text-caption transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
               scopeAll
-                ? "선택한 것만 보기 (질의 대상 기준)"
-                : "저장분 전부 보기 (선택·세션 필터 해제)"
-            }
-            className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+                ? "bg-brand-primary/10 text-brand-primary font-medium"
+                : "text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04",
+            ].join(" ")}
           >
-            {scopeAll ? "선택만 보기" : "전체 보기"}
+            전체 보기
           </button>
         )}
         {/*
