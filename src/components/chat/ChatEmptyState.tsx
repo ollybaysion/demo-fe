@@ -1,7 +1,6 @@
 "use client";
 
 import { SNAPSHOT_DEMO_QUESTION } from "./data/request-samples";
-import { RotatingTip } from "./RotatingTip";
 
 /**
  * 입력 카드 왕복을 여는 질문 — 백엔드 MockLlm·FE mock route 의 request_input
@@ -70,11 +69,6 @@ export function ChatEmptyState({ onQuickStart }: Props) {
           </button>
         </div>
       )}
-
-      {/* 쓰임새를 알려주는 한 줄 — 예시 질문 chip 이 "무엇을 물을까"라면, 팁은
-          "이 도구로 무엇을 할 수 있나"다. 아래에 조용히 두어 헤드라인·왕복
-          버튼과 눈길을 다투지 않게 한다. */}
-      <RotatingTip />
     </div>
   );
 }

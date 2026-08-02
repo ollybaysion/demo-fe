@@ -32,6 +32,7 @@ import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
+import { RotatingTip } from "./RotatingTip";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
 import { EquipmentPanel } from "./context";
@@ -1227,6 +1228,11 @@ export function ChatContainer() {
               lockedValue={lockedValue}
               placeholder={inputPlaceholder}
             />
+            {/* 쓰임새를 알려주는 한 줄 — 입력창 바로 아래, 쓰는 손 곁이다.
+                시작 화면에서만 돈다: 대화가 시작되면 안내가 아니라 답이 그
+                자리를 가져야 한다. 데모 재생 중에도 비운다 — 시나리오가 말하는
+                동안 다른 목소리를 얹지 않는다. */}
+            {messages.length === 0 && !demoState && <RotatingTip />}
           </div>
         </div>
       </div>
