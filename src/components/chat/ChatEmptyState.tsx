@@ -66,7 +66,7 @@ export function ChatEmptyState({ onQuickStart }: Props) {
           className="mt-lg text-body-md text-brand-muted"
           style={{ fontFamily: "var(--font-hero-body)" }}
         >
-          입력창에 질문을 입력하거나, 아래 왕복을 눌러 흐름을 확인하세요.
+          오른쪽 패널에서 설비를 먼저 추가해주세요.
         </p>
       </div>
 

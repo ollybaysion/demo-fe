@@ -288,7 +288,10 @@ export function ChatInput({
             // 스크롤바가 뜨는 것을 막는다. 상한 도달 시 handleInput 이 켠다.
             "overflow-y-hidden",
             "placeholder:text-brand-muted-soft font-sans text-body-md",
-            "py-[10px] px-xs",
+            // 한 줄 높이를 옆의 아이콘 버튼(40px)과 같게 맞춘다 —
+            // 16px × 1.55 = 24.8px + 8px × 2 ≈ 41px. 아래를 맞추는 배치라
+            // 둘의 높이가 다르면 한 줄일 때 아이콘만 내려앉아 보인다.
+            "py-[8px] px-xs",
             "focus:outline-none",
             "disabled:text-brand-muted disabled:cursor-not-allowed",
             isLocked ? "text-brand-muted-soft cursor-default" : "text-brand-ink",
@@ -334,7 +337,9 @@ function IconButton({ children, className, ...rest }: IconButtonProps) {
       type="button"
       className={[
         "shrink-0 inline-flex items-center justify-center",
-        "w-9 h-9 rounded-full",
+        // 옆의 입력 한 줄과 같은 높이 — 아래를 맞추는 배치라 높이가 다르면
+        // 한 줄일 때 아이콘만 내려앉아 보인다.
+        "w-10 h-10 rounded-full",
         "text-brand-ink",
         "hover:bg-brand-ink-translucent-04 active:bg-brand-ink-translucent-04",
         "disabled:text-brand-muted-soft disabled:cursor-not-allowed disabled:hover:bg-transparent",
