@@ -27,17 +27,16 @@ function SparkIcon({ className }: { className?: string }) {
 /**
  * 한 줄 가이드 팁 — 한자리에서 문구만 바뀐다.
  *
- * 존재감은 면이 아니라 글자가 낸다: 배경도 테두리도 없이 본문보다 한 단계
- * 큰 글씨(title-md)와 잉크색이면 충분하다. 카드나 배너로 두르면 왼쪽
- * 데이터 패널의 카드들과 같은 무게가 되어, 시작 화면이 카드 밭이 된다.
- * 색은 아이콘 하나에만 준다 — 문장 앞에서 눈을 잡고 비켜서는 몫이다.
+ * 존재감은 면이 아니라 글자가 낸다: 배경도 테두리도 없이 22px 잉크색이면
+ * 충분하다. 카드나 배너로 두르면 왼쪽 데이터 패널의 카드들과 같은 무게가
+ * 되어, 시작 화면이 카드 밭이 된다. 색은 아이콘 하나에만 준다.
  *
- * <p>바깥 여백은 쥐지 않는다 — 어느 자리에 놓이느냐에 따라 붙일 간격이
- * 다르므로, 그건 놓는 쪽이 정한다.
+ * <p>글꼴은 `--font-hero-body`(설정 > 시작 화면 글꼴)를 따른다 — 바로 아래
+ * 제목과 한 세트로 움직여야 얼굴이 갈리지 않는다.
  *
- * <p>자리를 옮기거나 높이를 늘리지 않는 이유: 안내는 배경이지 사건이
- * 아니다. 높이가 들썩이면 이웃한 것들이 밀려 "뭔가 일어났나" 싶어진다.
- * 그래서 교체는 짧은 페이드 하나로 끝낸다.
+ * <p>자리를 옮기거나 높이를 늘리지 않는 이유: 안내는 배경이지 사건이 아니다.
+ * 높이가 들썩이면 이웃한 것들이 밀려 "뭔가 일어났나" 싶어진다. 그래서 교체는
+ * 짧은 페이드 하나로 끝낸다.
  *
  * <p>읽는 중에 바뀌지 않도록 마우스를 올리면 멈춘다. 움직임을 줄이도록
  * 설정한 사람에게는 페이드 없이 문구만 바뀐다(globals.css 의
@@ -77,9 +76,14 @@ export function RotatingTip({
       {/* key 가 곧 애니메이션 방아쇠 — 문구가 바뀌면 페이드가 처음부터 다시. */}
       <p
         key={index}
-        className="animate-tip-fade inline-flex items-center gap-xs text-title-md text-brand-ink"
+        className="animate-tip-fade inline-flex items-center gap-xs text-brand-ink"
+        style={{
+          fontFamily: "var(--font-hero-body)",
+          fontWeight: "var(--font-hero-body-weight)" as unknown as number,
+          fontSize: 22,
+        }}
       >
-        <SparkIcon className="h-4 w-4 shrink-0 text-brand-primary" />
+        <SparkIcon className="h-[18px] w-[18px] shrink-0 text-brand-primary" />
         {tip}
       </p>
     </div>
