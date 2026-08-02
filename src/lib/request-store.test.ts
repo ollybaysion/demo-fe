@@ -4,9 +4,11 @@ import {
   clearOrigin,
   fulfilledForOrigin,
   isFulfilledBy,
+  JUDGE_ORIGIN,
   markFulfilled,
   openRequests,
   receiveRequests,
+  reconcileRequests,
   tableFromSql,
   type PendingRequest,
 } from "@/lib/request-store";
@@ -64,6 +66,35 @@ describe("receiveRequests", () => {
       "sensor_list",
       "recipe_steps",
     ]);
+  });
+});
+
+describe("reconcileRequests", () => {
+  it("서버가 준 전체 목록으로 바꾼다 — 회귀(사라졌던 카드 부활)도 자연히 된다", () => {
+    const prev = [pending()];
+    const next = reconcileRequests(prev, [
+      req({ queryKey: "other#0", label: "다른 조회" }),
+    ]);
+    expect(next).toHaveLength(1);
+    expect(next[0].request.queryKey).toBe("other#0");
+    expect(next[0].originMessageId).toBe(JUDGE_ORIGIN);
+  });
+
+  it("내용이 같은 카드는 항목 정체를 유지한다 — 불필요한 다시 그리기 방지", () => {
+    const prev = [pending()];
+    const next = reconcileRequests(prev, [req()]);
+    expect(next).toBe(prev);
+  });
+
+  it("같은 키라도 SQL 이 갱신되면 서버 것으로 바꾼다 — additive 가 못 하던 일", () => {
+    const prev = [pending({ request: req({ sql: "SELECT 1" }) })];
+    const next = reconcileRequests(prev, [req({ sql: "SELECT 2" })]);
+    expect(next[0].request.sql).toBe("SELECT 2");
+    expect(next[0].originMessageId).toBe(JUDGE_ORIGIN);
+  });
+
+  it("빈 목록이면 카드가 전부 걷힌다 — 열려 있어야 할 것이 없다는 판정이다", () => {
+    expect(reconcileRequests([pending()], [])).toEqual([]);
   });
 });
 

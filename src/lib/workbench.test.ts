@@ -15,6 +15,7 @@ const TRACE: Skill = {
   focus: "센서 측정값",
   description: "…",
   inputs: [{ key: "param_index", required: true }],
+  steps: [],
 };
 
 function session(id: string, equipment = "CVD-01"): SkillSession {

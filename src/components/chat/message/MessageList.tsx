@@ -37,9 +37,14 @@ export function MessageList({
     (m) => m.role === "assistant",
   );
   const lastErrorIndex = findLastIndex(messages, (m) => m.role === "error");
-  const regenerateIndex = isStreaming
+  let regenerateIndex = isStreaming
     ? -1
     : Math.max(lastAssistantIndex, lastErrorIndex);
+  // 판정 서술(`judge_`)은 user 발화 없이 생긴 답이다 — 재생성으로 되돌릴 질문이
+  // 없으므로 버튼을 주지 않는다(#163).
+  if (regenerateIndex >= 0 && messages[regenerateIndex].id.startsWith("judge_")) {
+    regenerateIndex = -1;
+  }
 
   return (
     <ol role="log" aria-live="polite" className="space-y-md">
