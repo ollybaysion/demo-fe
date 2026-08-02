@@ -68,9 +68,6 @@ type Props = {
   onRename: (id: string, label: string) => void;
   /** 출처 쿼리 달기/고치기(빈 값 = 지움) — 카드의 테이블 칩이 여기서 파생된다. */
   onSetQuery: (id: string, sql: string | undefined) => void;
-  /** 마지막으로 삭제된 스냅샷 — 있으면 목록 위에 되돌리기 스트립이 뜬다. */
-  lastRemoved: DataSnapshot | null;
-  onRestore: () => void;
   /**
    * 답변 산출물 — 모델이 답과 함께 내놓은 표·차트·이력·그림·링크, 그리고 사용자가
    * 직접 올린 그림·링크. 스냅샷(근거)과 섞지 않고 별도 단으로 산다.
@@ -145,8 +142,6 @@ export function DataPanel({
   onRemove,
   onRename,
   onSetQuery,
-  lastRemoved,
-  onRestore,
   artifacts,
   onAddArtifact,
   onRemoveArtifact,
@@ -616,23 +611,6 @@ export function DataPanel({
                 />
               }
             >
-              {/* 실수 삭제 구제 — 스냅샷은 SQL 재실행 없이 다시 만들기 번거로워,
-                  삭제 직후 한 번은 그 자리에서 되돌릴 수 있어야 한다. */}
-              {lastRemoved && (
-                <div className="mb-xs flex items-center justify-between gap-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs">
-                  <span className="min-w-0 truncate text-caption text-brand-muted">
-                    “{lastRemoved.label}” 휴지통으로
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onRestore}
-                    className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
-                  >
-                    되돌리기
-                  </button>
-                </div>
-              )}
-
               {/* 데이터는 상시 그룹 — 같은 설비·구간·category 에서 나온 카드가
                   하나의 둥근 틀로 묶인다. `groups` 가 없으면 예전처럼 평평한
                   목록(확장 모드의 마스터 컬럼도 이 경로를 그대로 쓴다). */}

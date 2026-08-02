@@ -264,8 +264,6 @@ export function ChatContainer() {
     addSnapshot,
     addEmptyResult,
     remove: removeSnapshot,
-    restoreLastRemoved: restoreSnapshot,
-    lastRemoved: lastRemovedSnapshot,
     trashed: trashedSnapshots,
     restore: restoreSnapshotById,
     purge: purgeSnapshot,
@@ -1275,10 +1273,6 @@ export function ChatContainer() {
     },
     [snapshots, removeSnapshot, requestJudge],
   );
-  const handleRestoreLastRemoved = useCallback(() => {
-    restoreSnapshot();
-    requestJudge({ type: "snapshot-restored" });
-  }, [restoreSnapshot, requestJudge]);
   const handleRestoreSnapshotById = useCallback(
     (id: string) => {
       restoreSnapshotById(id);
@@ -1407,8 +1401,6 @@ export function ChatContainer() {
               onRemove={handleRemoveSnapshot}
               onRename={setSnapshotLabel}
               onSetQuery={setSnapshotSourceSql}
-              lastRemoved={lastRemovedSnapshot}
-              onRestore={handleRestoreLastRemoved}
               trashed={trashedSnapshots}
               onRestoreOne={handleRestoreSnapshotById}
               onPurge={purgeSnapshot}
