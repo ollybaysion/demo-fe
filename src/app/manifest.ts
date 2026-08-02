@@ -7,8 +7,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "FDC Agent",
-    short_name: "FDC Agent",
+    name: "Inline FDC Agent",
+    short_name: "Inline FDC Agent",
     description: "설비 데이터를 자연어로 분석하는 도메인 특화 챗봇.",
     start_url: "/",
     display: "standalone",

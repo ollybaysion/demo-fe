@@ -4,7 +4,7 @@ import { ImageResponse } from "next/og";
  * 메신저(Slack/카톡 등) 링크 프리뷰용 og:image (1200×630).
  * 크림 캔버스 + 코랄 wordmark + 한 줄 설명.
  */
-export const alt = "FDC Agent — 도메인 특화 FDC 분석 챗봇";
+export const alt = "Inline FDC Agent — 도메인 특화 FDC 분석 챗봇";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -51,12 +51,14 @@ export default function OpenGraphImage() {
           </div>
           <div
             style={{
-              fontSize: 88,
+              // 이름이 로고 옆 한 줄에 다 서야 한다 — 1200px 폭에서 로고(96)와
+              // 좌우 여백(160)을 뺀 자리에 들어가는 크기다.
+              fontSize: 76,
               fontWeight: 500,
               letterSpacing: "-0.02em",
             }}
           >
-            FDC Agent
+            Inline FDC Agent
           </div>
         </div>
         <div

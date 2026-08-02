@@ -1,4 +1,4 @@
-# FDC Agent Frontend
+# Inline FDC Agent Frontend
 
 설비 데이터를 자연어로 분석하는 도메인 특화 챗봇 프론트엔드.
 

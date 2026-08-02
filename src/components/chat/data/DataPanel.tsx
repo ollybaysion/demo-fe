@@ -1,11 +1,18 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  MAX_IMAGES_PER_INGEST,
+  imageRejectReason,
+  planClipboardIngest,
+  splitDroppedFiles,
+} from "@/lib/clipboard-ingest";
 import type { PendingInput } from "@/lib/input-store";
 import type { DerivedGroup } from "../context/derive-cards";
 import type { DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
 import { ArtifactCard } from "./ArtifactCard";
+import { ArtifactDetail } from "./ArtifactDetail";
 import type { Artifact } from "./artifacts";
 import { InputCard } from "./InputCard";
 import { RequestCard } from "./RequestCard";
@@ -26,13 +33,18 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  * 데이터를 *읽는* 정식 자리다. 레이아웃 양보(설비 정보 패널 숨김)는 부모가
  * `expanded` 로 처리한다.
  *
- * 등록 경로는 셋, 전부 같은 `onAdd` 로 합류한다:
+ * 등록 경로는 셋:
  *  1. 하단 [+ 데이터 추가] 모달 — 기본 경로.
  *  2. **Ctrl+V 즉시 등록** — 채팅 입력창 등 텍스트 입력이 아닌 곳에서
  *     붙여넣으면 바로 등록. SQL Developer 복사 → 앱 클릭 → Ctrl+V 로 끝.
- *  3. **파일 드롭** — CSV/TSV/텍스트 파일을 패널에 끌어놓으면 읽어 등록
- *     (UTF-8 기준). 실패하면 그 텍스트를 안고 모달이 열린다 — 붙여넣은
- *     것을 잃지 않고 원인을 보여 주기 위해.
+ *  3. **파일 드롭** — 패널에 끌어놓으면 읽어 등록(텍스트는 UTF-8 기준).
+ *     실패하면 그 텍스트를 안고 모달이 열린다 — 붙여넣은 것을 잃지 않고
+ *     원인을 보여 주기 위해.
+ *
+ * 2·3 은 들어온 것을 보고 갈라진다({@link planClipboardIngest}): 표·텍스트는
+ * 스냅샷(`onAdd`)으로, 그림과 주소 한 줄은 답변 산출물(`onAddArtifact`)로.
+ * 붙여넣는 사람이 무엇을 붙이는지 이미 알고 있으므로, 어느 통로로 넣을지는
+ * 묻지 않는다.
  */
 type Props = {
   snapshots: DataSnapshot[];
@@ -64,12 +76,17 @@ type Props = {
    * 직접 올린 그림·링크. 스냅샷(근거)과 섞지 않고 별도 단으로 산다.
    */
   artifacts: Artifact[];
-  /** 사용자가 직접 올리는 그림·링크. */
+  /** 사람이 붙여넣거나 끌어다 놓은 그림·주소가 이리로 들어온다. */
   onAddArtifact: (
     entry:
       | { kind: "image"; label: string; dataUrl: string }
       | { kind: "link"; label: string; url: string },
   ) => void;
+  /**
+   * 직접 올린 산출물 지우기. 파생된 산출물(모델이 낸 표·차트·그림)에는 달지
+   * 않는다 — 답이 있는 한 다시 계산되어 되살아나므로 버튼이 거짓말이 된다.
+   */
+  onRemoveArtifact: (id: string) => void;
   /** 휴지통에 든 것들 — 최근에 버린 것이 위. */
   trashed: DataSnapshot[];
   /** 휴지통에서 꺼내기. */
@@ -132,6 +149,7 @@ export function DataPanel({
   onRestore,
   artifacts,
   onAddArtifact,
+  onRemoveArtifact,
   trashed,
   onRestoreOne,
   onPurge,
@@ -158,11 +176,13 @@ export function DataPanel({
     error: { code: string; message: string };
   } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  /** 붙여넣기·드롭에서 못 받은 것의 이유 — 하단 힌트 자리에 대신 뜬다. */
+  const [ingestError, setIngestError] = useState<string | null>(null);
   // 요청 묶음 전체 접기 — 요청이 여러 건이면 보관 목록이 한참 아래로 밀린다.
   const [requestsOpen, setRequestsOpen] = useState(true);
   // 보관 목록도 같은 급의 단이다 — 요청 단만 접히면 대등하지 않다.
   const [dataOpen, setDataOpen] = useState(true);
-  // 휴지통은 **접힌 채로** 시작한다 — 버린 것은 찾을 때만 보이면 된다.
+  // 휴지통은 **닫힌 채로** 시작한다 — 버린 것은 찾을 때만 보이면 된다.
   const [trashOpen, setTrashOpen] = useState(false);
   // 산출물 단은 펼친 채로 — 방금 나온 답의 표·차트가 여기 서므로 접혀 있으면
   // 답이 나와도 화면이 안 움직인 것처럼 보인다.
@@ -216,13 +236,27 @@ export function DataPanel({
       : (groups ?? []);
 
   /**
-   * 확장 모드의 상세 대상. 명시 선택이 사라졌으면(삭제 등) 첫 카드로
-   * 물러난다 — 빈 오른쪽 면을 사용자가 채워야 할 이유가 없다.
+   * 확장 모드의 상세 대상 — 스냅샷의 표이거나 산출물의 그림이다. 명시 선택이
+   * 사라졌으면(삭제 등) 첫 스냅샷으로 물러난다 — 빈 오른쪽 면을 사용자가
+   * 채워야 할 이유가 없다.
    */
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const detailTarget = expanded
-    ? (snapshots.find((s) => s.id === selectedId) ?? snapshots[0] ?? null)
-    : null;
+  const [picked, setPicked] = useState<{
+    kind: "snapshot" | "artifact";
+    id: string;
+  } | null>(null);
+  const pickedImage =
+    expanded && picked?.kind === "artifact"
+      ? (artifacts.find(
+          (a): a is Artifact & { kind: "image" } =>
+            a.id === picked.id && a.kind === "image",
+        ) ?? null)
+      : null;
+  const detailTarget =
+    expanded && !pickedImage
+      ? (snapshots.find((s) => picked?.kind === "snapshot" && s.id === picked.id) ??
+        snapshots[0] ??
+        null)
+      : null;
 
   const handleAdd = useCallback(
     (input: string) => {
@@ -274,23 +308,93 @@ export function DataPanel({
     [handleAdd],
   );
 
-  // Ctrl+V 즉시 등록 — 텍스트 입력 요소에 하는 붙여넣기는 건드리지 않는다
-  // (채팅 입력·모달 textarea 는 각자의 붙여넣기가 있다).
+  /** 그림 몇 장을 산출물로 올린다 — 못 받은 것은 이유를 남긴다. */
+  const registerImages = useCallback(
+    async (files: File[]) => {
+      let rejected: string | null =
+        files.length > MAX_IMAGES_PER_INGEST
+          ? `한 번에 ${MAX_IMAGES_PER_INGEST}장까지 받습니다 — 나머지는 다시 붙여넣어 주세요.`
+          : null;
+      for (const file of files.slice(0, MAX_IMAGES_PER_INGEST)) {
+        const reason = imageRejectReason(file);
+        if (reason) {
+          rejected = reason;
+          continue;
+        }
+        try {
+          onAddArtifact({
+            kind: "image",
+            label: imageLabel(file),
+            dataUrl: await readAsDataUrl(file),
+          });
+          // 접어 둔 단에 넣으면 등록이 없던 일처럼 보인다 — 펴서 보여 준다.
+          setArtifactsOpen(true);
+        } catch {
+          rejected = "그림을 읽지 못했습니다.";
+        }
+      }
+      setIngestError(rejected);
+    },
+    [onAddArtifact],
+  );
+
+  // Ctrl+V 즉시 등록 — 클립보드에 실린 것을 보고 표·주소·그림을 가른다.
+  // 텍스트 입력 요소에 하는 **텍스트** 붙여넣기는 건드리지 않는다(채팅 입력·
+  // 모달 textarea 는 각자의 붙여넣기가 있다). 그림은 텍스트 입력 안에서
+  // 붙여넣어도 거기서는 아무 일도 일어나지 않으므로 이쪽이 받는다.
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable='true']")) return;
-      const text = e.clipboardData?.getData("text/plain") ?? "";
-      if (text.trim().length === 0) return;
+      // 이미 자기 붙여넣기를 처리한 곳(채팅 입력창의 이미지 첨부)은 건드리지
+      // 않는다 — 한 번의 Ctrl+V 가 첨부와 산출물로 두 번 등록되면 안 된다.
+      if (e.defaultPrevented) return;
+      const plan = planClipboardIngest(e.clipboardData);
+      if (plan.kind === "none") return;
+      if (plan.kind === "text" || plan.kind === "link") {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest("input, textarea, [contenteditable='true']")) return;
+        e.preventDefault();
+        if (plan.kind === "link") {
+          // 이름은 비워 보낸다 — 호스트에서 짓는 규칙이 이미 한 곳에 있다.
+          onAddArtifact({ kind: "link", label: "", url: plan.url });
+          setArtifactsOpen(true);
+          setIngestError(null);
+          return;
+        }
+        registerText(plan.text);
+        return;
+      }
+      // [데이터 추가] 모달이 떠 있으면 받지 않는다 — 등록 결과도 실패 이유도
+      // 모달 뒤에 가려서, 붙여넣은 사람에게는 아무 일도 안 일어난 화면이 된다.
+      if (addOpen) return;
       e.preventDefault();
-      registerText(text);
+      void registerImages(plan.files);
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [registerText]);
+  }, [registerText, registerImages, onAddArtifact, addOpen]);
+
+  // 넓게 보기로 들어가면 서랍은 닫는다 — 열어 둔 채 넓히면 읽으려던 상세 면이
+  // 덮인 채로 시작한다. 닫아 두면 돌아왔을 때도 놀랄 것이 없다.
+  useEffect(() => {
+    if (!expanded) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTrashOpen(false);
+  }, [expanded]);
+
+  // 덮은 것은 Esc 로 걷힌다 — 모달과 같은 관례(AddDataModal).
+  useEffect(() => {
+    if (!trashOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setTrashOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [trashOpen]);
 
   async function handleDroppedFiles(files: FileList) {
-    for (const file of Array.from(files)) {
+    const { images, others } = splitDroppedFiles(Array.from(files));
+    if (images.length > 0) await registerImages(images);
+    for (const file of others) {
       const text = await file.text();
       registerText(text);
     }
@@ -342,6 +446,41 @@ export function DataPanel({
             className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
             {viewMode === "equipment" ? "설비별" : "유형별"}
+          </button>
+        )}
+        {/*
+          휴지통 — 버린 것은 **단이 아니라 서랍**이다. 데이터·산출물과 나란히
+          단으로 서면 같은 급의 목록으로 읽히는데, 실제로는 찾을 때만 여는
+          곳이다. 그래서 헤더 아이콘으로 올리고 열면 목록 위를 덮는다.
+          비어 있으면 아이콘도 없다 — 빈 서랍은 채울 것이 있다는 신호가 된다.
+        */}
+        {trashed.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setTrashOpen((v) => !v)}
+            // 넓게 보기에서는 열지 않는다 — 서랍이 상세 면까지 덮어, 데이터를
+            // 읽으려고 넓힌 화면을 버린 것들이 가린다.
+            disabled={expanded}
+            aria-expanded={trashOpen}
+            aria-label={`휴지통 ${trashed.length}개`}
+            title={
+              expanded
+                ? "휴지통은 원래대로 돌린 뒤에 열 수 있습니다"
+                : `휴지통 — 버린 ${trashed.length}개`
+            }
+            className={[
+              "shrink-0 inline-flex items-center gap-[3px] h-8 px-xs rounded-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors",
+              "disabled:text-brand-muted-soft disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-brand-muted-soft",
+              "hover:bg-brand-ink-translucent-04",
+              trashOpen
+                ? "text-brand-primary bg-brand-primary/10"
+                : "text-brand-muted hover:text-brand-primary",
+            ].join(" ")}
+          >
+            <TrashIcon />
+            <span className="text-[11px] leading-none tabular-nums">
+              {trashed.length}
+            </span>
           </button>
         )}
         {/* 패널 전체 접기 — 두 단을 한 번에. */}
@@ -561,7 +700,10 @@ export function DataPanel({
                               onSetQuery={onSetQuery}
                               flash={s.id === flashId}
                               onSelect={
-                                expanded ? () => setSelectedId(s.id) : undefined
+                                expanded
+                                  ? () =>
+                                      setPicked({ kind: "snapshot", id: s.id })
+                                  : undefined
                               }
                               selected={expanded && s.id === detailTarget?.id}
                             />
@@ -595,7 +737,9 @@ export function DataPanel({
                       onSetQuery={onSetQuery}
                       flash={s.id === flashId}
                       onSelect={
-                        expanded ? () => setSelectedId(s.id) : undefined
+                        expanded
+                          ? () => setPicked({ kind: "snapshot", id: s.id })
+                          : undefined
                       }
                       selected={expanded && s.id === detailTarget?.id}
                     />
@@ -614,11 +758,10 @@ export function DataPanel({
               open={artifactsOpen}
               onToggle={() => setArtifactsOpen((v) => !v)}
             >
-              <AddArtifact onAdd={onAddArtifact} />
               {artifacts.length === 0 ? (
                 <p className="text-caption text-brand-muted-soft">
                   아직 없습니다. 답이 표·차트·그림을 내놓으면 여기에 쌓이고,
-                  위에서 그림·링크를 직접 올릴 수도 있습니다.
+                  화면 캡처나 주소를 붙여넣어도 여기에 섭니다.
                 </p>
               ) : (
                 <div className="flex flex-col gap-xs">
@@ -626,72 +769,30 @@ export function DataPanel({
                     // 맨 위(가장 최근 답의 첫 산출물)만 펼쳐 둔다 — 방금 나온
                     // 것은 누르지 않고 보이는 게 맞고, 나머지까지 펼치면 목록이
                     // 스크롤 덩어리가 된다.
-                    <ArtifactCard key={a.id} artifact={a} defaultOpen={i === 0} />
+                    <ArtifactCard
+                      key={a.id}
+                      artifact={a}
+                      defaultOpen={i === 0}
+                      // 크게 볼 것이 있는 건 그림뿐이고, 볼 자리(오른쪽 면)는
+                      // 확장 모드에만 있다.
+                      onSelect={
+                        expanded && a.kind === "image"
+                          ? () => setPicked({ kind: "artifact", id: a.id })
+                          : undefined
+                      }
+                      selected={pickedImage?.id === a.id}
+                      // 직접 올린 것(messageId === null)만 지울 수 있다.
+                      onRemove={
+                        a.messageId === null
+                          ? () => onRemoveArtifact(a.id)
+                          : undefined
+                      }
+                    />
                   ))}
                 </div>
               )}
             </CollapsibleSection>
 
-            {/*
-              휴지통 — 비어 있으면 단 자체가 없다. 늘 떠 있는 빈 서랍은 채울
-              것이 있다는 신호로 읽혀 목록만 길어진다.
-
-              영구 삭제를 이 안에만 두는 이유: 카드의 [삭제]가 곧바로 지우면
-              오클릭 하나로 SQL 을 다시 돌려야 한다. 진짜 사라지는 문은 하나면
-              되고, 그 문은 버린 것들을 눈으로 보는 자리에 있어야 한다.
-            */}
-            {trashed.length > 0 && (
-              <CollapsibleSection
-                title={`휴지통 (${trashed.length})`}
-                open={trashOpen}
-                onToggle={() => setTrashOpen((v) => !v)}
-                action={
-                  trashOpen ? (
-                    <button
-                      type="button"
-                      onClick={onPurgeAll}
-                      title="휴지통을 비웁니다 — 되돌릴 수 없습니다"
-                      className="text-caption text-brand-muted-soft hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
-                    >
-                      비우기
-                    </button>
-                  ) : undefined
-                }
-              >
-                <ul className="flex flex-col gap-xxs">
-                  {trashed.map((s) => (
-                    <li
-                      key={s.id}
-                      className="flex items-center gap-xs rounded-md border border-brand-hairline-soft bg-brand-canvas px-sm py-xs"
-                    >
-                      <span className="flex-1 min-w-0">
-                        <span className="block truncate text-caption text-brand-muted">
-                          {s.label}
-                        </span>
-                        <span className="block text-[11px] leading-[1.5] text-brand-muted-soft">
-                          {s.columns.length}열 · {s.rows.length}행
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onRestoreOne(s.id)}
-                        className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
-                      >
-                        되돌리기
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onPurge(s.id)}
-                        title="영구 삭제 — 되돌릴 수 없습니다"
-                        className="shrink-0 text-caption text-brand-muted-soft hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
-                      >
-                        영구 삭제
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </CollapsibleSection>
-            )}
           </div>
 
           {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
@@ -707,15 +808,28 @@ export function DataPanel({
               <PlusIcon />
               데이터 추가
             </button>
-            <p className="mt-xs text-center text-caption text-brand-muted-soft">
-              표를 복사해 Ctrl+V 하거나 파일을 끌어놓아도 등록됩니다.
-            </p>
+            {ingestError ? (
+              <p
+                role="alert"
+                className="mt-xs text-center text-caption text-brand-error"
+              >
+                {ingestError}
+              </p>
+            ) : (
+              <p className="mt-xs text-center text-caption text-brand-muted-soft">
+                표를 복사해 Ctrl+V 하거나 파일을 끌어놓아도 등록됩니다. 화면
+                캡처·주소를 붙여넣으면 산출물에 섭니다.
+              </p>
+            )}
           </div>
         </div>
 
-        {/* 상세 면 — 확장 모드의 오른쪽. 카드에서 걷어낸 "읽기"가 여기 산다. */}
+        {/* 상세 면 — 확장 모드의 오른쪽. 카드에서 걷어낸 "읽기"가 여기 산다.
+            그림을 고르면 표 대신 그림이 이 자리를 쓴다. */}
         {showDetail &&
-          (detailTarget ? (
+          (pickedImage ? (
+            <ArtifactDetail artifact={pickedImage} />
+          ) : detailTarget ? (
             <SnapshotDetail snapshot={detailTarget} />
           ) : (
             <div className="flex-1 min-w-0 flex items-center justify-center">
@@ -743,6 +857,77 @@ export function DataPanel({
           <p className="text-body-sm font-medium text-brand-primary">
             여기에 놓으면 등록됩니다
           </p>
+        </div>
+      )}
+
+      {/*
+        휴지통 서랍 — 헤더 아래를 덮는다(헤더는 남는다: 연 아이콘이 곧 닫는
+        아이콘이다). 목록을 밀어내지 않으므로 되돌린 카드가 어디로 돌아가는지
+        보인다.
+
+        영구 삭제를 이 안에만 두는 이유: 카드의 [삭제]가 곧바로 지우면 오클릭
+        하나로 SQL 을 다시 돌려야 한다. 진짜 사라지는 문은 하나면 되고, 그
+        문은 버린 것들을 눈으로 보는 자리에 있어야 한다.
+      */}
+      {trashOpen && trashed.length > 0 && (
+        <div className="absolute inset-x-0 top-16 bottom-0 z-20 flex flex-col bg-brand-canvas">
+          <div className="shrink-0 flex items-center gap-xs px-lg py-sm border-b border-brand-hairline-soft">
+            <h3 className="flex-1 min-w-0 font-sans text-body-sm font-medium text-brand-ink">
+              휴지통{" "}
+              <span className="text-caption text-brand-muted font-normal">
+                {trashed.length}개
+              </span>
+            </h3>
+            <button
+              type="button"
+              onClick={onPurgeAll}
+              title="휴지통을 비웁니다 — 되돌릴 수 없습니다"
+              className="shrink-0 text-caption text-brand-muted-soft hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+            >
+              비우기
+            </button>
+            <button
+              type="button"
+              onClick={() => setTrashOpen(false)}
+              aria-label="휴지통 닫기"
+              title="닫기"
+              className="shrink-0 text-caption text-brand-muted-soft hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+            >
+              닫기
+            </button>
+          </div>
+          <ul className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-xxs px-lg py-sm">
+            {trashed.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center gap-xs rounded-md border border-brand-hairline-soft bg-brand-canvas px-sm py-xs"
+              >
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-caption text-brand-muted">
+                    {s.label}
+                  </span>
+                  <span className="block text-[11px] leading-[1.5] text-brand-muted-soft">
+                    {s.columns.length}열 · {s.rows.length}행
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRestoreOne(s.id)}
+                  className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+                >
+                  되돌리기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPurge(s.id)}
+                  title="영구 삭제 — 되돌릴 수 없습니다"
+                  className="shrink-0 text-caption text-brand-muted-soft hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+                >
+                  영구 삭제
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -896,6 +1081,27 @@ function CollapseCardsButton({
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
 function FoldIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
@@ -925,121 +1131,24 @@ function FoldIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 /**
- * 그림·링크 직접 올리기 — 모델이 내놓기를 기다리지 않고 사람이 근거 화면 캡처나
- * 사내 문서를 이 자리에 붙일 수 있어야 한다.
- *
- * 이미지는 base64 로 접어 넣는다(첨부와 같은 방식) — 사내 이미지 서버가 붙기
- * 전까지는 브라우저 안에서 끝나야 한다.
+ * 목록에 설 이름. 붙여넣은 그림은 브라우저가 죄다 `image.png` 로 주기 때문에
+ * 두 장만 올려도 어느 것이 어느 것인지 알 수 없다 — 그럴 때만 시각을 쓴다.
  */
-function AddArtifact({
-  onAdd,
-}: {
-  onAdd: (
-    entry:
-      | { kind: "image"; label: string; dataUrl: string }
-      | { kind: "link"; label: string; url: string },
-  ) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [url, setUrl] = useState("");
-  const [label, setLabel] = useState("");
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  if (!open) {
-    return (
-      <div className="mb-xs flex justify-end">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="text-caption text-brand-muted-soft hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
-        >
-          + 그림·링크
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mb-xs flex flex-col gap-xxs rounded-md border border-brand-primary/40 bg-brand-surface-soft p-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-caption font-medium text-brand-ink">
-          그림·링크 추가
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            setUrl("");
-            setLabel("");
-          }}
-          className="text-caption text-brand-muted-soft hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
-        >
-          닫기
-        </button>
-      </div>
-      <input
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-        placeholder="이름 (비우면 주소에서 만듭니다)"
-        className="h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink placeholder:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
-      />
-      <div className="flex items-center gap-xxs">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" || !url.trim()) return;
-            onAdd({ kind: "link", label: label.trim(), url: url.trim() });
-            setUrl("");
-            setLabel("");
-          }}
-          placeholder="https://..."
-          className="flex-1 min-w-0 h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink placeholder:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
-        />
-        <button
-          type="button"
-          disabled={!url.trim()}
-          onClick={() => {
-            onAdd({ kind: "link", label: label.trim(), url: url.trim() });
-            setUrl("");
-            setLabel("");
-          }}
-          className="shrink-0 h-8 px-sm rounded-sm text-caption bg-brand-primary text-brand-on-primary hover:bg-brand-primary-active disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-colors"
-        >
-          링크 추가
-        </button>
-      </div>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            onAdd({
-              kind: "image",
-              label: label.trim() || file.name,
-              dataUrl: String(reader.result ?? ""),
-            });
-            setLabel("");
-          };
-          reader.readAsDataURL(file);
-        }}
-      />
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        className="h-8 rounded-sm border border-brand-hairline text-caption text-brand-ink hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-      >
-        이미지 고르기
-      </button>
-    </div>
-  );
+function imageLabel(file: File): string {
+  const name = file.name?.trim();
+  if (name && name.toLowerCase() !== "image.png") return name;
+  const at = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+  return `붙여넣은 그림 ${at}`;
 }
 
 /** 접을 수 있는 섹션 — 제목 줄 전체가 토글이다. */

@@ -1,4 +1,4 @@
-# FDC Agent
+# Inline FDC Agent
 
 설비 데이터를 **자연어로 묻고 분석**하는 도구입니다.
 
