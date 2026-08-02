@@ -12,6 +12,14 @@ export type SkillPickerProps = {
   recent: string[];
   /** 선택된 스킬 이름(`skill.skill`), 없으면 빈 문자열. */
   selected: string;
+  /**
+   * 펼쳤는가. 접혀 있으면 **검색창 한 줄만** 선다 — 최근 칩·목록·[⤢]는 펼친
+   * 뒤에 온다. 검색창은 접힌 채로도 남는 유일한 자리라, 여기가 무엇을 고르는
+   * 곳인지 늘 말해 준다.
+   */
+  expanded: boolean;
+  /** 접힌 검색창에 손이 닿았다 — 펼쳐 달라(포커스·타이핑). */
+  onExpand: () => void;
   onSelect: (skill: string) => void;
 };
 

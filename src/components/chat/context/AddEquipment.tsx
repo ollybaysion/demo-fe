@@ -22,10 +22,10 @@ import { SkillPicker } from "./skill-pickers/SkillPicker";
  * <ul>
  *   <li><b>설비</b> — 이 분석의 대상. 이것만 넣고 [시작]해도 된다(스킬 없이 채팅부터
  *       시작할 수 있어야 하므로).</li>
- *   <li><b>스킬</b> — 접혀 있어도 **자리는 늘 보인다**. 무엇을 더 할 수 있는지가
- *       화면에서 사라지면, 할 수 있다는 것도 같이 사라진다. 슬라이드 버튼을 누르면
- *       고르기 화면(최근 칩 · 검색 · 목록, 그리고 [⤢] 로 넓은 화면)이 위로
- *       올라온다.</li>
+ *   <li><b>스킬</b> — 아직 안 골랐다면 접힌 채로도 **검색창이 서 있다**. 무엇을
+ *       더 할 수 있는지가 화면에서 사라지면, 할 수 있다는 것도 같이 사라진다.
+ *       검색창에 손이 닿거나 슬라이드 버튼을 누르면 그 아래로 최근 칩 · 목록
+ *       (그리고 [⤢] 로 넓은 화면)이 올라온다.</li>
  *   <li><b>남은 값</b> — 스킬을 고르면 그 스킬이 요구하는 인자가 이어서 열린다.
  *       **여기서 다 채워야 시작된다**: 반쯤 채운 분석은 만들지 않는다.</li>
  * </ul>
@@ -74,17 +74,15 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const equipmentRef = useRef<HTMLInputElement | null>(null);
 
-  // 목록은 **스킬 칸을 처음 펼칠 때** 받는다 — 설비만 넣는 사람에게 요청을 물리지
-  // 않는다.
+  // 목록은 **폼을 열 때** 받는다. 접혀 있어도 검색창은 서 있고, 그 자리는 몇 개
+  // 중에서 고르는지(`스킬 검색 (30개)`)까지 말한다 — 목록이 없으면 쓸 수 없는
+  // 칸이다. 못 받으면 검색창째로 안 그리고 설비 등록만 남는다.
   useEffect(() => {
-    if (!pickerOpen || skills !== null) return;
+    if (!open || skills !== null) return;
     let alive = true;
     fetchSkills()
       .then((list) => {
-        if (!alive) return;
-        setSkills(list);
-        // 하나뿐이면 고를 것이 없다 — 미리 골라 준다.
-        if (list.length === 1) setSelected(list[0].skill);
+        if (alive) setSkills(list);
       })
       .catch(() => {
         if (alive) setError("스킬 목록을 불러오지 못했습니다.");
@@ -92,7 +90,20 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
     return () => {
       alive = false;
     };
-  }, [pickerOpen, skills]);
+  }, [open, skills]);
+
+  /**
+   * 펼치기 — 줄을 누르거나 검색창에 손이 닿으면.
+   *
+   * <p>하나뿐이면 고를 것이 없으니 이때 미리 골라 준다. 펼치기 전에 붙이지는
+   * 않는다: 스킬 없이 설비만 넣고 시작하는 길이 그 스킬의 인자 요구로 막힌다.
+   * 목록이 오는 중에 펼쳤다면 미리 고르지 않는다 — 한 줄짜리 목록에서 한 번
+   * 누르면 되는 일이다.
+   */
+  const openPicker = useCallback(() => {
+    setPickerOpen(true);
+    if (skills?.length === 1) setSelected((prev) => prev || skills[0].skill);
+  }, [skills]);
 
   useEffect(() => {
     if (open) equipmentRef.current?.focus();
@@ -300,13 +311,15 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
       {/*
         스킬 칸 — 설비 칸과 **같은 무게**로 둔다: 라벨은 밖에, 필드는 같은 높이·
         같은 테두리. 둘은 이 폼의 두 축이고 어느 쪽이 더 중요하지 않다(설비만으로도,
-        스킬을 붙여서도 시작할 수 있다). 접혀 있어도 자리가 늘 보여야 여기가
-        "설비만 넣는 화면"이 아님을 말한다. 누르면 고르기 화면이 위로 올라온다.
+        스킬을 붙여서도 시작할 수 있다). 그래서 아직 안 고른 동안에는 접혀 있어도
+        **검색창이 서 있다** — 설비 입력칸 아래 빈 라벨 한 줄만 있으면 여기는
+        "설비만 넣는 화면"으로 읽히고, 무엇을 더 할 수 있는지가 화면에서 사라진다.
+        검색창에 손이 닿거나 이 줄을 누르면 최근 칩·목록이 위로 올라온다.
       */}
       <div className="flex flex-col gap-xxs">
         <button
           type="button"
-          onClick={() => setPickerOpen((v) => !v)}
+          onClick={() => (pickerOpen ? setPickerOpen(false) : openPicker())}
           aria-expanded={pickerOpen}
           aria-label={pickerOpen ? "스킬 고르기 접기" : "스킬 고르기 펼치기"}
           className="group w-full flex items-center gap-xs rounded-sm py-xxs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
@@ -332,37 +345,38 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
           )}
         </button>
 
-        {pickerOpen && (
-          <div className="animate-step-rise flex flex-col gap-xxs">
-            {error && (
-              <p className="text-caption text-brand-muted-soft leading-relaxed">
-                {error}
-              </p>
-            )}
-            {!error && skills === null && (
-              <p className="text-caption text-brand-muted-soft">불러오는 중…</p>
-            )}
-            {!error && skills !== null && skills.length === 0 && (
-              <p className="text-caption text-brand-muted-soft leading-relaxed">
-                쓸 수 있는 스킬이 없습니다.
-              </p>
-            )}
-            {!error && skills !== null && skills.length > 0 && (
-              <SkillPicker
-                skills={skills}
-                recent={recent}
-                selected={selected}
-                onSelect={(skillName) => {
-                  setSelected(skillName);
-                  setValues({});
-                  // 스킬이 바뀌면 요구하는 값도 바뀐다 — 앞선 검사 결과는 무효다.
-                  setSubmitError(null);
-                  // 고르고 나면 목록은 접는다 — 남은 칸(인자)이 바로 보이게.
-                  setPickerOpen(false);
-                }}
-              />
-            )}
-          </div>
+        {/* 목록을 못 받았거나 비었을 때 — 펼친 사람에게만 말한다. 접힌 자리에는
+            아무 말도 남기지 않는다: 쓸 수 없는 칸이면 없는 편이 낫고, 설비 등록은
+            그대로 된다. */}
+        {pickerOpen && (error || skills === null || skills.length === 0) && (
+          <p className="animate-step-rise text-caption text-brand-muted-soft leading-relaxed">
+            {error ??
+              (skills === null ? "불러오는 중…" : "쓸 수 있는 스킬이 없습니다.")}
+          </p>
+        )}
+
+        {/*
+          고르기 자리 — 접혀 있어도 **검색창 한 줄**은 남는다(`expanded={false}`).
+          다만 이미 고른 뒤에 접히면 아무것도 남기지 않는다: 아래에 그 스킬의 인자
+          칸이 서 있어 검색창까지 두면 한 자리에 세 겹이 되고, 다시 고르는 길은 줄
+          오른쪽 [다시 선택하기] 하나로 족하다.
+        */}
+        {!error && skills !== null && skills.length > 0 && (pickerOpen || !selectedSkill) && (
+          <SkillPicker
+            skills={skills}
+            recent={recent}
+            selected={selected}
+            expanded={pickerOpen}
+            onExpand={openPicker}
+            onSelect={(skillName) => {
+              setSelected(skillName);
+              setValues({});
+              // 스킬이 바뀌면 요구하는 값도 바뀐다 — 앞선 검사 결과는 무효다.
+              setSubmitError(null);
+              // 고르고 나면 목록은 접는다 — 남은 칸(인자)이 바로 보이게.
+              setPickerOpen(false);
+            }}
+          />
         )}
       </div>
 
