@@ -443,10 +443,15 @@ type ErrorResponse = {
 | `unauthorized` | 401 | 인증 도입 후 |
 | `forbidden` | 403 | |
 | `not_found` | 404 | 설비/run id 등 |
+| `method_not_allowed` | 405 | 그 경로가 지원하지 않는 HTTP 메서드 (응답에 `Allow` 헤더 동봉) |
+| `unsupported_media_type` | 415 | `Content-Type` 미지원 — 본문은 `application/json` 이어야 한다 |
 | `rate_limited` | 429 | per-user rate limit 도입 후 |
 | `internal` | 500 | 일반 서버 오류 |
 
 응답 헤더에 항상 `X-Request-Id` 첨부.
+
+예외가 하나 있다: `Accept` 가 JSON 을 받지 않는 요청은 **406 + 빈 본문**이다. 호출자가
+JSON 을 거부한 상황이라 위 형식조차 실어 보낼 수 없어, 상태코드만이 전달 수단이다.
 
 ### SSE 도중 에러 (`event: error`)
 
