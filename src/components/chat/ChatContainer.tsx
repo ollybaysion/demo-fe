@@ -1151,6 +1151,15 @@ export function ChatContainer() {
         >
 
         <main className="flex-1 overflow-y-auto scrollbar-none">
+          {/* 쓰임새를 알려주는 한 줄 — 채팅 카드 맨 위, 화면을 열면 가장 먼저
+              닿는 자리다. 시작 화면에서만 돈다: 대화가 시작되면 안내가 아니라
+              답이 그 자리를 가져야 한다. 데모 재생 중에도 비운다 — 시나리오가
+              말하는 동안 다른 목소리를 얹지 않는다. */}
+          {messages.length === 0 && !demoState && (
+            <div className="px-lg pt-lg">
+              <RotatingTip />
+            </div>
+          )}
           {/* 메시지 목록은 xl+ 에서 좌·우 5vw 만 남기고 풀 폭 사용 —
               풍선 자체는 항상 중앙(`[1fr | 768 | 1fr]`)에 두어 표 유무에
               따라 움직이지 않음. 풍선이 오른쪽으로 슬라이드되는 더 적극
@@ -1228,11 +1237,6 @@ export function ChatContainer() {
               lockedValue={lockedValue}
               placeholder={inputPlaceholder}
             />
-            {/* 쓰임새를 알려주는 한 줄 — 입력창 바로 아래, 쓰는 손 곁이다.
-                시작 화면에서만 돈다: 대화가 시작되면 안내가 아니라 답이 그
-                자리를 가져야 한다. 데모 재생 중에도 비운다 — 시나리오가 말하는
-                동안 다른 목소리를 얹지 않는다. */}
-            {messages.length === 0 && !demoState && <RotatingTip />}
           </div>
         </div>
       </div>

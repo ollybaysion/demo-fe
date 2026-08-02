@@ -10,15 +10,34 @@ type Props = {
   intervalMs?: number;
 };
 
+/** 네 갈래 스파크 — 브랜드의 spike-mark 결을 한 글자 크기로 줄인 것. */
+function SparkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M8 0.5c0.35 2.6 1.2 4.35 2.55 5.25S13.4 7.15 15.5 8c-2.1 0.85-3.6 1.35-4.95 2.25S8.35 12.9 8 15.5c-0.35-2.6-1.2-4.35-2.55-5.25S2.6 8.85 0.5 8c2.1-0.85 3.6-1.35 4.95-2.25S7.65 3.1 8 0.5z" />
+    </svg>
+  );
+}
+
 /**
- * 한 줄 가이드 팁 — 입력창 **바로 아래**에서 문구만 바뀐다.
+ * 한 줄 가이드 팁 — 한자리에서 문구만 바뀐다.
  *
- * 자리가 곧 의미다: 무엇을 쓸 수 있는지 알려주는 말은 쓰는 칸 곁에 있어야
- * 눈에 든다. 화면 위쪽 여백에 두면 헤드라인의 딸림줄로 읽히고 만다.
+ * 존재감은 면이 아니라 글자가 낸다: 배경도 테두리도 없이 본문보다 한 단계
+ * 큰 글씨(title-md)와 잉크색이면 충분하다. 카드나 배너로 두르면 왼쪽
+ * 데이터 패널의 카드들과 같은 무게가 되어, 시작 화면이 카드 밭이 된다.
+ * 색은 아이콘 하나에만 준다 — 문장 앞에서 눈을 잡고 비켜서는 몫이다.
  *
- * <p>자리를 옮기거나 늘리지 않는 이유: 안내는 배경이지 사건이 아니다.
- * 높이가 들썩이면 위의 입력창이 밀려 "뭔가 일어났나" 싶어진다. 그래서
- * 교체는 짧은 페이드 하나로 끝낸다.
+ * <p>바깥 여백은 쥐지 않는다 — 어느 자리에 놓이느냐에 따라 붙일 간격이
+ * 다르므로, 그건 놓는 쪽이 정한다.
+ *
+ * <p>자리를 옮기거나 높이를 늘리지 않는 이유: 안내는 배경이지 사건이
+ * 아니다. 높이가 들썩이면 이웃한 것들이 밀려 "뭔가 일어났나" 싶어진다.
+ * 그래서 교체는 짧은 페이드 하나로 끝낸다.
  *
  * <p>읽는 중에 바뀌지 않도록 마우스를 올리면 멈춘다. 움직임을 줄이도록
  * 설정한 사람에게는 페이드 없이 문구만 바뀐다(globals.css 의
@@ -51,13 +70,16 @@ export function RotatingTip({
 
   return (
     <div
-      className="mt-sm text-center"
+      className="flex justify-center"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
       {/* key 가 곧 애니메이션 방아쇠 — 문구가 바뀌면 페이드가 처음부터 다시. */}
-      <p key={index} className="animate-tip-fade text-body-md text-brand-muted">
-        <span className="text-brand-muted-soft">팁 · </span>
+      <p
+        key={index}
+        className="animate-tip-fade inline-flex items-center gap-xs text-title-md text-brand-ink"
+      >
+        <SparkIcon className="h-4 w-4 shrink-0 text-brand-primary" />
         {tip}
       </p>
     </div>
