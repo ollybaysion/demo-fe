@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import type { BranchDecision } from "./chat-data";
 import type { Skill } from "./skills";
 import {
+  allBranchDecisions,
+  applyBranchDecisions,
   EMPTY_WORKBENCH,
   fulfillSlot,
   loadWorkbench,
@@ -211,6 +214,108 @@ describe("cascade 삭제·역인덱스", () => {
   });
 });
 
+describe("분기 변수 — 게이트와 판정 사실 (BE #55)", () => {
+  // 1단계에 종료형·열림형 분기, 3단계는 열림형의 대상(잠김 출생). 바인드는 전부
+  // 인자라, 게이트가 없다면 세 단계 모두 즉시 요청이 될 모양이다.
+  const SKILL_BRANCH: Skill = {
+    skill: "fdc_trace_reading",
+    name: "fdc-trace-reading",
+    unit: "센서",
+    focus: "센서 측정값",
+    description: "측정",
+    inputs: [{ key: "equipment", required: true }],
+    steps: [
+      {
+        title: "1단계 — 집계",
+        sql: "SELECT COUNT(*) AS CNT FROM t0 WHERE eqp_id = :eqp",
+        argBinds: { eqp: "equipment" },
+        priorStepBinds: [],
+        binds: { eqp: { from: "arg", arg: "equipment" } },
+        branches: [
+          { when: "CNT = 0", then: "종료하고 없다로 답한다" },
+          { when: "이탈이 유의미하면", then: "상세를 본다", opens: 2 },
+        ],
+      },
+      {
+        title: "2단계 — 기본",
+        sql: "SELECT X FROM t1 WHERE eqp_id = :eqp",
+        argBinds: { eqp: "equipment" },
+        priorStepBinds: [],
+        binds: { eqp: { from: "arg", arg: "equipment" } },
+      },
+      {
+        title: "3단계 — 상세(조건부)",
+        sql: "SELECT Y FROM t2 WHERE eqp_id = :eqp",
+        argBinds: { eqp: "equipment" },
+        priorStepBinds: [],
+        binds: { eqp: { from: "arg", arg: "equipment" } },
+      },
+    ],
+  } as Skill;
+
+  const KEY0 = "fdc-trace-reading#0__equipment=CVD-01";
+  const RUN = { skill: "fdc-trace-reading", args: { equipment: "CVD-01" } };
+  const OPEN: BranchDecision = { ...RUN, step: 0, decision: "open", index: 1, reason: "이탈 57건" };
+  const STOP: BranchDecision = { ...RUN, step: 0, decision: "stop", index: 0, reason: "CNT 0건" };
+
+  function seededBranch(): Workbench {
+    return openAnalysis(EMPTY_WORKBENCH, "CVD-01", null, SKILL_BRANCH, {}).wb;
+  }
+
+  it("열림형 분기의 대상 단계는 잠김 출생 — 바인드가 차 있어도 요청이 아니다", () => {
+    const views = slotViews(seededBranch().equipments[0].analyses[0], lookupOf({}));
+    expect(views[0].kind).toBe("request");
+    expect(views[1].kind).toBe("request");
+    expect(views[2]).toMatchObject({ kind: "pending", reason: "branch-wait" });
+  });
+
+  it("open 판정 사실이 조건부 단계를 연다 — 분기 true AND 바인드 true", () => {
+    const wb = applyBranchDecisions(seededBranch(), [OPEN]);
+    const views = slotViews(wb.equipments[0].analyses[0], lookupOf({}));
+    expect(views[2].kind).toBe("request");
+  });
+
+  it("stop 판정 사실은 그 뒤 단계를 전부 닫는다 — 도착한 데이터는 그대로 보인다", () => {
+    let wb = fulfillSlot(seededBranch(), KEY0, "snap-1");
+    wb = applyBranchDecisions(wb, [STOP]);
+    const views = slotViews(
+      wb.equipments[0].analyses[0],
+      lookupOf({ "snap-1": { columns: ["CNT"], rows: [["0"]] } }),
+    );
+    expect(views[0].kind).toBe("data");
+    expect(views[1]).toMatchObject({ kind: "pending", reason: "branch-stop" });
+    expect(views[2]).toMatchObject({ kind: "pending", reason: "branch-stop" });
+  });
+
+  it("판정 사실은 run 이 맞는 카드에만 앉고, 같은 사실은 한 번만 쌓인다", () => {
+    let wb = applyBranchDecisions(seededBranch(), [OPEN]);
+    wb = applyBranchDecisions(wb, [OPEN]);
+    expect(wb.equipments[0].analyses[0].branchDecisions).toHaveLength(1);
+
+    const other = applyBranchDecisions(seededBranch(), [
+      { ...OPEN, args: { equipment: "ETCH-01" } },
+    ]);
+    expect(other.equipments[0].analyses[0].branchDecisions).toBeUndefined();
+  });
+
+  it("판정 근거 단계를 재등록하면 그 단계발 판정 사실이 폐기된다(재판정 경로)", () => {
+    let wb = applyBranchDecisions(seededBranch(), [STOP]);
+    wb = fulfillSlot(wb, KEY0, "snap-2");
+    expect(wb.equipments[0].analyses[0].branchDecisions).toBeUndefined();
+    const views = slotViews(
+      wb.equipments[0].analyses[0],
+      lookupOf({ "snap-2": { columns: ["CNT"], rows: [["412"]] } }),
+    );
+    expect(views[1].kind).toBe("request");
+  });
+
+  it("저장분 전체가 판정 body 로 되나간다 — 없으면 undefined", () => {
+    expect(allBranchDecisions(seededBranch())).toBeUndefined();
+    const wb = applyBranchDecisions(seededBranch(), [OPEN]);
+    expect(allBranchDecisions(wb)).toEqual([OPEN]);
+  });
+});
+
 describe("영속", () => {
   function withStorage(seed: Record<string, string>, run: () => void) {
     const store = new Map(Object.entries(seed));
@@ -241,6 +346,24 @@ describe("영속", () => {
       saveWorkbench(filled);
       const back = loadWorkbench();
       expect(back).toEqual(filled);
+    });
+  });
+
+  it("분기 판정 사실도 왕복을 살아남는다", () => {
+    withStorage({}, () => {
+      const wb = applyBranchDecisions(seeded().wb, [
+        {
+          skill: "fdc-explain-sensor",
+          args: { snsr_id: "B" },
+          step: 0,
+          decision: "stop",
+          index: 0,
+          reason: "r",
+        },
+      ]);
+      expect(wb.equipments[0].analyses[0].branchDecisions).toHaveLength(1);
+      saveWorkbench(wb);
+      expect(loadWorkbench()).toEqual(wb);
     });
   });
 

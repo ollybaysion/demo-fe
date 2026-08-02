@@ -53,6 +53,8 @@ import {
 import { type Skill, type SkillSession } from "@/lib/skills";
 import {
   allAnalyses,
+  allBranchDecisions,
+  applyBranchDecisions,
   EMPTY_WORKBENCH as EMPTY_TREE,
   fulfillSlot,
   loadWorkbench as loadWorkbenchTree,
@@ -716,6 +718,7 @@ export function ChatContainer() {
         runs: toRunDecls(state.tree),
         scope: toChatScope(state.prunedScope, state.legacySessions),
         inputs: toChatInputs(state.inputValues),
+        branchDecisions: allBranchDecisions(state.tree),
       },
       {
         // 서술 메시지는 **첫 token 에서만** 만든다 — 카드만 있는 응답(대다수)이
@@ -749,11 +752,23 @@ export function ChatContainer() {
       },
       controller.signal,
     )
-      .then(() => {
+      .then((done) => {
         // 카드 배치는 판정 응답을 읽지 않는다 — 슬롯 상태는 매 렌더 로컬
         // 파생(slotViews)이라 화면이 상태와 어긋날 수 없다. 판정 왕복은
         // BE 인지(진행 트레이스)와 종결 서술을 위해 남는다. openRequests 는
         // 채팅 경로(BindResolver)와의 패리티 교차검증 재료로만 의미가 있다.
+        //
+        // 유일한 예외 = 분기 판정 사실(#55): LLM 판정이라 로컬 재현이 불가한
+        // 입력이다. 스냅샷처럼 도착 사실로 카드에 저장하고, 해석은 여전히
+        // 렌더마다 로컬이다. 낡은 응답(revision 어긋남)은 버린다.
+        const decisions = done?.branchDecisions;
+        if (
+          decisions &&
+          decisions.length > 0 &&
+          revision === judgeRevisionRef.current
+        ) {
+          setTree((prev) => applyBranchDecisions(prev, decisions));
+        }
       })
       .finally(() => {
         clearTimeout(timeoutId);

@@ -21,6 +21,7 @@
  * 파생한다. 소속을 지어내지 않는다.
  */
 
+import type { BranchDecision } from "./chat-data";
 import { newId } from "./id";
 import type { Skill, SkillBind, SkillStep } from "./skills";
 import { equipmentInputKey } from "./skills";
@@ -53,6 +54,12 @@ export type AnalysisCard = {
   args: Record<string, string>;
   dataList: DataSlot[];
   attachments: AttachmentCard[];
+  /**
+   * 분기 판정 사실(BE #55) — LLM 판정이라 로컬 재현이 불가한 유일한 입력.
+   * 스냅샷처럼 **도착해서 저장되는 사실**이고, 해석(slotViews)이 렌더마다
+   * 읽는다: stop 은 그 뒤 단계를 닫고, open 은 잠김 출생 단계를 연다.
+   */
+  branchDecisions?: BranchDecision[];
 };
 
 /**
@@ -147,6 +154,29 @@ export function slotViews(an: AnalysisCard, lookup: SnapshotLookup): SlotView[] 
     const body = lookup(slot.snapshotId);
     return body ?? null;
   };
+  // 분기 변수 — 요청 카드 = 분기 true AND 바인드 전부 true. 일반 단계는 분기가
+  // 처음부터 true(문 없음)고, 열림형 분기의 대상 단계만 false 로 태어나 open
+  // 판정 사실이 true 로 바꾼다. stop 사실은 그 뒤 단계를 전부 닫는다.
+  // 이미 도착한 데이터는 사실이므로 게이트가 숨기지 않는다 — 게이트는 요청
+  // 파생만 막는다.
+  const steps = an.skills[0].steps;
+  const gated = new Set<number>();
+  for (const st of steps) {
+    for (const b of st.branches ?? []) {
+      if (b.opens !== undefined) gated.add(b.opens);
+    }
+  }
+  const decisions = an.branchDecisions ?? [];
+  let stopAt: number | null = null;
+  const opened = new Set<number>();
+  for (const d of decisions) {
+    if (d.decision === "stop") {
+      stopAt = stopAt === null ? d.step : Math.min(stopAt, d.step);
+      continue;
+    }
+    const target = steps[d.step]?.branches?.[d.index]?.opens;
+    if (target !== undefined) opened.add(target);
+  }
   return an.dataList.map((slot, step) => {
     if (slot.snapshotId !== undefined && lookup(slot.snapshotId) !== undefined) {
       return {
@@ -156,6 +186,12 @@ export function slotViews(an: AnalysisCard, lookup: SnapshotLookup): SlotView[] 
         queryKey: slotQueryKey(an, step),
         snapshotId: slot.snapshotId,
       };
+    }
+    if (stopAt !== null && step > stopAt) {
+      return { kind: "pending", step, title: slot.title, reason: "branch-stop" };
+    }
+    if (gated.has(step) && !opened.has(step)) {
+      return { kind: "pending", step, title: slot.title, reason: "branch-wait" };
     }
     const r = resolveSlot(slot.sql, slot.binds, an.args, priorRowsOf);
     if (r.kind === "ready") {
@@ -280,8 +316,53 @@ export function fulfillSlot(
     const dataList = an.dataList.map((s, i) =>
       i === step ? { ...s, snapshotId } : s,
     );
-    return { ...an, dataList };
+    // 이 단계 데이터를 보고 내린 분기 판정은 낡았다 — 폐기하면 BE 가 이 등록
+    // 이벤트에서 재판정한다(옛 데이터의 판정이 새 데이터 위에 박제되지 않게).
+    const decisions = (an.branchDecisions ?? []).filter((d) => d.step !== step);
+    return {
+      ...an,
+      dataList,
+      ...(decisions.length > 0
+        ? { branchDecisions: decisions }
+        : an.branchDecisions !== undefined
+          ? { branchDecisions: undefined }
+          : {}),
+    };
   });
+}
+
+/**
+ * done 의 분기 판정 사실을 카드에 앉힌다 — run(스킬+인자)이 맞는 분석에만,
+ * 같은 사실(step·decision·index)은 한 번만. 맞는 카드가 없으면 버린다
+ * (소속을 지어내지 않는다).
+ */
+export function applyBranchDecisions(
+  wb: Workbench,
+  decisions: BranchDecision[],
+): Workbench {
+  if (decisions.length === 0) return wb;
+  return mapAnalyses(wb, (an) => {
+    const mine = decisions.filter((d) =>
+      sameRun(runRefOf(an), { skill: d.skill, args: d.args }),
+    );
+    if (mine.length === 0) return an;
+    const current = an.branchDecisions ?? [];
+    const fresh = mine.filter(
+      (d) =>
+        !current.some(
+          (c) =>
+            c.step === d.step && c.decision === d.decision && c.index === d.index,
+        ),
+    );
+    if (fresh.length === 0) return an;
+    return { ...an, branchDecisions: [...current, ...fresh] };
+  });
+}
+
+/** 판정 body 에 되보낼 저장분 전체 — 없으면 undefined(필드 생략). */
+export function allBranchDecisions(wb: Workbench): BranchDecision[] | undefined {
+  const all = allAnalyses(wb).flatMap((an) => an.branchDecisions ?? []);
+  return all.length === 0 ? undefined : all;
 }
 
 /** 분석 카드 제거 — 슬롯·보관물도 함께 사라진다(cascade). IDB 본문 정리는 호출자 몫. */
@@ -374,6 +455,7 @@ function migrateAnalysis(raw: unknown): AnalysisCard | null {
     skills?: unknown;
     dataList?: unknown;
     attachments?: unknown;
+    branchDecisions?: unknown;
     skill?: Skill;
     cards?: unknown[];
   };
@@ -389,6 +471,9 @@ function migrateAnalysis(raw: unknown): AnalysisCard | null {
       attachments: Array.isArray(a.attachments)
         ? (a.attachments as AttachmentCard[])
         : [],
+      ...(Array.isArray(a.branchDecisions) && a.branchDecisions.length > 0
+        ? { branchDecisions: a.branchDecisions as BranchDecision[] }
+        : {}),
     };
   }
   if (!a.skill || !Array.isArray(a.skill.steps)) return null;

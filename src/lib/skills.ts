@@ -25,6 +25,13 @@ export type SkillBind =
   | { from: "arg"; arg: string }
   | { from: "step"; step: number; column: string };
 
+/**
+ * 스텝의 분기 하나(BE #55) — `when` 은 문법 없는 산문 그대로. `opens` 가 있으면
+ * 열림형: 그 0-기반 스텝은 **잠김 출생**이라, BE 의 분기 판정 사실(open)이
+ * 도착해야 요청으로 파생된다. 없으면 종료형(성립 시 절차 종결).
+ */
+export type SkillBranch = { when: string; then?: string; opens?: number };
+
 export type SkillStep = {
   title: string;
   /** 이 스텝이 답에 기여하는 차원 한 마디. 데이터 카드의 category 로 쓴다. */
@@ -41,6 +48,8 @@ export type SkillStep = {
    * 구 BE 응답에는 없을 수 있어 선택 필드로 둔다.
    */
   binds?: Record<string, SkillBind>;
+  /** 분기 목록 — 없으면 분기 없는 스텝(카탈로그 거울, 선택 필드). */
+  branches?: SkillBranch[];
 };
 
 export type Skill = {

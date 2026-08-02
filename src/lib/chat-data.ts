@@ -14,6 +14,23 @@ import type { ChatDataSnapshot, ChatInputs, DataRequest } from "./types";
 /** 절차의 명시 선언 — BE 판정 입력. `args` 는 **인자 원문 채널**이다(#38 T1·T3). */
 export type RunDecl = { skill: string; args: Record<string, string> };
 
+/**
+ * 분기 판정 사실 하나(BE #55) — spec `branches` 의 성립을 LLM 이 판정한 결과.
+ * FE 가 로컬로 재현할 수 없는 유일한 판정이라, done 으로 받아 분석 카드에
+ * **도착한 사실**로 저장하고 다음 판정 body 에 되보낸다(picks 와 같은 echo).
+ */
+export type BranchDecision = {
+  skill: string;
+  args: Record<string, string>;
+  /** 분기가 붙은 스텝(0-기반) — 판정 근거 데이터가 도착한 자리. */
+  step: number;
+  decision: "stop" | "open";
+  /** 성립한 분기의 `branches[]` 번호. */
+  index: number;
+  /** LLM 근거 한 문장 — 화면·트레이스 표시용. */
+  reason?: string;
+};
+
 /** 패널에서 방금 일어난 액션 — 서술 전이 감지에만 쓰인다(판정 입력이 아니다). */
 export type PanelJudgeEvent = { type: string; queryKey?: string };
 
@@ -41,6 +58,8 @@ export type ChatDataDone = {
   runsProgress?: RunProgress[];
   terminalRuns?: string[];
   needsRows?: string[];
+  /** 분기 판정 사실 전체 — body 저장분 + 이번 요청의 새 판정. */
+  branchDecisions?: BranchDecision[];
   narratedRun?: string;
 };
 
@@ -56,6 +75,8 @@ export type JudgeBody = {
   runs?: RunDecl[];
   scope?: unknown;
   inputs?: ChatInputs;
+  /** 카드에 저장된 분기 판정 사실 되보내기 — BE 무상태 판정 유지. */
+  branchDecisions?: BranchDecision[];
 };
 
 export type JudgeHooks = {
