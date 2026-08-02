@@ -58,7 +58,9 @@ export function ScopeTray({
       onDrop={handleDrop}
       aria-label="질의 대상"
       className={[
-        "mb-xs flex items-center gap-sm rounded-md px-xxs py-xxs min-h-[28px] transition-colors",
+        // 높이는 담겼을 때(칩 한 줄) 기준으로 고정한다 — 비었다고 낮아지면
+        // 카드를 누르는 순간 입력창이 아래로 밀린다. 늘 같은 자리여야 한다.
+        "mb-xs flex items-center gap-sm rounded-md px-xxs py-xxs min-h-[40px] transition-colors",
         // 상자는 끌어 오는 동안에만 그린다 — 놓을 자리를 그때 보여주면 된다.
         over
           ? "border border-brand-primary bg-brand-primary/5 ring-4 ring-brand-primary/10"
@@ -77,7 +79,9 @@ export function ScopeTray({
             over ? "text-brand-primary" : "text-brand-muted",
           ].join(" ")}
         >
-          {over ? "여기에 놓기" : "설비 카드를 눌러 담으세요"}
+          {/* 비어 있음 = 대상 없음이 아니라 **전체**다 — 담긴 게 없으면 가진
+              데이터가 다 실려 나간다(스코프는 좁히는 장치다). */}
+          {over ? "여기에 놓기" : "전체 · 카드를 누르면 그 대상으로 좁혀집니다"}
         </span>
       ) : (
         <div className="flex-1 min-w-0 flex flex-wrap items-center gap-xxs">
