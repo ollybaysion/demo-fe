@@ -20,6 +20,8 @@ export type EquipmentLine = {
   start: string;
   end: string;
   category: string;
+  /** 둘째 줄(선택) — 분석 파라미터("snsr_id=B"). */
+  sub?: string;
   status: EquipmentLineStatus;
   /** 이 줄에 딸린 데이터 표 수 — 대기 중이면 0. */
   tableCount: number;

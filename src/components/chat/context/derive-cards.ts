@@ -23,6 +23,8 @@ import type {
 /** 설비별 통합 그룹 — 채워진 데이터 카드와 아직 대기인 요청 카드가 함께 산다. */
 export type DerivedGroup = SnapshotGroupModel & {
   equipment: string;
+  /** 그룹 헤더 둘째 줄(선택) — 분석 파라미터("snsr_id=B"). */
+  sublabel?: string;
   /** 이 그룹으로 아직 채워지지 않은 요청들 — 그룹 안에 점선 카드로 뜬다. */
   requests: PendingRequest[];
 };

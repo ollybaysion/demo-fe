@@ -20,6 +20,11 @@ export type SkillInput = {
   description?: string;
 };
 
+/** bind 하나의 배선 — 인자에서 오거나, 앞 스텝 결과의 컬럼에서 온다. */
+export type SkillBind =
+  | { from: "arg"; arg: string }
+  | { from: "step"; step: number; column: string };
+
 export type SkillStep = {
   title: string;
   /** 이 스텝이 답에 기여하는 차원 한 마디. 데이터 카드의 category 로 쓴다. */
@@ -30,6 +35,12 @@ export type SkillStep = {
   argBinds: Record<string, string>;
   /** 앞 스텝 결과가 채우는 bind — 사용자가 채울 수 없다. */
   priorStepBinds: string[];
+  /**
+   * 배선 전문 — bind 이름마다 출처(인자 or 앞 스텝의 컬럼). FE 가 판정 왕복
+   * 없이 스텝 상태(미정/요청 가능)를 로컬로 파생하는 재료다(dataList).
+   * 구 BE 응답에는 없을 수 있어 선택 필드로 둔다.
+   */
+  binds?: Record<string, SkillBind>;
 };
 
 export type Skill = {

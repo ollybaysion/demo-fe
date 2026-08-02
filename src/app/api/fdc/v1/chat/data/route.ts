@@ -74,6 +74,8 @@ async function mockJudge(request: Request): Promise<Response> {
         queryKey,
         label: `${step.title}${argsPart ? ` (${argsPart.replaceAll("&", ", ")})` : ""}`,
         sql: renderSql(step.sql, step.argBinds, run.args ?? {}),
+        // 카드 소속(설비→분석 계층)의 근거 — 실 BE 와 같은 계약.
+        run: { skill: run.skill, args: run.args ?? {} },
       });
     });
 

@@ -68,9 +68,6 @@ type Props = {
   onRename: (id: string, label: string) => void;
   /** 출처 쿼리 달기/고치기(빈 값 = 지움) — 카드의 테이블 칩이 여기서 파생된다. */
   onSetQuery: (id: string, sql: string | undefined) => void;
-  /** 마지막으로 삭제된 스냅샷 — 있으면 목록 위에 되돌리기 스트립이 뜬다. */
-  lastRemoved: DataSnapshot | null;
-  onRestore: () => void;
   /**
    * 답변 산출물 — 모델이 답과 함께 내놓은 표·차트·이력·그림·링크, 그리고 사용자가
    * 직접 올린 그림·링크. 스냅샷(근거)과 섞지 않고 별도 단으로 산다.
@@ -108,12 +105,9 @@ type Props = {
    */
   groups?: DerivedGroup[];
   /**
-   * 좌측 그룹을 묶는 축. `equipment` = 설비별 통합(요청+데이터 한 그룹),
-   * `type` = 요청/데이터 유형별 분리(요청은 상단, 데이터는 아래 그룹).
+   * 전체 보기 — 참이면 선택(질의 대상)·세션 필터를 풀고 저장분 전부를 보인다.
+   * 기본(거짓)은 오른쪽 설비 패널에서 담은 것들만.
    */
-  viewMode?: "equipment" | "type";
-  onToggleView?: () => void;
-  /** 데이터 스코프 — 참이면 전역 저장분 전부, 거짓이면 현재 세션 등록분만. */
   scopeAll?: boolean;
   onToggleScope?: () => void;
   /**
@@ -132,7 +126,49 @@ type Props = {
   onToggleGroup?: (key: string) => void;
   /** 단 제목 줄 아이콘 — 그룹을 한 번에 접거나 편다. */
   onSetAllGroups?: (open: boolean) => void;
+  /** 등록한 데이터가 판정 왕복 중 — 헤더 신호등이 돌고, 끝나면 초록으로 한 번 켜진다. */
+  judging?: boolean;
 };
+
+/**
+ * 판정 신호등 — 데이터 등록이 조용히 서버 판정으로 넘어가는 것을 눈에 보이게
+ * 한다. 왕복 동안 스피너가 돌고, 응답이 반영되는 순간 초록불이 잠깐 켜졌다
+ * 꺼진다. 지속 상태를 남기지 않는다 — 한 번의 안내다.
+ */
+function JudgeLight({ judging }: { judging: boolean }) {
+  const [flash, setFlash] = useState(false);
+  const prevRef = useRef(judging);
+  useEffect(() => {
+    const was = prevRef.current;
+    prevRef.current = judging;
+    if (was && !judging) {
+      setFlash(true);
+      const t = setTimeout(() => setFlash(false), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [judging]);
+  if (judging) {
+    return (
+      <span
+        role="status"
+        aria-label="판정 중"
+        title="등록한 데이터를 서버 판정으로 확인하는 중"
+        className="ml-xs inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-brand-muted/30 border-t-brand-primary align-middle"
+      />
+    );
+  }
+  if (flash) {
+    return (
+      <span
+        role="status"
+        aria-label="판정 반영됨"
+        title="판정 반영됨"
+        className="ml-xs inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-brand-success align-middle"
+      />
+    );
+  }
+  return null;
+}
 
 export function DataPanel({
   snapshots,
@@ -145,8 +181,6 @@ export function DataPanel({
   onRemove,
   onRename,
   onSetQuery,
-  lastRemoved,
-  onRestore,
   artifacts,
   onAddArtifact,
   onRemoveArtifact,
@@ -158,8 +192,6 @@ export function DataPanel({
   onToggleExpanded,
   detailVisible,
   groups,
-  viewMode = "equipment",
-  onToggleView,
   scopeAll = false,
   onToggleScope,
   focusGroupKey,
@@ -169,6 +201,7 @@ export function DataPanel({
   openGroupKeys = null,
   onToggleGroup,
   onSetAllGroups,
+  judging = false,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [seed, setSeed] = useState<{
@@ -227,13 +260,7 @@ export function DataPanel({
   const allRequestKeys = (groups ?? []).flatMap((g) =>
     g.requests.map((r) => r.request.queryKey),
   );
-  // 유형별 모드에서 상단으로 끌어올릴 데이터 요청(그룹에서 평탄화).
-  const flatRequests = (groups ?? []).flatMap((g) => g.requests);
-  // 유형별 모드에선 요청만 있는 그룹(데이터 없음)은 상단에서 다루므로 감춘다.
-  const shownGroups =
-    viewMode === "type"
-      ? (groups ?? []).filter((g) => g.snapshots.length > 0)
-      : (groups ?? []);
+  const shownGroups = groups ?? [];
 
   /**
    * 확장 모드의 상세 대상 — 스냅샷의 표이거나 산출물의 그림이다. 명시 선택이
@@ -424,28 +451,26 @@ export function DataPanel({
               {includedCount}개 포함
             </span>
           )}
+          <JudgeLight judging={judging} />
         </h2>
         <div className="shrink-0 flex items-center gap-xxs">
-        {/* 스코프 토글 — 현재 세션 등록분만(기본) vs 전역 저장분 전부. */}
+        {/* 전체 보기 토글 — 기본은 오른쪽 설비 패널에서 담은 것만. 문구는 늘
+            같고, 켜져 있음은 선택 표시(색·배경)로만 말한다. */}
         {onToggleScope && (
           <button
             type="button"
+            aria-pressed={scopeAll}
             onClick={onToggleScope}
-            title={scopeAll ? "현재 세션 데이터만 보기" : "전체 데이터 보기"}
-            className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            title="저장분 전부 보기 — 선택·세션 필터 해제"
+            className={[
+              "shrink-0 h-7 px-xs rounded-sm text-caption transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+              scopeAll
+                ? "bg-brand-primary/10 text-brand-primary font-medium"
+                : "text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04",
+            ].join(" ")}
           >
-            {scopeAll ? "전체" : "현재 세션"}
-          </button>
-        )}
-        {/* 뷰 토글 — 설비별 통합 vs 요청/데이터 유형별. */}
-        {onToggleView && (
-          <button
-            type="button"
-            onClick={onToggleView}
-            title={viewMode === "equipment" ? "유형별로 보기" : "설비별로 보기"}
-            className="shrink-0 h-7 px-xs rounded-sm text-caption text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          >
-            {viewMode === "equipment" ? "설비별" : "유형별"}
+            전체 보기
           </button>
         )}
         {/*
@@ -538,15 +563,11 @@ export function DataPanel({
           ].join(" ")}
         >
           <div className="flex-1 overflow-y-auto scrollbar-none">
-            {/* 상단 요청 섹션. 설비별 모드에선 스칼라 입력 요청만(데이터 요청은
-                각 설비 그룹 안으로). 유형별 모드에선 데이터 요청도 여기로 모은다. */}
-            {(inputRequests.length > 0 ||
-              (viewMode === "type" && flatRequests.length > 0)) && (
+            {/* 상단 요청 섹션 — 스칼라 입력 요청만. 데이터 요청 카드는 각 설비·
+                분석 그룹 안에 산다. */}
+            {inputRequests.length > 0 && (
               <CollapsibleSection
-                title={`요청받은 데이터 (${
-                  inputRequests.length +
-                  (viewMode === "type" ? flatRequests.length : 0)
-                })`}
+                title={`요청받은 데이터 (${inputRequests.length})`}
                 open={requestsOpen}
                 onToggle={() => setRequestsOpen((v) => !v)}
               >
@@ -558,50 +579,22 @@ export function DataPanel({
                       onSubmit={onSubmitInput}
                     />
                   ))}
-                  {viewMode === "type" &&
-                    flatRequests.map((p) => (
-                      <RequestCard
-                        key={p.request.queryKey}
-                        request={p.request}
-                        open={
-                          openRequestKeys === null ||
-                          openRequestKeys.includes(p.request.queryKey)
-                        }
-                        onToggle={() =>
-                          setOpenRequestKeys((prev) => {
-                            const base = prev ?? allRequestKeys;
-                            return base.includes(p.request.queryKey)
-                              ? base.filter((k) => k !== p.request.queryKey)
-                              : [...base, p.request.queryKey];
-                          })
-                        }
-                        focused={p.request.queryKey === focusRequestKey}
-                        focusNonce={requestFocusNonce}
-                        onFulfill={handleFulfill}
-                        onRegisterEmpty={handleRegisterEmpty}
-                      />
-                    ))}
                 </div>
               </CollapsibleSection>
             )}
 
             {/*
-              설비별 모드에선 이 섹션에 **아직 조달 전인 요청 카드도 함께** 산다
-              (설비 하나를 한 자리에서 보려고 그렇게 묶는다). 그래서 제목을
-              "등록된 데이터"라고 하면 요청됨 카드가 등록된 것처럼 읽힌다 —
-              내용에 맞춰 이름과 수를 나눈다. 유형별 모드에선 요청이 위 섹션으로
-              올라가므로 여기 남는 것은 정말 등록분뿐이다.
+              이 섹션에는 **아직 조달 전인 요청 카드도 함께** 산다(설비 하나를
+              한 자리에서 보려고 그렇게 묶는다). 그래서 제목을 "등록된
+              데이터"라고 하면 요청됨 카드가 등록된 것처럼 읽힌다 — 내용에 맞춰
+              이름과 수를 나눈다.
             */}
             <CollapsibleSection
-              title={
-                viewMode === "equipment"
-                  ? `설비별 데이터 (등록 ${dataCount}${
-                      allRequestKeys.length > 0
-                        ? ` · 요청 ${allRequestKeys.length}`
-                        : ""
-                    })`
-                  : `등록된 데이터 (${dataCount})`
-              }
+              title={`설비별 데이터 (등록 ${dataCount}${
+                allRequestKeys.length > 0
+                  ? ` · 요청 ${allRequestKeys.length}`
+                  : ""
+              })`}
               open={dataOpen}
               onToggle={() => setDataOpen((v) => !v)}
               action={
@@ -616,23 +609,6 @@ export function DataPanel({
                 />
               }
             >
-              {/* 실수 삭제 구제 — 스냅샷은 SQL 재실행 없이 다시 만들기 번거로워,
-                  삭제 직후 한 번은 그 자리에서 되돌릴 수 있어야 한다. */}
-              {lastRemoved && (
-                <div className="mb-xs flex items-center justify-between gap-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs">
-                  <span className="min-w-0 truncate text-caption text-brand-muted">
-                    “{lastRemoved.label}” 휴지통으로
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onRestore}
-                    className="shrink-0 text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
-                  >
-                    되돌리기
-                  </button>
-                </div>
-              )}
-
               {/* 데이터는 상시 그룹 — 같은 설비·구간·category 에서 나온 카드가
                   하나의 둥근 틀로 묶인다. `groups` 가 없으면 예전처럼 평평한
                   목록(확장 모드의 마스터 컬럼도 이 경로를 그대로 쓴다). */}
@@ -648,11 +624,8 @@ export function DataPanel({
                       <SnapshotGroup
                         key={g.key}
                         label={g.label}
-                        count={
-                          viewMode === "type"
-                            ? g.snapshots.length
-                            : g.snapshots.length + g.requests.length
-                        }
+                        sublabel={g.sublabel}
+                        count={g.snapshots.length + g.requests.length}
                         open={
                           openGroupKeys === null || openGroupKeys.includes(g.key)
                         }
@@ -660,11 +633,9 @@ export function DataPanel({
                         focused={g.key === focusGroupKey}
                         focusNonce={focusNonce}
                       >
-                        {/* 설비별 통합 모드에서만 대기 요청 카드를 그룹 안에 얹는다
-                            ('아직 오는 것'이 위, 가진 데이터가 아래). 유형별 모드에선
-                            요청은 상단 섹션에 있으니 여기선 데이터만 보인다. */}
-                        {viewMode === "equipment" &&
-                          g.requests.map((p) => (
+                        {/* 대기 요청 카드를 그룹 안에 얹는다 — '아직 오는 것'이
+                            위, 가진 데이터가 아래. */}
+                        {g.requests.map((p) => (
                             <RequestCard
                               key={p.request.queryKey}
                               request={p.request}
@@ -950,6 +921,7 @@ const FLASH_MS = 1200;
 
 function SnapshotGroup({
   label,
+  sublabel,
   count,
   open,
   onToggle,
@@ -958,6 +930,8 @@ function SnapshotGroup({
   children,
 }: {
   label: string;
+  /** 둘째 줄 — 분석 카드의 파라미터("snsr_id=B"). 없으면 한 줄. */
+  sublabel?: string;
   count: number;
   open: boolean;
   onToggle: () => void;
@@ -1000,8 +974,15 @@ function SnapshotGroup({
         aria-expanded={open}
         className="w-full flex items-center gap-xs px-sm py-xs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
-        <span className="min-w-0 flex-1 truncate text-caption font-medium text-brand-ink">
-          {label}
+        <span className="min-w-0 flex-1 flex flex-col">
+          <span className="truncate text-caption font-medium text-brand-ink">
+            {label}
+          </span>
+          {sublabel && (
+            <span className="truncate text-caption text-brand-muted-soft">
+              {sublabel}
+            </span>
+          )}
         </span>
         <span className="shrink-0 text-caption text-brand-muted-soft tabular-nums">
           {count}

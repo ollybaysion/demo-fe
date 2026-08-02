@@ -134,17 +134,17 @@ export function SnapshotCard({
     >
       <div className="flex items-start gap-xs">
         <span className="relative mt-[3px] shrink-0 inline-flex">
+          {/* 동봉 토글은 사용 중지 — 질의 대상(스코프)과 역할이 겹치고, 절차
+              데이터를 끄면 판정이 미도착으로 오판해 요청을 다시 연다.
+              표시는 남긴다(현재 상태를 숨기지 않는다): 걷어낼지는 dataList
+              재설계에서 결정. onToggleIncluded 배선도 그때 함께 정리한다. */}
           <input
             type="checkbox"
             checked={snapshot.included}
-            onChange={() => onToggleIncluded(snapshot.id)}
-            aria-label={`${snapshot.label} 요청에 포함`}
-            title={
-              snapshot.included
-                ? "요청에서 빼기"
-                : "요청에 포함 — 내용까지 함께 나갑니다"
-            }
-            className="peer appearance-none w-4 h-4 rounded-[4px] border border-brand-hairline bg-transparent checked:bg-brand-primary checked:border-brand-primary cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
+            disabled
+            aria-label={`${snapshot.label} 요청에 포함 (선택 사용 중지)`}
+            title="동봉 선택은 사용 중지 — 범위는 질의 대상으로 정합니다"
+            className="peer appearance-none w-4 h-4 rounded-[4px] border border-brand-hairline bg-transparent checked:bg-brand-primary checked:border-brand-primary cursor-not-allowed opacity-60 transition-colors focus:outline-none"
           />
           <svg
             className="pointer-events-none absolute inset-0 m-auto opacity-0 peer-checked:opacity-100 text-brand-on-primary transition-opacity"

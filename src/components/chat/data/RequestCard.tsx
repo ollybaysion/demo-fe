@@ -143,9 +143,6 @@ export function RequestCard({
         aria-expanded={open}
         className="w-full px-sm py-xs flex items-start gap-xxs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
-        <span className="shrink-0 inline-flex items-center h-5 px-xs rounded-full bg-brand-primary/15 text-brand-primary text-caption font-medium">
-          요청됨
-        </span>
         <span className="flex-1 min-w-0">
           <span className="block text-body-sm text-brand-ink truncate">
             {request.label}
@@ -163,16 +160,6 @@ export function RequestCard({
 
       {open && (
         <div className="px-sm pb-xs flex flex-col gap-xxs">
-
-      <p className="text-caption text-brand-muted">
-        이 조회를 실행한 결과를 붙여넣어 주세요.
-      </p>
-
-      {request.columns && request.columns.length > 0 && (
-        <p className="text-caption text-brand-muted-soft font-mono">
-          {request.columns.join(", ")}
-        </p>
-      )}
 
       {request.sql && (
         <div className="relative">
@@ -225,10 +212,7 @@ export function RequestCard({
           <span className="font-semibold">{error.code}</span> — {error.message}
         </p>
       )}
-      <div className="flex items-center justify-between gap-xs">
-        <p className="text-caption text-brand-muted-soft min-w-0">
-          등록 후 채팅에 “등록 완료”라고 입력하면 이어서 분석합니다.
-        </p>
+      <div className="flex items-center justify-end gap-xs">
         <div className="shrink-0 flex items-center gap-xs">
           {/* 붙여넣을 것이 없는 답 — 0행도 등록되어야 이 요청이 끝난다.
               붙여넣기를 시작한 뒤에는 감춘다: 채우던 중에 "없음"을 누르면

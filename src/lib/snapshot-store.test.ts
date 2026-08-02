@@ -91,6 +91,19 @@ describe("upsertSnapshot", () => {
     expect(out[0].capturedAt).toBe("2026-07-21T00:00:00.000Z");
   });
 
+  it("휴지통의 같은 내용에는 접지 않는다 — 새 항목으로 선다", () => {
+    // 접으면 버린 항목이 옛 id 로 몰래 부활하고, 호출부 dedupe 판정(live 만)과
+    // 어긋나 카드가 허공 id 를 가리킨다 — [결과 없음] 미분류행 버그의 원인.
+    const list = [snap({ deletedAt: "2026-08-02T00:00:00.000Z" })];
+    const next = snap({ id: "snap-2" });
+    const out = upsertSnapshot(list, next);
+
+    expect(out).toHaveLength(2);
+    expect(out[0].deletedAt).toBeDefined(); // 휴지통 항목은 그대로 잠들어 있다.
+    expect(out[1].id).toBe("snap-2");
+    expect(out[1].deletedAt).toBeUndefined();
+  });
+
   it("갱신해도 사용자가 쥔 체크와 항목 id 는 잇는다", () => {
     // 다시 붙여넣는 의도는 "이게 최신"이지 "설정을 초기화해라"가 아니다.
     const list = [snap({ included: true })];
@@ -128,6 +141,15 @@ describe("upsertFulfilling — 요청 카드를 채우는 경로", () => {
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe("snap-1");
     expect(out[0].included).toBe(true);
+  });
+
+  it("휴지통의 같은 내용은 깨우지도 체크하지도 않는다", () => {
+    const trashed = snap({ deletedAt: "2026-08-02T00:00:00.000Z", included: false });
+    const out = upsertFulfilling([trashed], snap({ id: "snap-2" }));
+    expect(out).toHaveLength(2);
+    expect(out[0].included).toBe(false); // 버린 항목의 동봉을 되켜지 않는다.
+    expect(out[1].id).toBe("snap-2");
+    expect(out[1].included).toBe(true);
   });
 
   it("다른 항목의 체크 상태는 건드리지 않는다", () => {

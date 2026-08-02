@@ -53,6 +53,12 @@ const MOCK_SKILLS: Skill[] = [
           end: "end",
         },
         priorStepBinds: [],
+        binds: {
+          eqp: { from: "arg", arg: "equipment" },
+          pidx: { from: "arg", arg: "param_index" },
+          start: { from: "arg", arg: "start" },
+          end: { from: "arg", arg: "end" },
+        },
       },
       {
         title: "2단계 — 측정을 낸 설비",
@@ -61,6 +67,7 @@ const MOCK_SKILLS: Skill[] = [
   FROM fdc_equipment WHERE eqp_id = :eqp`,
         argBinds: { eqp: "equipment" },
         priorStepBinds: [],
+        binds: { eqp: { from: "arg", arg: "equipment" } },
       },
       {
         title: "3단계 — 수집 기간의 설비 이벤트",
@@ -70,6 +77,7 @@ const MOCK_SKILLS: Skill[] = [
  ORDER BY evt_time DESC FETCH FIRST 3 ROWS ONLY`,
         argBinds: { eqp: "equipment" },
         priorStepBinds: [],
+        binds: { eqp: { from: "arg", arg: "equipment" } },
       },
     ],
   },
@@ -97,6 +105,7 @@ const MOCK_SKILLS: Skill[] = [
   FROM fdc_sensor WHERE snsr_id = :id`,
         argBinds: { id: "snsr_id" },
         priorStepBinds: [],
+        binds: { id: { from: "arg", arg: "snsr_id" } },
       },
       {
         title: "2단계 — 소속 설비",
@@ -105,6 +114,7 @@ const MOCK_SKILLS: Skill[] = [
   FROM fdc_equipment WHERE eqp_id = :eqp`,
         argBinds: {},
         priorStepBinds: ["eqp"],
+        binds: { eqp: { from: "step", step: 0, column: "EQP_ID" } },
       },
       {
         title: "3단계 — 설비 최근 이벤트 (정비 맥락)",
@@ -114,6 +124,7 @@ const MOCK_SKILLS: Skill[] = [
  ORDER BY evt_time DESC FETCH FIRST 3 ROWS ONLY`,
         argBinds: {},
         priorStepBinds: ["eqp"],
+        binds: { eqp: { from: "step", step: 0, column: "EQP_ID" } },
       },
     ],
   },
