@@ -1326,12 +1326,15 @@ export function ChatContainer() {
           <div
             className={[
               "mx-auto py-xl",
-              messages.length === 0
+              messages.length === 0 && !judging
                 ? "max-w-chat-narrow px-lg"
                 : "max-w-chat-narrow px-lg xl:max-w-none xl:px-[5vw]",
             ].join(" ")}
           >
-            {messages.length === 0 ? (
+            {/* 판정 중에는 빈 채팅이라도 시작 화면 대신 목록을 그린다 — 안 그러면
+                채팅 없이 결과부터 등록한 사용자에게 생각 중 표시도, 곧 도착할
+                종결 서술의 자리도 시작 화면에 가려 보이지 않는다. */}
+            {messages.length === 0 && !judging ? (
               <ChatEmptyState onQuickStart={handleQuickStart} />
             ) : (
               <MessageList
