@@ -129,14 +129,18 @@ export function trashSnapshot(
   );
 }
 
-/** 휴지통에서 꺼낸다 — 지웠던 그대로(동봉은 꺼진 채)로 목록에 돌아온다. */
+/**
+ * 휴지통에서 꺼낸다 — **동봉을 켠 채로** 돌아온다. 꺼진 채 돌려주면 카드의
+ * 동봉 토글이 사용 중지인 지금은 되켤 길이 없어, 복원했는데 요청에 영영
+ * 실리지 않는 항목이 된다. 되살린다는 건 다시 쓰겠다는 뜻이다.
+ */
 export function restoreSnapshot(
   list: DataSnapshot[],
   id: string,
 ): DataSnapshot[] {
   return list.map((s) => {
     if (s.id !== id || s.deletedAt === undefined) return s;
-    const rest = { ...s };
+    const rest = { ...s, included: true };
     delete rest.deletedAt;
     return rest;
   });

@@ -38,11 +38,11 @@ describe("휴지통", () => {
     expect(includedSnapshots(after).map((s) => s.id)).toEqual(["b"]);
   });
 
-  it("되돌리면 목록으로 돌아온다 — 동봉은 꺼진 채로", () => {
+  it("되돌리면 목록으로 돌아온다 — 동봉은 켠 채로(토글이 사용 중지라 되켤 길이 없다)", () => {
     const back = restoreSnapshot(trashSnapshot([snap("a")], "a", AT), "a");
     expect(liveSnapshots(back).map((s) => s.id)).toEqual(["a"]);
     expect(back[0].deletedAt).toBeUndefined();
-    expect(back[0].included).toBe(false);
+    expect(back[0].included).toBe(true);
   });
 
   it("휴지통은 새로고침을 넘긴다 — deletedAt 이 저장소에서 살아 온다", () => {
