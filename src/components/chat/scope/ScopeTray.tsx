@@ -65,14 +65,16 @@ export function ScopeTray({
           : "border border-transparent",
       ].join(" ")}
     >
-      <span className="shrink-0 text-[11px] font-medium tracking-wide text-brand-muted-soft">
+      {/* 면을 걷은 뒤로는 글자가 이 자리의 전부다 — 색까지 옅으면 없는 것처럼
+          보인다. muted-soft 는 캔버스 위에서 2.3:1 이라 대비 기준에도 못 미쳤다. */}
+      <span className="shrink-0 text-[11px] font-medium tracking-wide text-brand-muted">
         질의 대상
       </span>
       {items.length === 0 ? (
         <span
           className={[
             "text-caption",
-            over ? "text-brand-primary" : "text-brand-muted-soft",
+            over ? "text-brand-primary" : "text-brand-muted",
           ].join(" ")}
         >
           {over ? "여기에 놓기" : "설비 카드를 눌러 담으세요"}
