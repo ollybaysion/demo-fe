@@ -309,7 +309,9 @@ export function ChatContainer() {
         | { kind: "link"; label: string; url: string },
     ) => {
       setUserArtifacts((prev) => {
-        const id = `user:${entry.kind}:${prev.length}:${entry.label}`;
+        // id 는 목록 위치와 무관해야 한다 — 순번으로 지으면 하나 지운 뒤 올린
+        // 것이 방금 지운 것과 같은 id 를 받아 서로를 덮는다.
+        const id = `user:${entry.kind}:${newId()}`;
         const base = { id, messageId: null, turn: null } as const;
         const next: Artifact =
           entry.kind === "image"
@@ -330,6 +332,14 @@ export function ChatContainer() {
     },
     [],
   );
+
+  /**
+   * 직접 올린 산출물 지우기 — 대화에서 **파생된** 산출물은 대상이 아니다.
+   * 그쪽은 답이 있는 한 매 렌더마다 다시 계산되므로, 지워도 곧바로 되살아난다.
+   */
+  const handleRemoveArtifact = useCallback((id: string) => {
+    setUserArtifacts((prev) => prev.filter((a) => a.id !== id));
+  }, []);
 
   const handleAddEquipment = useCallback(
     (
@@ -1070,6 +1080,7 @@ export function ChatContainer() {
             <DataPanel
               artifacts={artifacts}
               onAddArtifact={handleAddArtifact}
+              onRemoveArtifact={handleRemoveArtifact}
               snapshots={scopedSnapshots}
               // 현재 세션 요청 + 스냅샷에서 파생한 그룹. viewMode 로 설비별/유형별.
               groups={dataGroups}

@@ -96,20 +96,20 @@ const gothicA1 = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "FDC Agent",
+  title: "Inline FDC Agent",
   description: "설비 데이터를 자연어로 분석하는 도메인 특화 챗봇.",
-  applicationName: "FDC Agent",
+  applicationName: "Inline FDC Agent",
   openGraph: {
-    title: "FDC Agent",
+    title: "Inline FDC Agent",
     description: "설비 데이터를 자연어로 분석하는 도메인 특화 챗봇.",
-    siteName: "FDC Agent",
+    siteName: "Inline FDC Agent",
     type: "website",
     locale: "ko_KR",
     // images 는 app/opengraph-image.tsx 가 자동으로 채움.
   },
   twitter: {
     card: "summary_large_image",
-    title: "FDC Agent",
+    title: "Inline FDC Agent",
     description: "설비 데이터를 자연어로 분석하는 도메인 특화 챗봇.",
   },
 };

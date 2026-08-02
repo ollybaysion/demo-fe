@@ -29,7 +29,7 @@ export function ChatHeader({ onNewConversation, onOpenHistory }: Props) {
               <MenuIcon />
             </button>
           )}
-          <h1 className="font-sans text-title-lg text-brand-ink">FDC Agent</h1>
+          <h1 className="font-sans text-title-lg text-brand-ink">Inline FDC Agent</h1>
         </div>
         <div className="flex items-center gap-xs">
           {onNewConversation && (
