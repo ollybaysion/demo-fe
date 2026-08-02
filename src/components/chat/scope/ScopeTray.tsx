@@ -58,12 +58,11 @@ export function ScopeTray({
       onDrop={handleDrop}
       aria-label="질의 대상"
       className={[
-        "mb-xs flex items-center gap-sm rounded-lg px-sm py-xs min-h-[52px] transition-colors",
+        "mb-xs flex items-center gap-sm rounded-md px-xxs py-xxs min-h-[28px] transition-colors",
+        // 상자는 끌어 오는 동안에만 그린다 — 놓을 자리를 그때 보여주면 된다.
         over
           ? "border border-brand-primary bg-brand-primary/5 ring-4 ring-brand-primary/10"
-          : items.length > 0
-            ? "border border-brand-hairline"
-            : "border border-dashed border-brand-hairline",
+          : "border border-transparent",
       ].join(" ")}
     >
       <span className="shrink-0 text-[11px] font-medium tracking-wide text-brand-muted-soft">
@@ -76,9 +75,7 @@ export function ScopeTray({
             over ? "text-brand-primary" : "text-brand-muted-soft",
           ].join(" ")}
         >
-          {over
-            ? "여기에 놓기"
-            : "설비 카드를 여기로 끌어다 놓으세요 — 담긴 설비에 대해 질의합니다"}
+          {over ? "여기에 놓기" : "설비 카드를 눌러 담으세요"}
         </span>
       ) : (
         <div className="flex-1 min-w-0 flex flex-wrap items-center gap-xxs">
