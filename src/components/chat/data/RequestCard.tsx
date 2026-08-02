@@ -164,10 +164,6 @@ export function RequestCard({
       {open && (
         <div className="px-sm pb-xs flex flex-col gap-xxs">
 
-      <p className="text-caption text-brand-muted">
-        이 조회를 실행한 결과를 붙여넣어 주세요.
-      </p>
-
       {request.sql && (
         <div className="relative">
           {/* whitespace-pre-wrap: 패널 폭(440px)을 넘는 SQL 줄도 스크롤에
