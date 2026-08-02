@@ -168,6 +168,9 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
       return;
     }
     if (missing.length > 0) {
+      // 고르기 목록이 열려 있으면 인자 칸은 접혀 있다 — 어느 칸을 채우라는
+      // 말인지 보이게 목록을 닫고 나서 말한다.
+      setPickerOpen(false);
       setSubmitError(
         `${missing.map((i) => i.key.toUpperCase()).join(" · ")} 값을 입력하세요.`,
       );
@@ -363,8 +366,14 @@ export function AddEquipment({ onAdd, existing = [], openFor = null }: Props) {
         )}
       </div>
 
-      {/* 고른 스킬이 더 요구하는 값 — 스킬이 정해진 뒤에만 자리를 쓴다. */}
-      {selectedSkill && asking.length > 0 && (
+      {/*
+        고른 스킬이 더 요구하는 값 — 스킬이 **정해져 있는 동안에만** 자리를 쓴다.
+        다시 고르는 중(`pickerOpen`)에는 접는다: 이전 스킬의 답이 목록 아래
+        남아 있으면, 지금 고르는 스킬의 것인지 앞서 고른 것의 것인지 알 수 없다.
+        값은 지우지 않는다 — 목록만 접으면(고르기 취소) 채운 그대로 돌아온다.
+        새 스킬을 실제로 고른 순간엔 `onSelect` 가 비운다.
+      */}
+      {!pickerOpen && selectedSkill && asking.length > 0 && (
         <AskInputs
           inputs={asking}
           values={values}
