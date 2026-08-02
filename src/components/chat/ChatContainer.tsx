@@ -60,6 +60,7 @@ import {
   ownerOfSnapshot,
   reconcileRequestCards,
   referencedSnapshotIds,
+  removeAnalysis,
   runRefOf,
   sameRun,
   saveWorkbench as saveWorkbenchTree,
@@ -1259,6 +1260,19 @@ export function ChatContainer() {
     [addSnapshot, rememberSessionSnapshot, requestJudge],
   );
 
+  /**
+   * 분석 카드 삭제(선언 철회) — 요청 카드는 함께 사라지고 표 본문(IDB)은 남아
+   * 미분류로 흘러간다. 스코프에 담겨 있던 항목은 prune 이 자연 정리한다.
+   * 선언(runs[])이 줄었으니 판정을 다시 받는다.
+   */
+  const handleRemoveAnalysis = useCallback(
+    (analysisId: string) => {
+      setTree((prev) => removeAnalysis(prev, analysisId));
+      requestJudge({ type: "session-registered" });
+    },
+    [requestJudge],
+  );
+
   /** 판정 집합을 바꾸는 패널 액션들 — 상태를 바꾸고 다음 커밋에서 판정을 부른다. */
   const handleToggleSnapshotIncluded = useCallback(
     (id: string) => {
@@ -1686,6 +1700,7 @@ export function ChatContainer() {
             focusCardId={equipmentFocus.key}
             focusNonce={equipmentFocus.n}
             onAddEquipment={handleAddEquipment}
+            onRemoveLine={handleRemoveAnalysis}
             onToggleScope={toggleQueryScope}
             inScope={(item) =>
               item.kind === "equipment"

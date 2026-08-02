@@ -53,6 +53,11 @@ type Props = {
    */
   onToggleScope?: (item: ScopeItem) => void;
   inScope?: (item: ScopeItem) => boolean;
+  /**
+   * 분석 카드 삭제(선언 철회) — 줄의 휴지통 버튼. 요청 카드는 함께 사라지고
+   * 표 본문(IDB)은 남아 미분류로 흘러간다. 안 넘기면 버튼을 안 그린다.
+   */
+  onRemoveLine?: (lineKey: string) => void;
 };
 
 export function EquipmentPanel({
@@ -66,6 +71,7 @@ export function EquipmentPanel({
   onAddEquipment,
   onToggleScope,
   inScope,
+  onRemoveLine,
 }: Props) {
   // 첫 카드는 펼쳐 둔다 — 빈 목록처럼 보이지 않게.
   const [expanded, setExpanded] = useState<string[]>(() =>
@@ -147,6 +153,7 @@ export function EquipmentPanel({
                 }
                 onToggleScope={onToggleScope}
                 inScope={inScope}
+                onRemoveLine={onRemoveLine}
               />
             ))
           )}
@@ -180,6 +187,7 @@ function EquipmentCard({
   onAddSkill,
   onToggleScope,
   inScope,
+  onRemoveLine,
 }: {
   card: EquipmentCardModel;
   open: boolean;
@@ -193,6 +201,7 @@ function EquipmentCard({
   onAddSkill?: () => void;
   onToggleScope?: (item: ScopeItem) => void;
   inScope?: (item: ScopeItem) => boolean;
+  onRemoveLine?: (lineKey: string) => void;
 }) {
   const known = card.descriptors.length > 0;
   const ref = useRef<HTMLDivElement | null>(null);
@@ -358,6 +367,9 @@ function EquipmentCard({
               onSelect={() => onFocusLine(line.key)}
               onToggleScope={onToggleScope}
               inScope={inScope}
+              {...(onRemoveLine
+                ? { onRemove: () => onRemoveLine(line.key) }
+                : {})}
             />
           ))}
         </div>
@@ -377,12 +389,15 @@ function LineRow({
   onSelect,
   onToggleScope,
   inScope,
+  onRemove,
 }: {
   line: EquipmentLine;
   equipment: string;
   onSelect: () => void;
   onToggleScope?: (item: ScopeItem) => void;
   inScope?: (item: ScopeItem) => boolean;
+  /** 분석 카드 삭제 — hover 에만 드러나는 휴지통. */
+  onRemove?: () => void;
 }) {
   const waiting = line.status === "pending";
   const scopeItem: ScopeItem = {
@@ -451,7 +466,10 @@ function LineRow({
   if (!onToggleScope) return row;
 
   return (
-    <div {...scopeDragProps(scopeItem)} className="flex items-stretch gap-xxs">
+    <div
+      {...scopeDragProps(scopeItem)}
+      className="group/row flex items-stretch gap-xxs"
+    >
       {row}
       {/* 대기 줄도 누를 수 있다 — 볼 데이터 대신 **그 데이터를 부른 요청 카드**로
           데려간다(요청이 왼쪽에 실제로 있으니 갈 곳이 있다). */}
@@ -468,7 +486,40 @@ function LineRow({
       >
         <ArrowLeft />
       </button>
+      {onRemove && (
+        // 삭제 = 선언 철회. 요청 카드는 함께 사라지고, 표 본문(IDB)은 남아
+        // 미분류로 흘러간다 — 데이터를 지우는 버튼이 아니다.
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`${line.category} 분석 카드 삭제`}
+          title="분석 카드 삭제 — 등록한 데이터 본문은 미분류로 남습니다"
+          className="shrink-0 px-xxs rounded-md text-brand-muted-soft opacity-0 group-hover/row:opacity-100 focus:opacity-100 hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-all"
+        >
+          <TrashMini />
+        </button>
+      )}
     </div>
+  );
+}
+
+/** 줄의 삭제 버튼 아이콘 — 14px 인라인 SVG 관례. */
+function TrashMini() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
   );
 }
 
