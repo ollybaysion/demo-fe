@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { newId as sharedNewId } from "@/lib/id";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import {
   type ChatError,
@@ -40,17 +41,30 @@ import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
 import { EquipmentPanel } from "./context";
 import { EquipmentDetailDrawer } from "./context/EquipmentDetailDrawer";
-import { derivePanel, equipmentCardId, parseLabel } from "./context/derive-cards";
+import { equipmentCardId, parseLabel } from "./context/derive-cards";
+import { deriveWorkbenchPanel } from "./context/workbench-derive";
 import {
   judgeChatData,
-  toRunDecls,
   type PanelJudgeEvent,
 } from "@/lib/chat-data";
+import { type Skill, type SkillSession } from "@/lib/skills";
 import {
-  equipmentInputKey,
-  type Skill,
-  type SkillSession,
-} from "@/lib/skills";
+  allAnalyses,
+  EMPTY_WORKBENCH as EMPTY_TREE,
+  fulfillRequestCard,
+  loadWorkbench as loadWorkbenchTree,
+  openAnalysis,
+  ownerOfSnapshot,
+  reconcileRequestCards,
+  referencedSnapshotIds,
+  runRefOf,
+  sameRun,
+  saveWorkbench as saveWorkbenchTree,
+  toRunDecls,
+  upsertEquipment,
+  type Workbench as WorkbenchTree,
+  type WireRequest,
+} from "@/lib/workbench-cards";
 import {
   clearPendingWorkbench,
   EMPTY_WORKBENCH,
@@ -120,7 +134,8 @@ type DemoMeta = { scenarioId: string; turnIndex: number };
 type DemoState = DemoMeta & { ended: boolean };
 
 function newId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  // 메시지·이벤트 id — 대화 저장에 영속되므로 공유 UUID 생성기를 쓴다.
+  return sharedNewId();
 }
 
 export function ChatContainer() {
@@ -259,7 +274,6 @@ export function ChatContainer() {
   const {
     open: openRequests,
     receive: receiveRequests,
-    reconcile: reconcileRequests,
     fulfill: fulfillRequest,
     clearFulfilled: clearFulfilledRequests,
     clear: clearRequests,
@@ -282,15 +296,34 @@ export function ChatContainer() {
     pendingJudgeRef.current = event;
   }, []);
 
-  // "설비 추가"로 연 스킬 세션 — 설비 하나를 스킬 하나로 본다. 여기 등록된 것이
-  // 좌측 카드(입력·요청)의 출처다.
-  const [skillSessions, setSkillSessions] = useState<SkillSession[]>([]);
-  // 직접 등록한 설비 — **스킬과 무관**하다. 설비만 넣고 채팅부터 시작할 수 있어야
-  // 하므로(진입 1단), 우측 설비 카드의 씨앗은 세션이 아니라 이 목록이다.
-  const [seedEquipments, setSeedEquipments] = useState<string[]>([]);
-  /** 설비 → 사람이 고른 라인. 채팅에서 파생된 설비는 여기 없다(라인을 모른다). */
-  const [equipmentLines, setEquipmentLines] = useState<Record<string, string>>(
-    {},
+  /**
+   * 작업판 트리 — 설비⊃분석⊃카드 3종 보관물의 정본(#168). 대화와 무관하게
+   * 살고(localStorage 영속), 새 대화·대화 전환에서 초기화하지 않는다.
+   * SSR 첫 렌더와의 hydration 불일치를 피하려고 빈 트리로 시작해 클라이언트
+   * 마운트 후 복원한다.
+   */
+  const [tree, setTree] = useState<WorkbenchTree>(EMPTY_TREE);
+  const [treeHydrated, setTreeHydrated] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTree(loadWorkbenchTree());
+    setTreeHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (treeHydrated) saveWorkbenchTree(tree);
+  }, [tree, treeHydrated]);
+  /** 구식 호환 뷰 — 대화 저장 형식·질의 스코프가 아직 세션 목록을 읽는다. */
+  const legacySessions: SkillSession[] = useMemo(
+    () =>
+      tree.equipments.flatMap((eq) =>
+        eq.analyses.map((an) => ({
+          id: an.id,
+          equipment: eq.name,
+          skill: an.skill,
+          values: an.args,
+        })),
+      ),
+    [tree],
   );
   // 질의 대상 — 사용자가 트레이에 담은 설비·분석. 이 질문이 무엇을 놓고 하는
   // 질문인지이며, 담긴 게 없으면 지금까지처럼 대화 맥락 전체를 본다.
@@ -365,17 +398,6 @@ export function ChatContainer() {
       skill: Skill | null,
       values: Record<string, string>,
     ) => {
-      // 설비 카드부터 세운다 — 스킬이 붙든 안 붙든 이건 늘 한다.
-      setSeedEquipments((prev) =>
-        prev.includes(equipment) ? prev : [...prev, equipment],
-      );
-      // 라인은 고른 사람이 있을 때만 기억한다 — 안 고른 것을 빈 값으로 덮어쓰면
-      // 앞서 고른 라인이 다시 등록 한 번에 사라진다.
-      if (line) {
-        setEquipmentLines((prev) =>
-          prev[equipment] === line ? prev : { ...prev, [equipment]: line },
-        );
-      }
       // 아직 아무것도 안 담겼으면 방금 등록한 설비를 담는다 — 등록하자마자 묻는
       // 사람에게 "어느 설비인지 모르겠습니다"가 돌아오면 안 된다. 이미 담아 둔 게
       // 있으면 건드리지 않는다: 그건 사용자가 정한 범위다.
@@ -388,25 +410,16 @@ export function ChatContainer() {
         key: equipmentCardId(equipment),
         n: prev.n + 1,
       }));
-      if (!skill) return;
-
-      const eqKey = equipmentInputKey(skill);
-      const session: SkillSession = {
-        id: newId(),
-        equipment,
-        skill,
-        // 값은 세션 안에 둔다 — 같은 스킬을 두 설비에 걸어도 서로 안 덮어쓰게.
-        values: { ...(eqKey ? { [eqKey]: equipment } : {}), ...values },
-      };
-      setSkillSessions((prev) =>
-        // 같은 설비를 같은 스킬로 두 번 등록하면 카드가 겹쳐 쌓이기만 한다.
-        prev.some(
-          (s) => s.equipment === equipment && s.skill.skill === skill.skill,
-        )
-          ? prev
-          : [...prev, session],
-      );
-      // 세션은 카드를 직접 세우지 않는다 — 판정이 선언(runs[])을 보고 첫 카드를 연다.
+      // 설비 카드부터 세운다 — 스킬이 붙든 안 붙든 이건 늘 한다. 같은 이름은
+      // 병합이고, 스킬까지 정해졌으면 그 안에 분석 카드가 함께 선다(같은 run
+      // 재등록은 기존 카드 유지).
+      if (!skill) {
+        setTree((prev) => upsertEquipment(prev, equipment, line));
+        return;
+      }
+      setTree((prev) => openAnalysis(prev, equipment, line, skill, values).wb);
+      // 분석 카드는 요청 카드를 직접 세우지 않는다 — 판정이 선언(runs[])을 보고
+      // 첫 카드를 연다.
       requestJudge({ type: "session-registered" });
     },
     [requestJudge],
@@ -418,15 +431,15 @@ export function ChatContainer() {
     ? snapshots
     : snapshots.filter((s) => sessionSnapshotIds.has(s.id));
 
-  // 요청 카드는 **서버 판정이 만든다**(#163 — 카드 진실원 단일화). "설비 추가"로
-  // 등록한 스킬 세션은 카드를 직접 파생하지 않고 판정 입력(`runs[]` 선언)으로만
-  // 나간다 — SQL·조회 키를 클라이언트가 또 만들면 진실원이 셋이 된다. 세션이
-  // 생기거나 값이 바뀌면 판정이 다시 돌아 카드가 갱신된다.
-  const { equipmentCards, groups: dataGroups } = derivePanel(
-    [...openRequests],
+  // 요청 카드는 **서버 판정이 만든다**(#163 — 카드 진실원 단일화). 화면은 작업판
+  // 트리(설비⊃분석⊃카드)를 읽어 옮겨 담을 뿐이다 — 라벨 파싱 없음. 트리의 data
+  // 카드는 세션 스코프와 무관하게 본문을 찾는다(보관물이 스코프 토글로 사라지면
+  // 그게 곧 "카드가 죽는" 증상이다). 미분류·구식 릴레이 요청만 스코프를 따른다.
+  const { equipmentCards, groups: dataGroups } = deriveWorkbenchPanel(
+    tree,
+    snapshots,
     scopedSnapshots,
-    seedEquipments,
-    equipmentLines,
+    [...openRequests],
   );
   const detailCard =
     equipmentCards.find((c) => c.id === detailCardId) ?? null;
@@ -473,15 +486,13 @@ export function ChatContainer() {
     prunedScope.length === 0
       ? scopedSnapshots
       : scopedSnapshots.filter((s) => {
-          const { equipment, category } = parseLabel(s.label);
-          if (!equipment) return true;
+          // 소속은 트리가 안다 — 어느 분석의 data 카드가 이 본문을 참조하는가.
+          const owner = ownerOfSnapshot(tree, s.id);
+          if (!owner) return true; // 미소속(붙여넣기)은 스코프와 무관하게 남긴다.
           return (
-            hasEquipment(prunedScope, equipment) ||
+            hasEquipment(prunedScope, owner.equipment.name) ||
             prunedScope.some(
-              (i) =>
-                i.kind === "analysis" &&
-                i.equipment === equipment &&
-                i.category === category,
+              (i) => i.kind === "analysis" && i.lineKey === owner.analysis.id,
             )
           );
         });
@@ -491,26 +502,42 @@ export function ChatContainer() {
   // 저장 쪽이 내용으로 비교하므로(`sameWorkbench`) 되쓰기가 나지 않는다.
   const workbench: Workbench = useMemo(
     () => ({
-      seedEquipments,
-      equipmentLines,
-      skillSessions,
+      // 저장 형식은 구식 그대로 — 트리에서 내려 담는다(옛 저장분과 호환).
+      seedEquipments: tree.equipments.map((e) => e.name),
+      equipmentLines: Object.fromEntries(
+        tree.equipments
+          .filter((e): e is typeof e & { line: string } => e.line !== null)
+          .map((e) => [e.name, e.line]),
+      ),
+      skillSessions: legacySessions,
       sessionSnapshotIds: [...sessionSnapshotIds],
       queryScope,
     }),
-    [
-      seedEquipments,
-      equipmentLines,
-      skillSessions,
-      sessionSnapshotIds,
-      queryScope,
-    ],
+    [tree, legacySessions, sessionSnapshotIds, queryScope],
   );
 
-  /** 대화에 붙은 작업판을 화면에 세운다. 없으면 빈 작업판 — 전부 비운다. */
+  /**
+   * 대화에 붙은 작업판을 화면에 세운다. 설비·분석은 전역 보관물이라 지우지
+   * 않고 트리에 **병합**한다(#168 — 옛 대화 저장분의 승계가 이 병합이다).
+   * 대화에 매인 것(스코프·세션 스냅샷)만 그대로 되돌린다.
+   */
   const applyWorkbench = useCallback((next: Workbench) => {
-    setSeedEquipments(next.seedEquipments);
-    setEquipmentLines(next.equipmentLines);
-    setSkillSessions(next.skillSessions);
+    setTree((prev) => {
+      let wb = prev;
+      for (const name of next.seedEquipments) {
+        wb = upsertEquipment(wb, name, next.equipmentLines[name] ?? null);
+      }
+      for (const s of next.skillSessions) {
+        wb = openAnalysis(
+          wb,
+          s.equipment,
+          next.equipmentLines[s.equipment] ?? null,
+          s.skill,
+          s.values,
+        ).wb;
+      }
+      return wb;
+    });
     setSessionSnapshotIds(new Set(next.sessionSnapshotIds));
     setQueryScope(next.queryScope);
   }, []);
@@ -591,7 +618,9 @@ export function ChatContainer() {
   const judgeStateRef = useRef({
     messages,
     sentSnapshots,
-    skillSessions,
+    snapshots,
+    tree,
+    legacySessions,
     prunedScope,
     inputValues,
     demoState,
@@ -602,7 +631,9 @@ export function ChatContainer() {
     judgeStateRef.current = {
       messages,
       sentSnapshots,
-      skillSessions,
+      snapshots,
+      tree,
+      legacySessions,
       prunedScope,
       inputValues,
       demoState,
@@ -636,6 +667,19 @@ export function ChatContainer() {
       setJudging(true);
     }
 
+    // 판정에는 트리가 참조하는 본문이 스코프와 무관하게 실려야 한다 — 절차
+    // 진행은 대화(세션)보다 오래 살고, 이게 빠지면 BE 가 "미도착"으로 오판해
+    // 이미 채운 카드를 다시 연다.
+    const treeSnapIds = referencedSnapshotIds(state.tree);
+    const judgeSnapshots = [
+      ...state.sentSnapshots,
+      ...state.snapshots.filter(
+        (s) =>
+          treeSnapIds.has(s.id) &&
+          !state.sentSnapshots.some((t) => t.id === s.id),
+      ),
+    ];
+
     void judgeChatData(
       {
         eventId: newId(),
@@ -645,9 +689,9 @@ export function ChatContainer() {
           role: m.role,
           content: m.content,
         })),
-        snapshots: toChatPayload(state.sentSnapshots),
-        runs: toRunDecls(state.skillSessions),
-        scope: toChatScope(state.prunedScope, state.skillSessions),
+        snapshots: toChatPayload(judgeSnapshots),
+        runs: toRunDecls(state.tree),
+        scope: toChatScope(state.prunedScope, state.legacySessions),
         inputs: toChatInputs(state.inputValues),
       },
       {
@@ -686,7 +730,16 @@ export function ChatContainer() {
         if (!done) return; // 무음 폴백 — BE 없는 환경에서 에러 풍선 금지.
         // 낡은 응답 폐기 — 이 판정 뒤에 새 판정이 이미 나갔다면 그쪽이 진실이다.
         if (revision !== judgeRevisionRef.current) return;
-        reconcileRequests(done.openRequests ?? []);
+        // 카드는 트리에 앉는다 — 각 분석의 request 카드만 전량 교체된다.
+        // run 참조가 어느 분석과도 안 맞는 카드는 버린다(선언은 트리에서
+        // 나갔으므로 정상 경로에선 없다 — 소속을 지어내지 않는다).
+        setTree(
+          (prev) =>
+            reconcileRequestCards(
+              prev,
+              (done.openRequests ?? []) as WireRequest[],
+            ).wb,
+        );
       })
       .finally(() => {
         clearTimeout(timeoutId);
@@ -727,7 +780,9 @@ export function ChatContainer() {
             dataSnapshots: demoMeta ? undefined : toChatPayload(sentSnapshots),
             // 사용자가 담은 질의 대상 — 이 질문이 무엇을 놓고 하는 질문인지.
             // 담긴 게 없으면 필드가 빠져 지금까지와 같은 본문으로 나간다.
-            scope: demoMeta ? undefined : toChatScope(prunedScope, skillSessions),
+            scope: demoMeta
+              ? undefined
+              : toChatScope(prunedScope, legacySessions),
             // 채운 스칼라 입력 — 스킬 네임스페이스. sticky 라 대화 내내 실려 나가
             // 백엔드가 후속 턴마다 그 값으로 스킬을 이어간다. 데모는 싣지 않는다.
             inputs: demoMeta
@@ -825,22 +880,38 @@ export function ChatContainer() {
             // 데모 재생 중에는 만들지 않는다(시나리오 결정론 보존).
             // 패널은 상주라 따로 열 필요가 없다 — 카드가 최상단에 바로 뜬다.
             if (hasDataRequests && !demoMeta) {
-              const originIndex = findLastIndex(
-                history,
-                (m) => m.role === "user",
+              // run 참조가 트리의 분석과 맞는 카드는 판정이 트리에 앉힌다 —
+              // 여기서 구식 store 에도 넣으면 같은 카드가 두 곳에 선다.
+              const analyses = allAnalyses(judgeStateRef.current.tree);
+              const matched = payload.dataRequests!.filter((r) =>
+                analyses.some((a) => sameRun(runRefOf(a), r.run)),
               );
-              const origin = originIndex === -1 ? undefined : history[originIndex];
-              if (origin) {
-                receiveRequests(payload.dataRequests!, origin.id);
+              const alien = payload.dataRequests!.filter(
+                (r) => !analyses.some((a) => sameRun(runRefOf(a), r.run)),
+              );
+              if (matched.length > 0) {
+                // 트리 반영은 판정 왕복 하나로 통일한다(카드 진실원 = 판정).
+                requestJudge({ type: "chat-requests" });
               }
-              // 강조는 오른쪽 — 요청이 낳은 설비 카드를 우측에서 펼치고 깜빡인다.
-              const eq = parseLabel(payload.dataRequests![0].label).equipment;
-              if (eq) {
-                setRightTab("context");
-                setEquipmentFocus((prev) => ({
-                  key: equipmentCardId(eq),
-                  n: prev.n + 1,
-                }));
+              if (alien.length > 0) {
+                const originIndex = findLastIndex(
+                  history,
+                  (m) => m.role === "user",
+                );
+                const origin =
+                  originIndex === -1 ? undefined : history[originIndex];
+                if (origin) {
+                  receiveRequests(alien, origin.id);
+                }
+                // 강조는 오른쪽 — 요청이 낳은 설비 카드를 우측에서 펼치고 깜빡인다.
+                const eq = parseLabel(alien[0].label).equipment;
+                if (eq) {
+                  setRightTab("context");
+                  setEquipmentFocus((prev) => ({
+                    key: equipmentCardId(eq),
+                    n: prev.n + 1,
+                  }));
+                }
               }
             }
             // 입력 카드도 데이터 패널이 안는다 — 스칼라라 출처 매기 없이 (skill,key)
@@ -869,10 +940,11 @@ export function ChatContainer() {
     [
       sentSnapshots,
       prunedScope,
-      skillSessions,
+      legacySessions,
       inputValues,
       receiveRequests,
       receiveInputRequests,
+      requestJudge,
       setEquipmentFocus,
     ],
   );
@@ -1034,14 +1106,12 @@ export function ChatContainer() {
     setMessages([]);
     setIsStreaming(false);
     setDemoState(null);
-    // 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라져야 한다.
-    // 스냅샷은 반대로 남는다(대화와 독립된 보관물). 채운 입력도 대화에 매인 것이라
-    // 함께 걷어낸다(sticky 지만 새 대화에는 이월하지 않는다).
+    // 구식 릴레이 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라진다.
+    // 채운 입력도 대화에 매인 것이라 함께 걷어낸다(새 대화에 이월하지 않는다).
     clearRequests();
     clearInputs();
-    // 등록한 설비·스킬도 그 대화의 것이다 — 카드가 새 대화로 넘어오면 안 된다.
-    setSkillSessions([]);
-    setSeedEquipments([]);
+    // 작업판 트리(설비⊃분석⊃카드)는 **건드리지 않는다** — 대화와 무관한
+    // 보관물이다(#168). 설비 카드가 새 대화에서 죽는 일은 더 없다.
     setQueryScope([]);
     // 새 세션 — 예전 대화가 등록한 스냅샷은 기본 스코프에서 빠진다('전체'에서만).
     setSessionSnapshotIds(new Set());
@@ -1058,8 +1128,8 @@ export function ChatContainer() {
       setHistoryOpen(false);
       clearRequests();
       clearInputs();
-      setSkillSessions([]);
-      setSeedEquipments([]);
+      // 트리는 유지 — 대화 전환은 보관물을 건드리지 않는다. 스코프·세션
+      // 스냅샷은 load 효과의 applyWorkbench 가 그 대화의 것으로 되돌린다.
       setQueryScope([]);
       setSessionSnapshotIds(new Set());
       selectConversation(id);
@@ -1108,6 +1178,10 @@ export function ChatContainer() {
       const result = addSnapshot(input, label, opts);
       if (result.ok) {
         fulfillRequest(opts.queryKey);
+        // 같은 자리의 request 카드가 data 카드로 전이한다 — 본문은 IDB 참조.
+        setTree((prev) =>
+          fulfillRequestCard(prev, opts.queryKey, result.snapshot.id),
+        );
         rememberSessionSnapshot(result.snapshot.id);
         requestJudge({ type: "snapshot-registered", queryKey: opts.queryKey });
       }
@@ -1130,6 +1204,10 @@ export function ChatContainer() {
       const result = addEmptyResult(label, opts);
       if (result.ok) {
         fulfillRequest(opts.queryKey);
+        // 0행도 채운 것이다 — 같은 자리의 카드가 data 로 전이한다.
+        setTree((prev) =>
+          fulfillRequestCard(prev, opts.queryKey, result.snapshot.id),
+        );
         rememberSessionSnapshot(result.snapshot.id);
         requestJudge({ type: "snapshot-registered", queryKey: opts.queryKey });
       }
@@ -1218,6 +1296,16 @@ export function ChatContainer() {
     }
     return undefined;
   }, [messages, fulfilledRequestsFor]);
+
+  // 아직 채울 카드가 남았는가 — 구식 store 와 트리의 request 카드를 합쳐 센다.
+  const treeOpenRequestCount = useMemo(
+    () =>
+      allAnalyses(tree).reduce(
+        (n, a) => n + a.cards.filter((c) => c.type === "request").length,
+        0,
+      ),
+    [tree],
+  );
 
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
@@ -1366,7 +1454,8 @@ export function ChatContainer() {
             {messages.length > 0 &&
               !isStreaming &&
               ackOrigin &&
-              openRequests.length === 0 && (
+              openRequests.length === 0 &&
+              treeOpenRequestCount === 0 && (
                 <SuggestedQuestions
                   onSelect={handleSubmit}
                   questions={["등록 완료"]}

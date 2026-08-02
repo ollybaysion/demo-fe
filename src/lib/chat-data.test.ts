@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toRunDecls } from "./chat-data";
-import type { Skill, SkillSession } from "./skills";
+import type { Skill } from "./skills";
+import { EMPTY_WORKBENCH, openAnalysis, toRunDecls } from "./workbench-cards";
 
 const SKILL: Skill = {
   skill: "fdc_trace_reading",
@@ -15,22 +15,19 @@ const SKILL: Skill = {
   steps: [],
 };
 
-describe("toRunDecls", () => {
-  it("세션이 없으면 선언도 없다 — 필드 자체가 빠진다", () => {
-    expect(toRunDecls([])).toBeUndefined();
+describe("toRunDecls (작업판 트리)", () => {
+  it("분석 카드가 없으면 선언도 없다 — 필드 자체가 빠진다", () => {
+    expect(toRunDecls(EMPTY_WORKBENCH)).toBeUndefined();
   });
 
   it("설비명이 채우는 인자를 채워 spec 이름으로 선언한다", () => {
-    const session: SkillSession = {
-      id: "s1",
-      equipment: "CVD-01",
-      skill: SKILL,
-      values: { param_index: "7" },
-    };
-    expect(toRunDecls([session])).toEqual([
+    const { wb } = openAnalysis(EMPTY_WORKBENCH, "CVD-01", null, SKILL, {
+      param_index: "7",
+    });
+    expect(toRunDecls(wb)).toEqual([
       {
         skill: "fdc-trace-reading",
-        args: { param_index: "7", equipment: "CVD-01" },
+        args: { equipment: "CVD-01", param_index: "7" },
       },
     ]);
   });

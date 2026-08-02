@@ -315,6 +315,11 @@ export type DataRequest = {
    * 없을 수 있다.
    */
   timeRange?: { start: string; end: string };
+  /**
+   * 이 카드가 속한 절차 실행(스킬 + 원문 인자) — 설비→분석 계층에 앉히는 근거.
+   * `queryKey` 는 손실 인코딩이라 역파싱하면 안 되고, 소속은 이 필드가 정본이다.
+   */
+  run?: { skill: string; args: Record<string, string> };
 };
 
 /**

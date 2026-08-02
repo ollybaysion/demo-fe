@@ -9,7 +9,6 @@
  */
 
 import { parseSseStream } from "./sse";
-import { equipmentInputKey, type SkillSession } from "./skills";
 import type { ChatDataSnapshot, ChatInputs, DataRequest } from "./types";
 
 /** 절차의 명시 선언 — BE 판정 입력. `args` 는 **인자 원문 채널**이다(#38 T1·T3). */
@@ -45,22 +44,8 @@ export type ChatDataDone = {
   narratedRun?: string;
 };
 
-/**
- * 스킬 세션 → 절차 선언. 설비명이 채우는 인자를 여기서 채운다 — 요청 카드를
- * 클라이언트가 만들던 시절의 `skillDataRequests` 와 같은 규칙이되, 이제 SQL 은
- * BE 가 만들고 세션은 **선언만** 나른다.
- */
-export function toRunDecls(sessions: SkillSession[]): RunDecl[] | undefined {
-  if (sessions.length === 0) return undefined;
-  return sessions.map((session) => {
-    const args: Record<string, string> = { ...session.values };
-    const eq = equipmentInputKey(session.skill);
-    if (eq) args[eq] = session.equipment;
-    // spec 이름(하이픈) — BE 풀·queryKey 가 쓰는 정식 표기다(툴 이름도 흡수되지만
-    // 카드 키가 이 표기로 돌아오므로 처음부터 맞춰 보낸다).
-    return { skill: session.skill.name, args };
-  });
-}
+// 절차 선언은 작업판 트리에서 나온다 — `workbench-cards.toRunDecls`(분석 카드
+// 하나 = run 하나). 세션 목록에서 만들던 이전 판은 트리 도입으로 사라졌다.
 
 export type JudgeBody = {
   eventId: string;

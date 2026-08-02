@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { newId as sharedNewId } from "@/lib/id";
 import { maybeApplyDevSeed } from "@/lib/dev-seed";
 import { loadSnapshots, persistSnapshots } from "@/lib/snapshot-idb";
 import { parseSnapshot, toQueryKey } from "@/lib/snapshot-parse";
@@ -34,7 +35,9 @@ import type { DataSnapshot } from "@/lib/types";
 function newId(): string {
   // `snap-` 접두사 덕에 이 id 는 엔진 query_id 패턴을 그대로 만족한다 —
   // 라벨을 슬러그로 접을 수 없을 때 fallback 으로 쓸 수 있는 이유.
-  return `snap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  // 작업판 트리의 data 카드가 이 id 를 영속 참조하므로 충돌은 소속 오염이다 —
+  // UUID(122비트)로 만든다.
+  return sharedNewId("snap-");
 }
 
 export type AddSnapshotResult =
