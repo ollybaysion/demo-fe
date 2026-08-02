@@ -194,6 +194,7 @@
   --animate-cursor-blink: cursor-blink 800ms ease-in-out infinite;
   --animate-typing-bounce: typing-bounce 600ms ease-in-out infinite;
   --animate-step-rise: step-rise 200ms cubic-bezier(0, 0, 0.2, 1);
+  --animate-tip-fade: tip-fade 400ms ease-out;
 }
 
 @keyframes cursor-blink {
@@ -225,6 +226,54 @@
   40% {
     transform: translateY(-4px);
     opacity: 1;
+  }
+}
+
+/* ==========================================================================
+ * 시작 화면 글꼴 세트 — <html data-font="..."> (src/lib/font-set.ts)
+ *
+ * 시작 화면의 제목·팁·부제만 이 변수를 쓴다. 기본은 Pretendard 로, 제목은
+ * 굵기(700)로 세우고 팁은 500 으로 받친다. 대안 두 벌은 얼굴이 아주 다른
+ * 쪽으로만 남겼다 — 부드러운 명조(고운바탕+고운돋움), 각진 고딕(Gothic A1).
+ * ========================================================================== */
+
+:root {
+  --font-hero-head: var(--font-pretendard), var(--font-inter), sans-serif;
+  --font-hero-body: var(--font-pretendard), var(--font-inter), sans-serif;
+  --font-hero-head-weight: 700;
+  --font-hero-body-weight: 500;
+}
+
+[data-font="gowun"] {
+  --font-hero-head: var(--font-gowun-batang), serif;
+  --font-hero-body: var(--font-gowun-dodum), sans-serif;
+  --font-hero-head-weight: 400;
+  --font-hero-body-weight: 400;
+}
+
+[data-font="gothic-a1"] {
+  --font-hero-head: var(--font-gothic-a1), sans-serif;
+  --font-hero-body: var(--font-gothic-a1), sans-serif;
+  --font-hero-head-weight: 700;
+  --font-hero-body-weight: 400;
+}
+
+/* 한 줄 팁이 바뀐다 — 자리를 지킨 채 문구만 갈린다(4px 은 들썩임이 아니라 숨). */
+@keyframes tip-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 움직임을 줄이도록 설정했다면 문구는 그대로 바뀌되 미끄러지지 않는다. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-tip-fade {
+    animation: none;
   }
 }
 

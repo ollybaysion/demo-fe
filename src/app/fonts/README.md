@@ -22,6 +22,20 @@
 | `noto-serif-kr-400.woff2` / `noto-serif-kr-500.woff2` | Noto Serif KR 400/500 (latin subset) | `@fontsource/noto-serif-kr` |
 | `pretendard-variable.woff2` | Pretendard Variable (45~920) | `pretendard` npm |
 | `d2coding-subset.woff2` | D2Coding subset 400 | `d2coding` npm |
+| `gowun-batang-kr-400.woff2` | Gowun Batang 400 (korean subset) | `@fontsource/gowun-batang` |
+| `gowun-dodum-kr-400.woff2` | Gowun Dodum 400 (korean subset) | `@fontsource/gowun-dodum` |
+| `gothic-a1-kr-400.woff2` / `gothic-a1-kr-700.woff2` | Gothic A1 400/700 (korean subset) | `@fontsource/gothic-a1` |
+
+## 한글 글리프 주의
+
+`noto-serif-kr-400/500.woff2` 는 **latin 서브셋**이다 — 한글 글리프가 없어
+`--font-display` 로 한글을 쓰면 self-host 가 아니라 **시스템 폴백**으로
+그려진다(보는 환경마다 얼굴이 달라진다). 한글을 실제로 그려야 하는 자리에는
+`-kr-` 가 붙은 korean 서브셋(위 표의 아래 세 줄)이나 Pretendard 를 쓴다.
+
+시작 화면(팁·제목·부제)은 `--font-hero-*` 변수를 따르고, 값은
+`<html data-font="...">` 로 갈린다 — `src/lib/font-set.ts`, 설정 모달의
+"시작 화면 글꼴".
 
 ## 폰트 교체/추가 시
 

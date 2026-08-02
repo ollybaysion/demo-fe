@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { applyFontSet, type FontSet } from "@/lib/font-set";
 import { readJson, writeJson } from "@/lib/storage";
 import { applyTheme, type Theme } from "@/lib/theme";
 
@@ -8,7 +9,8 @@ import { applyTheme, type Theme } from "@/lib/theme";
  * 설정 화면 — 테마 확장 포함.
  *
  * 테마는 light / dark / sepia / cool-gray / high-contrast / system 6종.
- * 폰트 / 언어 / 모델 은 v1 UI 자리 — 실제 동작은 후속 PR.
+ * 시작 화면 글꼴은 3종(기본 Pretendard). 언어 / 모델 은 v1 UI 자리 —
+ * 실제 동작은 후속 PR.
  */
 
 export type ThemeOption = Theme;
@@ -18,6 +20,8 @@ export type ModelOption = "default";
 export type Settings = {
   theme: ThemeOption;
   fontSize: FontSizeOption;
+  /** 시작 화면(팁·제목·부제)의 글꼴 세트. */
+  fontSet: FontSet;
   /** 현재 ko 만 지원. 다국어는 별도 이슈. */
   language: "ko";
   model: ModelOption;
@@ -28,6 +32,7 @@ const SETTINGS_KEY = "fdc-fe.settings.v1";
 const DEFAULT_SETTINGS: Settings = {
   theme: "cool-gray",
   fontSize: "md",
+  fontSet: "pretendard",
   language: "ko",
   model: "default",
 };
@@ -48,6 +53,7 @@ export function SettingsModal({ open, onClose }: Props) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSettings(stored);
     applyTheme(stored.theme);
+    applyFontSet(stored.fontSet ?? DEFAULT_SETTINGS.fontSet);
   }, []);
 
   // 변경 즉시 저장 (별도 [저장] 버튼 없음 — 도움말 / 채팅 등 다른
@@ -57,6 +63,7 @@ export function SettingsModal({ open, onClose }: Props) {
       const next = { ...prev, [key]: value };
       writeJson(SETTINGS_KEY, next);
       if (key === "theme") applyTheme(value as Theme);
+      if (key === "fontSet") applyFontSet(value as FontSet);
       return next;
     });
   }
@@ -113,6 +120,18 @@ export function SettingsModal({ open, onClose }: Props) {
               { value: "cool-gray", label: "쿨 그레이" },
               { value: "high-contrast", label: "고대비" },
               { value: "system", label: "시스템 따라가기" },
+            ]}
+          />
+
+          <RadioGroup
+            label="시작 화면 글꼴"
+            name="fontSet"
+            value={settings.fontSet}
+            onChange={(v) => update("fontSet", v as FontSet)}
+            options={[
+              { value: "pretendard", label: "기본" },
+              { value: "gowun", label: "명조" },
+              { value: "gothic-a1", label: "고딕" },
             ]}
           />
 

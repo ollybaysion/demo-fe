@@ -58,27 +58,30 @@ export function ScopeTray({
       onDrop={handleDrop}
       aria-label="질의 대상"
       className={[
-        "mb-xs flex items-center gap-sm rounded-lg px-sm py-xs min-h-[52px] transition-colors",
+        // 높이는 담겼을 때(칩 한 줄) 기준으로 고정한다 — 비었다고 낮아지면
+        // 카드를 누르는 순간 입력창이 아래로 밀린다. 늘 같은 자리여야 한다.
+        "mb-xs flex items-center gap-sm rounded-md px-xxs py-xxs min-h-[40px] transition-colors",
+        // 상자는 끌어 오는 동안에만 그린다 — 놓을 자리를 그때 보여주면 된다.
         over
           ? "border border-brand-primary bg-brand-primary/5 ring-4 ring-brand-primary/10"
-          : items.length > 0
-            ? "border border-brand-hairline"
-            : "border border-dashed border-brand-hairline",
+          : "border border-transparent",
       ].join(" ")}
     >
-      <span className="shrink-0 text-[11px] font-medium tracking-wide text-brand-muted-soft">
+      {/* 면을 걷은 뒤로는 글자가 이 자리의 전부다 — 색까지 옅으면 없는 것처럼
+          보인다. muted-soft 는 캔버스 위에서 2.3:1 이라 대비 기준에도 못 미쳤다. */}
+      <span className="shrink-0 text-[11px] font-medium tracking-wide text-brand-muted">
         질의 대상
       </span>
       {items.length === 0 ? (
         <span
           className={[
             "text-caption",
-            over ? "text-brand-primary" : "text-brand-muted-soft",
+            over ? "text-brand-primary" : "text-brand-muted",
           ].join(" ")}
         >
-          {over
-            ? "여기에 놓기"
-            : "설비 카드를 여기로 끌어다 놓으세요 — 담긴 설비에 대해 질의합니다"}
+          {/* 비어 있음 = 대상 없음이 아니라 **전체**다 — 담긴 게 없으면 가진
+              데이터가 다 실려 나간다(스코프는 좁히는 장치다). */}
+          {over ? "여기에 놓기" : "전체 · 카드를 누르면 그 대상으로 좁혀집니다"}
         </span>
       ) : (
         <div className="flex-1 min-w-0 flex flex-wrap items-center gap-xxs">

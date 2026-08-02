@@ -1154,13 +1154,13 @@ export function ChatContainer() {
         >
           <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
             {/*
-              ChatInput 위 chip 슬롯 — 시점에 따라 두 모드 mutex.
-              - 메시지 0건 + 데모 아닌 빈 시작 화면: 예시 질문 chips
+              ChatInput 위 chip 슬롯 — 대화가 시작된 뒤에만 쓴다.
+              - 등록이 끝났을 때: 이어가기 안내
               - 어시스턴트 응답 후 (스트리밍 종료): 추천 후속 질문 chips
+
+              빈 시작 화면에는 두지 않는다. 그 자리에는 이미 팁과 왕복 두 줄이
+              무엇을 물을지 말하고 있어, chip 까지 놓으면 같은 말이 세 번이다.
             */}
-            {messages.length === 0 && !isStreaming && !demoState && (
-              <SuggestedQuestions onSelect={handleSubmit} />
-            )}
             {/* 충족된 요청이 있으면 추천보다 먼저 — 다음 걸음은 이어가기 발화다.
                 열린 요청이 남아 있으면 안내하지 않는다 — 아직 채울 카드가 있다.
                 (충족 요청의 정리는 handleSubmit 이 모든 발화에 대해 한다.) */}

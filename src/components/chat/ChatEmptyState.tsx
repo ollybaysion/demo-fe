@@ -1,6 +1,7 @@
 "use client";
 
 import { SNAPSHOT_DEMO_QUESTION } from "./data/request-samples";
+import { RotatingTip } from "./RotatingTip";
 
 /**
  * 입력 카드 왕복을 여는 질문 — 백엔드 MockLlm·FE mock route 의 request_input
@@ -18,55 +19,78 @@ type Props = {
   onQuickStart?: (question: string) => void;
 };
 
+const ROUNDTRIPS = [
+  {
+    question: SNAPSHOT_DEMO_QUESTION,
+    hint: "요청 카드 → 예시 결과 등록 → 다시 분석까지 클릭만으로 이어집니다.",
+  },
+  {
+    question: INPUT_DEMO_QUESTION,
+    hint: "입력 카드에 값(예: PARAM_INDEX)을 넣으면 자동으로 다시 분석합니다.",
+  },
+] as const;
+
+/**
+ * 빈 시작 화면.
+ *
+ * 위에서부터 팁 · 제목 · 괘선 · 부제 · 왕복 두 줄. 팁이 맨 위인 것은 화면을
+ * 열었을 때 가장 먼저 닿는 자리이기 때문이고, 왕복을 카드가 아니라 밑줄 그은
+ * 줄로 두는 것은 왼쪽 데이터 패널이 이미 카드 밭이어서다 — 시작 화면까지
+ * 카드로 채우면 무엇이 주인지 흐려진다.
+ *
+ * <p>글꼴은 `--font-hero-*`(설정 > 시작 화면 글꼴)를 따른다. 기본은
+ * Pretendard 이고, 명조·고딕 세트를 고를 수 있다.
+ */
 export function ChatEmptyState({ onQuickStart }: Props) {
   return (
-    <div className="py-section">
-      <div className="text-center">
-        <h2 className="font-display text-display-md text-brand-ink">
+    <div className="pt-xl pb-section">
+      <RotatingTip />
+
+      <div className="mt-xxl text-center">
+        <h2
+          className="text-brand-ink"
+          style={{
+            fontFamily: "var(--font-hero-head)",
+            fontWeight: "var(--font-hero-head-weight)" as unknown as number,
+            fontSize: 42,
+            lineHeight: 1.15,
+          }}
+        >
           무엇을 도와드릴까요?
         </h2>
-        <p className="mt-md text-body-md text-brand-muted">
-          입력창에 질문을 입력하거나, 아래 왕복을 눌러 흐름을 확인하세요.
+
+        {/* 짧은 괘선 — 제목과 부제 사이의 숨. 지면의 문법을 한 획만 빌린다. */}
+        <div className="mx-auto mt-lg h-px w-12 bg-brand-primary/40" />
+
+        <p
+          className="mt-lg text-body-md text-brand-muted"
+          style={{ fontFamily: "var(--font-hero-body)" }}
+        >
+          오른쪽 패널에서 설비를 먼저 추가해주세요.
         </p>
       </div>
 
       {onQuickStart && (
         <div
-          className="mt-xl mx-auto w-full flex flex-col gap-sm"
+          className="mt-xxl mx-auto w-full border-t border-brand-hairline"
           style={{ maxWidth: "640px" }}
         >
-          {/* 점선 테두리 — 정해진 대사 재생이 아니라 실 파이프라인을 그대로 탄다는 표시. */}
-          <button
-            type="button"
-            onClick={() => onQuickStart(SNAPSHOT_DEMO_QUESTION)}
-            className="block w-full text-left rounded-lg border border-dashed border-brand-primary/50 bg-brand-canvas px-md py-md hover:border-brand-primary hover:bg-brand-surface-card focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          >
-            <span className="inline-flex items-center h-5 px-xs rounded-full bg-brand-primary/15 text-brand-primary text-caption font-medium">
-              데이터 요청 왕복
-            </span>
-            <span className="mt-xxs block text-body-md text-brand-ink">
-              {SNAPSHOT_DEMO_QUESTION}
-            </span>
-            <span className="mt-xxs block text-caption text-brand-muted">
-              요청 카드 → 예시 결과 등록 → 다시 분석까지 클릭만으로 이어집니다.
-            </span>
-          </button>
-          {/* 스칼라 입력 왕복 — 데이터 요청(SQL 붙여넣기)과 다른 종류의 카드다. */}
-          <button
-            type="button"
-            onClick={() => onQuickStart(INPUT_DEMO_QUESTION)}
-            className="block w-full text-left rounded-lg border border-dashed border-brand-primary/50 bg-brand-canvas px-md py-md hover:border-brand-primary hover:bg-brand-surface-card focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          >
-            <span className="inline-flex items-center h-5 px-xs rounded-full bg-brand-primary/15 text-brand-primary text-caption font-medium">
-              입력 카드 왕복
-            </span>
-            <span className="mt-xxs block text-body-md text-brand-ink">
-              {INPUT_DEMO_QUESTION}
-            </span>
-            <span className="mt-xxs block text-caption text-brand-muted">
-              입력 카드에 값(예: PARAM_INDEX)을 넣으면 자동으로 다시 분석합니다.
-            </span>
-          </button>
+          {ROUNDTRIPS.map((r) => (
+            <button
+              key={r.question}
+              type="button"
+              onClick={() => onQuickStart(r.question)}
+              className="group block w-full border-b border-brand-hairline py-md text-left hover:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              <span className="text-body-md text-brand-ink group-hover:text-brand-primary transition-colors">
+                {r.question}
+              </span>
+              <span className="text-caption text-brand-primary"> →</span>
+              <span className="mt-xxs block text-caption text-brand-muted">
+                {r.hint}
+              </span>
+            </button>
+          ))}
         </div>
       )}
     </div>
