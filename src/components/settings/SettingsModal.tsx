@@ -129,9 +129,9 @@ export function SettingsModal({ open, onClose }: Props) {
             value={settings.fontSet}
             onChange={(v) => update("fontSet", v as FontSet)}
             options={[
-              { value: "pretendard", label: "기본 (Pretendard)" },
-              { value: "gowun", label: "명조 (고운바탕 · 고운돋움)" },
-              { value: "gothic-a1", label: "고딕 (Gothic A1)" },
+              { value: "pretendard", label: "기본" },
+              { value: "gowun", label: "명조" },
+              { value: "gothic-a1", label: "고딕" },
             ]}
           />
 
