@@ -182,12 +182,20 @@ export function toRunDecls(wb: Workbench): RunRef[] | undefined {
  * 못 건드린다. 같은 queryKey 의 기존 request 카드는 객체를 유지해(내용 같을 때)
  * 깜빡임을 막고, run 참조가 어느 분석과도 안 맞는 요청은 버리지 않고 반환해
  * 호출자가 구식 경로(미소속 표시)로 넘긴다.
+ *
+ * `snapshotIdByKey` 는 자가 치유 백필이다: 판정이 열라고 한 카드의 queryKey 와
+ * **정확히 일치**하는 스냅샷이 이미 로컬에 있으면(트리 도입 전 등록분 등) 요청
+ * 카드 대신 그 자리에 data 카드를 앉힌다 — 키는 BE 발급분과의 등치 비교뿐,
+ * 역파싱이 아니다. 백필이 있었으면 `backfilled` 로 알려 호출자가 판정을 한 번
+ * 더 돌리게 한다(도착이 실려야 다음 단계가 열린다).
  */
 export function reconcileRequestCards(
   wb: Workbench,
   open: WireRequest[],
-): { wb: Workbench; unmatched: WireRequest[] } {
+  snapshotIdByKey?: (queryKey: string) => string | undefined,
+): { wb: Workbench; unmatched: WireRequest[]; backfilled: number } {
   const unmatched: WireRequest[] = [];
+  let backfilled = 0;
   const byAnalysis = new Map<string, WireRequest[]>();
   for (const req of open) {
     const analysis = allAnalyses(wb).find((a) =>
@@ -222,8 +230,20 @@ export function reconcileRequestCards(
           // 이미 data 로 전이한 자리는 다시 열지 않는다 — 판정 직후 스냅샷이
           // 아직 페이로드에 없던 낡은 echo 가 카드를 되살리는 것을 막는다.
           .filter((r) => !fulfilled.has(r.queryKey))
-          .map((r) => {
+          .map((r): SnapshotCard => {
             const prev = prevReq.get(r.queryKey);
+            // 자가 치유 — 이 키의 데이터가 이미 로컬에 있으면 요청 대신 도착.
+            const snapId = snapshotIdByKey?.(r.queryKey);
+            if (snapId !== undefined) {
+              backfilled++;
+              return {
+                type: "data" as const,
+                id: prev?.id ?? newId("card_"),
+                queryKey: r.queryKey,
+                label: r.label,
+                snapshotId: snapId,
+              };
+            }
             if (prev && prev.label === r.label && prev.sql === r.sql) {
               return prev;
             }
@@ -243,7 +263,7 @@ export function reconcileRequestCards(
       }),
     })),
   };
-  return { wb: next, unmatched };
+  return { wb: next, unmatched, backfilled };
 }
 
 /**

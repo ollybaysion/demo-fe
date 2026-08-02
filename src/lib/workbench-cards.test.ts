@@ -123,6 +123,23 @@ describe("판정 반영 (request 카드)", () => {
     expect(next.equipments[0].analyses[0].cards).toHaveLength(0);
   });
 
+  it("로컬에 같은 키의 스냅샷이 있으면 요청 대신 data 카드로 백필한다", () => {
+    const { wb } = seeded();
+    const { wb: next, backfilled } = reconcileRequestCards(
+      wb,
+      [REQ1],
+      (key) => (key === REQ1.queryKey ? "snap-old" : undefined),
+    );
+    expect(backfilled).toBe(1);
+    const cards = next.equipments[0].analyses[0].cards;
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({
+      type: "data",
+      queryKey: REQ1.queryKey,
+      snapshotId: "snap-old",
+    });
+  });
+
   it("data 로 전이한 자리는 낡은 echo 가 다시 열지 못한다", () => {
     const { wb } = seeded();
     const opened = reconcileRequestCards(wb, [REQ1]).wb;

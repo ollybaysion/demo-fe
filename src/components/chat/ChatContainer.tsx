@@ -658,6 +658,20 @@ export function ChatContainer() {
     };
   });
 
+  /**
+   * 백필 후속 판정 — reconcile 이 로컬 데이터로 request→data 백필을 했으면,
+   * 그 도착이 페이로드에 실려야 다음 단계가 열리므로 한 번 더 판정한다.
+   * 백필이 없으면 0이라 멈춘다(수렴). 판정 effect **보다 먼저** 선언해야
+   * 같은 커밋에서 트리거가 읽힌다(effect 는 선언 순서대로 돈다).
+   */
+  const backfillRef = useRef(0);
+  useEffect(() => {
+    if (backfillRef.current > 0) {
+      backfillRef.current = 0;
+      pendingJudgeRef.current = { type: "data-backfill" };
+    }
+  });
+
   // deps 없음이 의도다: 어떤 상태가 바뀌었든 커밋마다 pendingJudgeRef 를 확인해야
   // 하고, 트리거가 없으면 첫 줄에서 반환하므로 setJudging 이 갱신 연쇄를 만들 수 없다.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -746,16 +760,28 @@ export function ChatContainer() {
         if (!done) return; // 무음 폴백 — BE 없는 환경에서 에러 풍선 금지.
         // 낡은 응답 폐기 — 이 판정 뒤에 새 판정이 이미 나갔다면 그쪽이 진실이다.
         if (revision !== judgeRevisionRef.current) return;
+        // 백필 조회 — 열라는 카드의 키와 정확히 일치하는 로컬 스냅샷(포함분,
+        // capturedAt 최신). 트리 도입 전 등록분이 여기서 제자리를 찾는다.
+        const latestByKey = new Map<string, { id: string; at: string }>();
+        for (const s of judgeStateRef.current.snapshots) {
+          if (!s.included || !s.queryKey) continue;
+          const cur = latestByKey.get(s.queryKey);
+          if (!cur || cur.at <= s.capturedAt) {
+            latestByKey.set(s.queryKey, { id: s.id, at: s.capturedAt });
+          }
+        }
         // 카드는 트리에 앉는다 — 각 분석의 request 카드만 전량 교체된다.
         // run 참조가 어느 분석과도 안 맞는 카드는 버린다(선언은 트리에서
         // 나갔으므로 정상 경로에선 없다 — 소속을 지어내지 않는다).
-        setTree(
-          (prev) =>
-            reconcileRequestCards(
-              prev,
-              (done.openRequests ?? []) as WireRequest[],
-            ).wb,
-        );
+        setTree((prev) => {
+          const r = reconcileRequestCards(
+            prev,
+            (done.openRequests ?? []) as WireRequest[],
+            (key) => latestByKey.get(key)?.id,
+          );
+          backfillRef.current += r.backfilled;
+          return r.wb;
+        });
       })
       .finally(() => {
         clearTimeout(timeoutId);
@@ -1392,7 +1418,6 @@ export function ChatContainer() {
               snapshots={scopedSnapshots}
               // 작업판 트리에서 파생한 그룹 — 질의 대상이 담겨 있으면 그 범위만.
               groups={visibleGroups}
-              guide={panelGuide}
               scopeAll={scopeAll}
               onToggleScope={() => setScopeAll((v) => !v)}
               focusGroupKey={groupFocus.key}
@@ -1471,6 +1496,13 @@ export function ChatContainer() {
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
+            {/* 다음 할 일 안내 — 조달 루프 상태에서 파생. 입력창 바로 위 가운데
+                영역이 "이제 뭘 하지"를 보는 자리다(채팅 버블 아님). */}
+            {panelGuide && !demoState && (
+              <p className="mb-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs text-caption text-brand-muted">
+                {panelGuide}
+              </p>
+            )}
             {/*
               ChatInput 위 chip 슬롯 — 대화가 시작된 뒤에만 쓴다.
               - 등록이 끝났을 때: 이어가기 안내

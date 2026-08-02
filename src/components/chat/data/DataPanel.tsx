@@ -111,11 +111,6 @@ type Props = {
   scopeAll?: boolean;
   onToggleScope?: () => void;
   /**
-   * 다음 할 일 안내 — 조달 루프의 현재 상태에서 파생된 한 줄. 채팅 버블이
-   * 아니라 패널 상단 스트립으로 산다(안내는 흐르는 대화가 아니라 상태다).
-   */
-  guide?: string | null;
-  /**
    * 오른쪽 줄을 누르면 그 그룹을 화면 안으로 끌어와 잠깐 깜빡인다.
    * **지속 상태가 아니다** — 한 번의 안내일 뿐이라, 사용자가 그 뒤에 그룹을
    * 접거나 다른 걸 봐도 어긋날 상태가 남지 않는다. `focusNonce` 가 바뀔 때마다
@@ -157,7 +152,6 @@ export function DataPanel({
   groups,
   scopeAll = false,
   onToggleScope,
-  guide,
   focusGroupKey,
   focusNonce = 0,
   focusRequestKey,
@@ -525,12 +519,6 @@ export function DataPanel({
           ].join(" ")}
         >
           <div className="flex-1 overflow-y-auto scrollbar-none">
-            {/* 다음 할 일 스트립 — 등록 직후 "이제 뭘 하지"의 답이 이 자리다. */}
-            {guide && (
-              <p className="mx-lg mt-md rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs text-caption text-brand-muted">
-                {guide}
-              </p>
-            )}
             {/* 상단 요청 섹션 — 스칼라 입력 요청만. 데이터 요청 카드는 각 설비·
                 분석 그룹 안에 산다. */}
             {inputRequests.length > 0 && (
