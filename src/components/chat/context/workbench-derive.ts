@@ -20,38 +20,16 @@ import type { DerivedGroup, DerivedPanel } from "./derive-cards";
 export const UNCLASSIFIED_GROUP_KEY = "unclassified";
 
 /**
- * 분석 카드의 사람이 읽는 라벨 — `스킬명 · 단위 대상값` ("fdc-explain-sensor ·
- * 센서 B"). 분석의 사람말 정체는 스킬이 아니라 **대상**이라 대표 인자 값을
- * 상시로 세운다(키 이름 같은 개발자 표기는 안 쓴다). 같은 스킬·같은 대상이
- * 또 있으면 그때만 나머지 인자를 꼬리로 붙여 가른다.
+ * 분석 카드 제목은 **2줄**이다: 제목줄 = 스킬 이름, 둘째 줄 = 파라미터
+ * ("snsr_id=B"). 수식어를 지어 붙이지 않고, 설비명이 채운 인자는 계층(설비
+ * 카드 소속)이 이미 말하므로 뺀다.
  */
-export function analysisLabel(
-  an: AnalysisCard,
-  siblings: AnalysisCard[] = [],
-): string {
-  const primary = primaryTarget(an);
-  const base = primary
-    ? `${an.skill.name} · ${an.skill.unit} ${primary}`.trim()
-    : an.skill.name;
-  const dup = siblings.some(
-    (s) =>
-      s !== an &&
-      s.skill.name === an.skill.name &&
-      primaryTarget(s) === primary,
-  );
-  if (!dup) return base;
-  const args = Object.entries(an.args)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(", ");
-  return args ? `${base} (${args})` : base;
-}
-
-/** 대표 인자 값 — 설비형이 아닌 첫 필수 입력의 값. 없으면 null. */
-function primaryTarget(an: AnalysisCard): string | null {
+export function analysisParams(an: AnalysisCard): string | null {
   const eqKey = equipmentInputKey(an.skill);
-  const input = an.skill.inputs.find((i) => i.required && i.key !== eqKey);
-  const value = input ? an.args[input.key] : undefined;
-  return value && value.trim() ? value.trim() : null;
+  const parts = Object.entries(an.args)
+    .filter(([k]) => k !== eqKey)
+    .map(([k, v]) => `${k}=${v}`);
+  return parts.length > 0 ? parts.join(", ") : null;
 }
 
 /**
@@ -79,7 +57,8 @@ export function deriveWorkbenchPanel(
   for (const eq of wb.equipments) {
     const lines: EquipmentLine[] = [];
     for (const an of eq.analyses) {
-      const label = analysisLabel(an, eq.analyses);
+      const title = an.skill.name;
+      const params = analysisParams(an);
       const dataSnapshots = an.cards
         .filter((c) => c.type === "data")
         .map((c) => byId.get(c.snapshotId))
@@ -101,14 +80,16 @@ export function deriveWorkbenchPanel(
         key: an.id,
         start: "",
         end: "",
-        category: label,
+        category: title,
+        ...(params ? { sub: params } : {}),
         status: dataSnapshots.length > 0 ? "filled" : "pending",
         tableCount: dataSnapshots.length,
         ...(requests[0] ? { requestKey: requests[0].request.queryKey } : {}),
       });
       groups.push({
         key: an.id,
-        label: `${eq.name} · ${label}`,
+        label: `${eq.name} · ${title}`,
+        ...(params ? { sublabel: params } : {}),
         equipment: eq.name,
         snapshots: dataSnapshots,
         requests,

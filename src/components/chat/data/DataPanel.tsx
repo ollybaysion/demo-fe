@@ -580,6 +580,7 @@ export function DataPanel({
                       <SnapshotGroup
                         key={g.key}
                         label={g.label}
+                        sublabel={g.sublabel}
                         count={g.snapshots.length + g.requests.length}
                         open={
                           openGroupKeys === null || openGroupKeys.includes(g.key)
@@ -876,6 +877,7 @@ const FLASH_MS = 1200;
 
 function SnapshotGroup({
   label,
+  sublabel,
   count,
   open,
   onToggle,
@@ -884,6 +886,8 @@ function SnapshotGroup({
   children,
 }: {
   label: string;
+  /** 둘째 줄 — 분석 카드의 파라미터("snsr_id=B"). 없으면 한 줄. */
+  sublabel?: string;
   count: number;
   open: boolean;
   onToggle: () => void;
@@ -926,8 +930,15 @@ function SnapshotGroup({
         aria-expanded={open}
         className="w-full flex items-center gap-xs px-sm py-xs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
-        <span className="min-w-0 flex-1 truncate text-caption font-medium text-brand-ink">
-          {label}
+        <span className="min-w-0 flex-1 flex flex-col">
+          <span className="truncate text-caption font-medium text-brand-ink">
+            {label}
+          </span>
+          {sublabel && (
+            <span className="truncate text-caption text-brand-muted-soft">
+              {sublabel}
+            </span>
+          )}
         </span>
         <span className="shrink-0 text-caption text-brand-muted-soft tabular-nums">
           {count}

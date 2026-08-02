@@ -440,6 +440,11 @@ function LineRow({
           </span>
         )}
       </span>
+      {line.sub && (
+        <span className="text-caption text-brand-muted-soft truncate">
+          {line.sub}
+        </span>
+      )}
       {line.start && line.end && (
         <span className="text-caption text-brand-muted-soft tabular-nums whitespace-nowrap">
           {formatRange(line.start, line.end)}
