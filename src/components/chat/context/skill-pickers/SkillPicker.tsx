@@ -11,11 +11,16 @@ const CHIP_COUNT = 3;
 /**
  * 스킬 고르기 — 폼 안에서 끝나고, 필요할 때만 넓은 화면을 연다.
  *
- * 세 갈래를 한 화면에 세로로 둔다. 위에서부터 손이 덜 드는 순서다:
+ * <p><b>검색창이 기둥이다.</b> 접혀 있을 땐 검색창 한 줄만 서고, 손이 닿으면
+ * (포커스·타이핑) 그 아래로 나머지가 올라온다. 검색창을 맨 위에 둔 것은 펼칠 때
+ * **자리가 밀리지 않게** 하기 위해서다 — 치는 중에 입력칸이 아래로 내려가면
+ * 커서를 쫓아가야 한다.
+ *
+ * 펼친 뒤의 갈래는 셋이고, 어느 쪽이든 손이 한 번이면 끝난다:
  * <ol>
  *   <li><b>최근 칩</b> — 늘 쓰는 스킬이 정해진 사람은 여기서 한 번 눌러 끝낸다.
  *       범주를 타고 들어가거나 검색어를 치는 과정이 없다.</li>
- *   <li><b>검색 + 목록</b> — 이름을 아는 사람은 치고, 훑고 싶은 사람은 30개를
+ *   <li><b>목록</b> — 이름을 아는 사람은 검색을 치고, 훑고 싶은 사람은 30개를
  *       그대로 스크롤한다. 목록은 한 덩어리다: 단위로 갈라 두면 찾는 스킬이 어느
  *       단위인지부터 알아야 하고, 그걸 아는 사람은 애초에 검색을 친다.</li>
  *   <li><b>[⤢]</b> — 이름과 짧은 설명만으로 확신이 안 설 때. 필요한 값·조회
@@ -30,6 +35,8 @@ export function SkillPicker({
   skills,
   recent,
   selected,
+  expanded,
+  onExpand,
   onSelect,
 }: SkillPickerProps) {
   const [query, setQuery] = useState("");
@@ -40,82 +47,95 @@ export function SkillPicker({
 
   return (
     <div className="flex flex-col gap-xxs">
-      {chips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-xxs">
-          <span className="text-caption text-brand-muted shrink-0">최근</span>
-          {chips.map((s) => {
-            const on = selected === s.skill;
-            return (
-              <button
-                key={s.skill}
-                type="button"
-                onClick={() => onSelect(s.skill)}
-                aria-pressed={on}
-                title={`${s.name} · ${s.focus}`}
-                className={[
-                  "max-w-full truncate rounded-full border px-xs h-6 font-mono text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
-                  on
-                    ? "border-brand-primary bg-brand-primary text-brand-on-primary"
-                    : "border-brand-hairline bg-brand-canvas text-brand-ink hover:border-brand-primary hover:text-brand-primary",
-                ].join(" ")}
-              >
-                {/* 칩도 이름이다 — 최근에 쓴 것을 다시 누르는 자리라, 목록에서
-                    본 것과 같은 말로 서 있어야 알아본다. */}
-                {s.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       <div className="flex items-center gap-xxs">
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onExpand();
+          }}
+          onFocus={onExpand}
           placeholder={`스킬 검색 (${skills.length}개)`}
           className="flex-1 min-w-0 h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink placeholder:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
         />
-        <button
-          type="button"
-          onClick={() => setBrowsing(true)}
-          aria-label="설명까지 보고 고르기"
-          title="필요한 값·조회까지 보고 고르기"
-          className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-sm border border-brand-hairline bg-brand-canvas text-brand-muted hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-        >
-          <ExpandIcon />
-        </button>
-      </div>
-
-      {/*
-        검색어가 비면 `matches` 가 전부 통과시키므로 목록은 늘 같은 한 덩어리다 —
-        "검색 결과"와 "전체"가 다른 화면이 아니라, 치는 만큼 줄어드는 한 목록이다.
-      */}
-      <div className="max-h-[320px] overflow-y-auto scrollbar-none flex flex-col gap-xxs">
-        {hits.length === 0 ? (
-          <div className="px-xs py-xs flex flex-col gap-xxs items-start">
-            <p className="text-caption text-brand-muted-soft">
-              맞는 스킬이 없습니다.
-            </p>
-            <button
-              type="button"
-              onClick={() => setBrowsing(true)}
-              className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
-            >
-              설명까지 보고 고르기 →
-            </button>
-          </div>
-        ) : (
-          hits.map((s) => (
-            <SkillRow
-              key={s.skill}
-              skill={s}
-              dense
-              selected={selected === s.skill}
-              onSelect={() => onSelect(s.skill)}
-            />
-          ))
+        {/* 넓은 화면으로 가는 문은 펼친 뒤에만 — 접힌 자리는 검색창 하나로
+            읽혀야 하고, 훑을 곳이 없는데 "펴 놓고 보기"부터 권할 일은 없다. */}
+        {expanded && (
+          <button
+            type="button"
+            onClick={() => setBrowsing(true)}
+            aria-label="설명까지 보고 고르기"
+            title="필요한 값·조회까지 보고 고르기"
+            className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-sm border border-brand-hairline bg-brand-canvas text-brand-muted hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            <ExpandIcon />
+          </button>
         )}
       </div>
+
+      {expanded && (
+        <div className="animate-step-rise flex flex-col gap-xxs">
+          {chips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-xxs">
+              <span className="text-caption text-brand-muted shrink-0">최근</span>
+              {chips.map((s) => {
+                const on = selected === s.skill;
+                return (
+                  <button
+                    key={s.skill}
+                    type="button"
+                    onClick={() => onSelect(s.skill)}
+                    aria-pressed={on}
+                    title={`${s.name} · ${s.focus}`}
+                    className={[
+                      "max-w-full truncate rounded-full border px-xs h-6 font-mono text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+                      on
+                        ? "border-brand-primary bg-brand-primary text-brand-on-primary"
+                        : "border-brand-hairline bg-brand-canvas text-brand-ink hover:border-brand-primary hover:text-brand-primary",
+                    ].join(" ")}
+                  >
+                    {/* 칩도 이름이다 — 최근에 쓴 것을 다시 누르는 자리라, 목록에서
+                        본 것과 같은 말로 서 있어야 알아본다. */}
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/*
+            검색어가 비면 `matches` 가 전부 통과시키므로 목록은 늘 같은 한
+            덩어리다 — "검색 결과"와 "전체"가 다른 화면이 아니라, 치는 만큼
+            줄어드는 한 목록이다.
+          */}
+          <div className="max-h-[320px] overflow-y-auto scrollbar-none flex flex-col gap-xxs">
+            {hits.length === 0 ? (
+              <div className="px-xs py-xs flex flex-col gap-xxs items-start">
+                <p className="text-caption text-brand-muted-soft">
+                  맞는 스킬이 없습니다.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setBrowsing(true)}
+                  className="text-caption text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
+                >
+                  설명까지 보고 고르기 →
+                </button>
+              </div>
+            ) : (
+              hits.map((s) => (
+                <SkillRow
+                  key={s.skill}
+                  skill={s}
+                  dense
+                  selected={selected === s.skill}
+                  onSelect={() => onSelect(s.skill)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {browsing && (
         <SkillBrowserModal
