@@ -18,21 +18,16 @@ const PHASE1_PLACEHOLDER = "백엔드 아직 없음 — 요약 기능은 연결 
 
 type Props = {
   open: boolean;
-  /**
-   * 채팅에 인입된 비교 결과의 마크다운 본문 (Phase 3). 있으면
-   * "비교 결과" Section + 클립보드 복사 본문에 자동 동봉. 없으면 미노출.
-   */
-  compareDigest?: string;
 };
 
-export function SummaryPanel({ open, compareDigest }: Props) {
+export function SummaryPanel({ open }: Props) {
   const summaryText = PHASE1_PLACEHOLDER;
   const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">(
     "idle",
   );
 
   async function handleCopy() {
-    const text = formatPanelText(summaryText, compareDigest);
+    const text = formatPanelText(summaryText);
     try {
       await navigator.clipboard.writeText(text);
       setCopyStatus("success");
@@ -59,13 +54,6 @@ export function SummaryPanel({ open, compareDigest }: Props) {
 
         <div className="flex-1 overflow-y-auto scrollbar-none">
           <div className="px-lg py-lg flex flex-col gap-lg">
-            {compareDigest && (
-              <Section title="비교 결과">
-                <pre className="text-caption text-brand-ink whitespace-pre-wrap font-mono leading-relaxed">
-                  {compareDigest}
-                </pre>
-              </Section>
-            )}
             <Section title="요약">
               <p className="text-body-sm text-brand-muted">{summaryText}</p>
               <div className="mt-md flex items-center gap-xs">
@@ -130,19 +118,6 @@ function Section({
 // Clipboard formatter — markdown-ish for ops chat / email
 // ────────────────────────────────────────────────────────────────────
 
-function formatPanelText(summary: string, compareDigest?: string): string {
-  const lines: string[] = [];
-  lines.push("# 대화 요약");
-
-  lines.push("");
-  lines.push("## 요약");
-  lines.push(summary);
-
-  if (compareDigest) {
-    lines.push("");
-    lines.push("## 비교 결과");
-    lines.push(compareDigest);
-  }
-
-  return lines.join("\n");
+function formatPanelText(summary: string): string {
+  return ["# 대화 요약", "", "## 요약", summary].join("\n");
 }
