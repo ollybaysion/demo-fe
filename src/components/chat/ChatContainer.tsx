@@ -579,6 +579,12 @@ export function ChatContainer() {
   // 스트림이 종결 서술이 된다 — "등록 완료" 타이핑이 필요 없어진다(#163).
   const judgeAbortRef = useRef<AbortController | null>(null);
   const judgeRevisionRef = useRef(0);
+  /**
+   * 판정 진행 중 — 채팅의 생각 중 표시용. `isStreaming` 과 분리다(입력은 안
+   * 잠근다). 결과 등록류 이벤트에서만 켠다: 토글·휴지통 같은 즉답 판정마다
+   * 풍선이 깜빡이면 소음이다.
+   */
+  const [judging, setJudging] = useState(false);
 
   // 판정 페이로드 재료 — 커밋마다 동기화해 아래 판정 effect 가 늘 최신을 읽는다
   // (선언 순서상 이 effect 가 먼저 돈다).
@@ -605,6 +611,9 @@ export function ChatContainer() {
     };
   });
 
+  // deps 없음이 의도다: 어떤 상태가 바뀌었든 커밋마다 pendingJudgeRef 를 확인해야
+  // 하고, 트리거가 없으면 첫 줄에서 반환하므로 setJudging 이 갱신 연쇄를 만들 수 없다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const event = pendingJudgeRef.current;
     if (!event) return;
@@ -621,6 +630,11 @@ export function ChatContainer() {
     const timeoutId = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS);
     const revision = ++judgeRevisionRef.current;
     const narrationId = `judge_${newId()}`;
+    // 결과가 제출된 이벤트다 — 서술이 올 수 있으니 생각 중 표시를 켠다.
+    // (실제로 서술이 없으면 done 과 함께 조용히 꺼진다.)
+    if (event.type === "snapshot-registered" || event.type === "snapshot-added") {
+      setJudging(true);
+    }
 
     void judgeChatData(
       {
@@ -674,7 +688,11 @@ export function ChatContainer() {
         if (revision !== judgeRevisionRef.current) return;
         reconcileRequests(done.openRequests ?? []);
       })
-      .finally(() => clearTimeout(timeoutId));
+      .finally(() => {
+        clearTimeout(timeoutId);
+        // 뒤에 새 판정이 이미 켜 둔 표시를 여기서 끄면 안 된다.
+        if (revision === judgeRevisionRef.current) setJudging(false);
+      });
   });
 
   // 언마운트 시 진행 중 판정 정리.
@@ -1319,6 +1337,7 @@ export function ChatContainer() {
               <MessageList
                 messages={messages}
                 isStreaming={isStreaming}
+                judging={judging}
                 onRegenerate={demoState ? undefined : handleRegenerate}
               />
             )}
