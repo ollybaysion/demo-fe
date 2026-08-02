@@ -123,21 +123,17 @@ describe("판정 반영 (request 카드)", () => {
     expect(next.equipments[0].analyses[0].cards).toHaveLength(0);
   });
 
-  it("로컬에 같은 키의 스냅샷이 있으면 요청 대신 data 카드로 백필한다", () => {
+  it("본문이 완전 삭제된 data 카드는 채움으로 안 치고 요청을 다시 연다", () => {
     const { wb } = seeded();
-    const { wb: next, backfilled } = reconcileRequestCards(
-      wb,
-      [REQ1],
-      (key) => (key === REQ1.queryKey ? "snap-old" : undefined),
+    const filled = fulfillRequestCard(
+      reconcileRequestCards(wb, [REQ1]).wb,
+      REQ1.queryKey,
+      "snap-purged",
     );
-    expect(backfilled).toBe(1);
+    const { wb: next } = reconcileRequestCards(filled, [REQ1], () => false);
     const cards = next.equipments[0].analyses[0].cards;
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toMatchObject({
-      type: "data",
-      queryKey: REQ1.queryKey,
-      snapshotId: "snap-old",
-    });
+    expect(cards[0].type).toBe("request");
   });
 
   it("data 로 전이한 자리는 낡은 echo 가 다시 열지 못한다", () => {

@@ -183,19 +183,18 @@ export function toRunDecls(wb: Workbench): RunRef[] | undefined {
  * 깜빡임을 막고, run 참조가 어느 분석과도 안 맞는 요청은 버리지 않고 반환해
  * 호출자가 구식 경로(미소속 표시)로 넘긴다.
  *
- * `snapshotIdByKey` 는 자가 치유 백필이다: 판정이 열라고 한 카드의 queryKey 와
- * **정확히 일치**하는 스냅샷이 이미 로컬에 있으면(트리 도입 전 등록분 등) 요청
- * 카드 대신 그 자리에 data 카드를 앉힌다 — 키는 BE 발급분과의 등치 비교뿐,
- * 역파싱이 아니다. 백필이 있었으면 `backfilled` 로 알려 호출자가 판정을 한 번
- * 더 돌리게 한다(도착이 실려야 다음 단계가 열린다).
+ * `snapshotAlive` 는 허상 정리다: data 카드가 가리키던 본문이 완전 삭제돼
+ * 허상이 됐으면, "채워진 자리"로 치지 않고 카드를 걷어낸 뒤 요청을 다시
+ * 연다 — 카드의 존재가 아니라 **본문이 살아 있는 카드**만 채움이다.
+ * (옛 데이터 자동 채택(백필)은 사용자 결정으로 하지 않는다 — 트리 밖
+ * 스냅샷은 미분류에 남고, 소속은 등록 행위로만 생긴다.)
  */
 export function reconcileRequestCards(
   wb: Workbench,
   open: WireRequest[],
-  snapshotIdByKey?: (queryKey: string) => string | undefined,
-): { wb: Workbench; unmatched: WireRequest[]; backfilled: number } {
+  snapshotAlive?: (snapshotId: string) => boolean,
+): { wb: Workbench; unmatched: WireRequest[] } {
   const unmatched: WireRequest[] = [];
-  let backfilled = 0;
   const byAnalysis = new Map<string, WireRequest[]>();
   for (const req of open) {
     const analysis = allAnalyses(wb).find((a) =>
@@ -215,35 +214,37 @@ export function reconcileRequestCards(
       ...eq,
       analyses: eq.analyses.map((an) => {
         const wanted = byAnalysis.get(an.id) ?? [];
-        const keep = an.cards.filter((c) => c.type !== "request");
+        const wantedKeys = new Set(wanted.map((r) => r.queryKey));
+        const keep = an.cards.filter((c) => {
+          if (c.type === "request") return false;
+          // 허상 정리 — 판정이 다시 열라는 자리의 data 카드인데 본문이 완전
+          // 삭제됐으면 걷어낸다(아래에서 요청 카드로 재개된다).
+          if (
+            c.type === "data" &&
+            wantedKeys.has(c.queryKey) &&
+            snapshotAlive !== undefined &&
+            !snapshotAlive(c.snapshotId)
+          ) {
+            return false;
+          }
+          return true;
+        });
         const prevReq = new Map(
           an.cards
             .filter((c): c is RequestCard => c.type === "request")
             .map((c) => [c.queryKey, c]),
         );
         const fulfilled = new Set(
-          an.cards
+          keep
             .filter((c): c is DataCard => c.type === "data")
             .map((c) => c.queryKey),
         );
         const requests = wanted
-          // 이미 data 로 전이한 자리는 다시 열지 않는다 — 판정 직후 스냅샷이
+          // 본문이 살아 있는 data 자리는 다시 열지 않는다 — 판정 직후 스냅샷이
           // 아직 페이로드에 없던 낡은 echo 가 카드를 되살리는 것을 막는다.
           .filter((r) => !fulfilled.has(r.queryKey))
-          .map((r): SnapshotCard => {
+          .map((r) => {
             const prev = prevReq.get(r.queryKey);
-            // 자가 치유 — 이 키의 데이터가 이미 로컬에 있으면 요청 대신 도착.
-            const snapId = snapshotIdByKey?.(r.queryKey);
-            if (snapId !== undefined) {
-              backfilled++;
-              return {
-                type: "data" as const,
-                id: prev?.id ?? newId("card_"),
-                queryKey: r.queryKey,
-                label: r.label,
-                snapshotId: snapId,
-              };
-            }
             if (prev && prev.label === r.label && prev.sql === r.sql) {
               return prev;
             }
@@ -263,7 +264,7 @@ export function reconcileRequestCards(
       }),
     })),
   };
-  return { wb: next, unmatched, backfilled };
+  return { wb: next, unmatched };
 }
 
 /**

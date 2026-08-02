@@ -658,20 +658,6 @@ export function ChatContainer() {
     };
   });
 
-  /**
-   * 백필 후속 판정 — reconcile 이 로컬 데이터로 request→data 백필을 했으면,
-   * 그 도착이 페이로드에 실려야 다음 단계가 열리므로 한 번 더 판정한다.
-   * 백필이 없으면 0이라 멈춘다(수렴). 판정 effect **보다 먼저** 선언해야
-   * 같은 커밋에서 트리거가 읽힌다(effect 는 선언 순서대로 돈다).
-   */
-  const backfillRef = useRef(0);
-  useEffect(() => {
-    if (backfillRef.current > 0) {
-      backfillRef.current = 0;
-      pendingJudgeRef.current = { type: "data-backfill" };
-    }
-  });
-
   // deps 없음이 의도다: 어떤 상태가 바뀌었든 커밋마다 pendingJudgeRef 를 확인해야
   // 하고, 트리거가 없으면 첫 줄에서 반환하므로 setJudging 이 갱신 연쇄를 만들 수 없다.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -760,28 +746,20 @@ export function ChatContainer() {
         if (!done) return; // 무음 폴백 — BE 없는 환경에서 에러 풍선 금지.
         // 낡은 응답 폐기 — 이 판정 뒤에 새 판정이 이미 나갔다면 그쪽이 진실이다.
         if (revision !== judgeRevisionRef.current) return;
-        // 백필 조회 — 열라는 카드의 키와 정확히 일치하는 로컬 스냅샷(포함분,
-        // capturedAt 최신). 트리 도입 전 등록분이 여기서 제자리를 찾는다.
-        const latestByKey = new Map<string, { id: string; at: string }>();
-        for (const s of judgeStateRef.current.snapshots) {
-          if (!s.included || !s.queryKey) continue;
-          const cur = latestByKey.get(s.queryKey);
-          if (!cur || cur.at <= s.capturedAt) {
-            latestByKey.set(s.queryKey, { id: s.id, at: s.capturedAt });
-          }
-        }
+        // 허상 정리용 생존 조회 — 완전 삭제된 본문을 물고 있는 data 카드는
+        // 채워진 자리가 아니다(요청 재개).
+        const alive = new Set(judgeStateRef.current.snapshots.map((s) => s.id));
         // 카드는 트리에 앉는다 — 각 분석의 request 카드만 전량 교체된다.
         // run 참조가 어느 분석과도 안 맞는 카드는 버린다(선언은 트리에서
         // 나갔으므로 정상 경로에선 없다 — 소속을 지어내지 않는다).
-        setTree((prev) => {
-          const r = reconcileRequestCards(
-            prev,
-            (done.openRequests ?? []) as WireRequest[],
-            (key) => latestByKey.get(key)?.id,
-          );
-          backfillRef.current += r.backfilled;
-          return r.wb;
-        });
+        setTree(
+          (prev) =>
+            reconcileRequestCards(
+              prev,
+              (done.openRequests ?? []) as WireRequest[],
+              (id) => alive.has(id),
+            ).wb,
+        );
       })
       .finally(() => {
         clearTimeout(timeoutId);
@@ -1356,8 +1334,14 @@ export function ChatContainer() {
     if (openCount > 0) {
       return `다음 할 일 — 열린 요청 카드 ${openCount}장의 SQL을 실행해 결과를 등록하세요. 조회 결과가 없으면 [결과 없음]으로 등록해도 됩니다.`;
     }
+    // 채움 = 본문이 살아 있는 data 카드만 — 완전 삭제로 허상이 된 카드를 세면
+    // 데이터가 없는데 "모두 채워졌다"고 말하게 된다.
+    const alive = new Set(snapshots.map((s) => s.id));
     const arrived = analyses.reduce(
-      (n, a) => n + a.cards.filter((c) => c.type === "data").length,
+      (n, a) =>
+        n +
+        a.cards.filter((c) => c.type === "data" && alive.has(c.snapshotId))
+          .length,
       0,
     );
     if (analyses.length > 0 && arrived > 0) {
@@ -1367,7 +1351,7 @@ export function ChatContainer() {
       return "설비 카드에서 분석을 추가하면 필요한 조회가 요청 카드로 열립니다.";
     }
     return null;
-  }, [tree, treeOpenRequestCount, openRequests]);
+  }, [tree, treeOpenRequestCount, openRequests, snapshots]);
 
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
