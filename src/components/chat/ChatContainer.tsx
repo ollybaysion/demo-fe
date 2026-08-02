@@ -1282,6 +1282,22 @@ export function ChatContainer() {
     },
     [restoreSnapshotById, requestJudge],
   );
+  /**
+   * 완전 삭제도 판정을 부른다 — 재개·허상 정리는 판정 reconcile 안에 살아서,
+   * 판정이 안 돌면 트리가 박제된다(실제로 겪은 버그). 휴지통 보내기 판정이
+   * 이미 정리했으면 이 판정은 무해한 no-op 이다.
+   */
+  const handlePurgeSnapshot = useCallback(
+    (id: string) => {
+      purgeSnapshot(id);
+      requestJudge({ type: "snapshot-purged" });
+    },
+    [purgeSnapshot, requestJudge],
+  );
+  const handlePurgeAll = useCallback(() => {
+    purgeAllSnapshots();
+    requestJudge({ type: "snapshot-purged" });
+  }, [purgeAllSnapshots, requestJudge]);
 
   // 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지 잘라낸 뒤
   // 같은 컨텍스트로 다시 API 호출. 데모 시나리오 진행 중엔 호출되지
@@ -1431,8 +1447,8 @@ export function ChatContainer() {
               onSetQuery={setSnapshotSourceSql}
               trashed={trashedSnapshots}
               onRestoreOne={handleRestoreSnapshotById}
-              onPurge={purgeSnapshot}
-              onPurgeAll={purgeAllSnapshots}
+              onPurge={handlePurgeSnapshot}
+              onPurgeAll={handlePurgeAll}
               expanded={dataExpandedInner}
               detailVisible={dataDetailVisible}
               onToggleExpanded={toggleDataExpanded}
