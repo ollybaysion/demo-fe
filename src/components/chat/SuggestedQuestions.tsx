@@ -1,16 +1,13 @@
 "use client";
 
-import { SUGGESTED_QUESTIONS } from "@/config/suggestedQuestions";
-
 type Props = {
   onSelect: (text: string) => void;
   /**
-   * chip 으로 표시할 질문 목록. 비면 `SUGGESTED_QUESTIONS` (빈 시작
-   * 화면용 예시 질문) 사용. 어시스턴트 추천 후속 질문은 이 prop 으로
-   * 전달.
+   * chip 으로 표시할 질문 목록 — 부르는 쪽이 정한다. 빈 시작 화면용 기본
+   * 목록은 없다: 그 자리에는 팁과 왕복 줄이 이미 무엇을 물을지 말하고 있다.
    */
-  questions?: readonly string[];
-  /** 빈 시작 화면 default 와 추천 후속을 SR 에 구분하기 위한 라벨. */
+  questions: readonly string[];
+  /** 이어가기 안내와 추천 후속을 SR 에 구분하기 위한 라벨. */
   ariaLabel?: string;
   /**
    * 데모 모드에서 응답이 준비된 chip 만 활성화 — 일치하지 않는 chip 은
@@ -22,7 +19,7 @@ type Props = {
 
 export function SuggestedQuestions({
   onSelect,
-  questions = SUGGESTED_QUESTIONS,
+  questions,
   ariaLabel = "예시 질문",
   enabledQuestion,
 }: Props) {
