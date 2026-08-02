@@ -101,14 +101,24 @@ export function useDataSnapshots() {
    */
   const commit = useCallback(
     (snapshot: DataSnapshot, include: boolean): AddSnapshotResult => {
-      const replacedExisting =
-        findSameContent(liveSnapshots(all), snapshot) !== undefined;
+      const existing = findSameContent(liveSnapshots(all), snapshot);
       setSnapshots((prev) =>
         include
           ? upsertFulfilling(prev, snapshot)
           : upsertSnapshot(prev, snapshot),
       );
-      return { ok: true, snapshot, replacedExisting };
+      // 갱신으로 접힌 등록은 **저장소가 유지한 항목 정체(id)** 로 돌려준다 —
+      // 호출부가 이 id 를 세션 스코프에 기억하는데, 새 id 를 주면 실제 저장된
+      // 항목이 스코프에서 빠져 채팅·판정 페이로드에 실리지 않는 유령이 된다
+      // (같은 조회의 0행을 새 세션에서 다시 등록할 때 실제로 났던 구멍).
+      const stored = existing
+        ? {
+            ...snapshot,
+            id: existing.id,
+            included: include ? true : existing.included,
+          }
+        : snapshot;
+      return { ok: true, snapshot: stored, replacedExisting: existing !== undefined };
     },
     [all],
   );

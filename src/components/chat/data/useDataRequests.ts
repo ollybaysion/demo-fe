@@ -8,6 +8,7 @@ import {
   markFulfilled,
   openRequests,
   receiveRequests,
+  reconcileRequests,
   type PendingRequest,
 } from "@/lib/request-store";
 import type { DataRequest } from "@/lib/types";
@@ -28,6 +29,11 @@ export function useDataRequests() {
     },
     [],
   );
+
+  /** 판정(`/chat/data`)의 openRequests 로 전체 리컨사일 — 카드 진실원은 서버다. */
+  const reconcile = useCallback((open: DataRequest[]) => {
+    setRequests((prev) => reconcileRequests(prev, open));
+  }, []);
 
   const fulfill = useCallback((queryKey: string) => {
     setRequests((prev) => markFulfilled(prev, queryKey));
@@ -55,6 +61,7 @@ export function useDataRequests() {
     requests,
     open: openRequests(requests),
     receive,
+    reconcile,
     fulfill,
     clearForOrigin,
     clearFulfilled,

@@ -14,6 +14,11 @@ import {
  * timeout 분류로 사용자 안내. 데모/mock 은 짧아 영향 없음.
  */
 const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * 판정(`/chat/data`) 전용 timeout — 채팅 30초와 분리한다. 판정 응답에는 종결
+ * 서술 스트림이 실릴 수 있어, 전역 30초가 완결 서술을 문장 중간에 자르면 안 된다.
+ */
+const JUDGE_TIMEOUT_MS = 60_000;
 import { parseSseStream } from "@/lib/sse";
 import { toChatInputs } from "@/lib/input-store";
 import type {
@@ -36,10 +41,13 @@ import { SummaryPanel } from "./summary/SummaryPanel";
 import { EquipmentPanel } from "./context";
 import { EquipmentDetailDrawer } from "./context/EquipmentDetailDrawer";
 import { derivePanel, equipmentCardId, parseLabel } from "./context/derive-cards";
-import { isFulfilledBy, type PendingRequest } from "@/lib/request-store";
+import {
+  judgeChatData,
+  toRunDecls,
+  type PanelJudgeEvent,
+} from "@/lib/chat-data";
 import {
   equipmentInputKey,
-  skillDataRequests,
   type Skill,
   type SkillSession,
 } from "@/lib/skills";
@@ -251,6 +259,7 @@ export function ChatContainer() {
   const {
     open: openRequests,
     receive: receiveRequests,
+    reconcile: reconcileRequests,
     fulfill: fulfillRequest,
     clearFulfilled: clearFulfilledRequests,
     clear: clearRequests,
@@ -264,6 +273,14 @@ export function ChatContainer() {
     fill: fillInput,
     clear: clearInputs,
   } = useInputRequests();
+
+  // ── panel-judge 트리거 — 패널 변경 직후 적어 두면 다음 커밋에서 판정이 나간다.
+  // (판정 본체는 아래 effect — mutator 직후 클로저는 낡은 상태를 보므로, 상태가
+  // 반영된 커밋 뒤에 페이로드를 만든다. #163 revision 규율.)
+  const pendingJudgeRef = useRef<PanelJudgeEvent | null>(null);
+  const requestJudge = useCallback((event: PanelJudgeEvent) => {
+    pendingJudgeRef.current = event;
+  }, []);
 
   // "설비 추가"로 연 스킬 세션 — 설비 하나를 스킬 하나로 본다. 여기 등록된 것이
   // 좌측 카드(입력·요청)의 출처다.
@@ -389,8 +406,10 @@ export function ChatContainer() {
           ? prev
           : [...prev, session],
       );
+      // 세션은 카드를 직접 세우지 않는다 — 판정이 선언(runs[])을 보고 첫 카드를 연다.
+      requestJudge({ type: "session-registered" });
     },
-    [],
+    [requestJudge],
   );
 
   // 현재 세션이 등록한 스냅샷만 기본으로 본다 — 전역 저장분(예전 세션 잔여)은
@@ -399,21 +418,12 @@ export function ChatContainer() {
     ? snapshots
     : snapshots.filter((s) => sessionSnapshotIds.has(s.id));
 
-  // "설비 추가"로 등록한 스킬이 세우는 요청 카드 — 상태로 쌓지 않고 **매번
-  // 파생**한다. 그래야 사용자가 입력 카드를 채우는 즉시 그 값이 SQL 의 bind 자리로
-  // 들어가고(고정해 두면 낡은 SQL 이 남는다), 결과를 붙여넣으면 같은 queryKey 의
-  // 스냅샷이 생겨 카드가 저절로 걷힌다.
-  const sessionRequests: PendingRequest[] = skillSessions.flatMap((session) =>
-    skillDataRequests(session)
-      .filter((request) => !isFulfilledBy(scopedSnapshots, request.queryKey))
-      .map((request) => ({
-        request,
-        originMessageId: `skill:${session.id}`,
-        fulfilled: false,
-      })),
-  );
+  // 요청 카드는 **서버 판정이 만든다**(#163 — 카드 진실원 단일화). "설비 추가"로
+  // 등록한 스킬 세션은 카드를 직접 파생하지 않고 판정 입력(`runs[]` 선언)으로만
+  // 나간다 — SQL·조회 키를 클라이언트가 또 만들면 진실원이 셋이 된다. 세션이
+  // 생기거나 값이 바뀌면 판정이 다시 돌아 카드가 갱신된다.
   const { equipmentCards, groups: dataGroups } = derivePanel(
-    [...openRequests, ...sessionRequests],
+    [...openRequests],
     scopedSnapshots,
     seedEquipments,
     equipmentLines,
@@ -520,7 +530,10 @@ export function ChatContainer() {
     setMessages(conv.messages);
     // 설비 카드는 저장물이 아니라 파생물이다 — 씨앗을 되돌려야 카드가 다시 선다.
     applyWorkbench(conv.workbench ?? EMPTY_WORKBENCH);
-  }, [activeId, conversationsHydrated, conversations, applyWorkbench]);
+    // 요청 카드는 서버 판정의 파생물이다 — 복원된 세션·스냅샷으로 한 번 판정해
+    // 카드를 되살린다(선언적 리컨사일의 복원 이점).
+    requestJudge({ type: "conversation-loaded" });
+  }, [activeId, conversationsHydrated, conversations, applyWorkbench, requestJudge]);
 
   // 아직 대화가 없을 때(첫 메시지 전) 세워 둔 작업판을 되살린다. 대화가 생기면
   // 그 대화가 안고 가므로 이 자리는 그때 비워진다.
@@ -559,6 +572,131 @@ export function ChatContainer() {
     conversationsHydrated,
     updateConversation,
   ]);
+
+  // ── panel-judge (`POST /chat/data`) — 패널 변경의 결정론 판정 ─────────────
+  // 패널의 등록·토글·삭제가 사람 발화 없이 BE 판정을 부르고, 응답의
+  // `openRequests` 로 카드를 리컨사일한다. 절차가 종결되면 그 응답의 token
+  // 스트림이 종결 서술이 된다 — "등록 완료" 타이핑이 필요 없어진다(#163).
+  const judgeAbortRef = useRef<AbortController | null>(null);
+  const judgeRevisionRef = useRef(0);
+  /**
+   * 판정 진행 중 — 채팅의 생각 중 표시용. `isStreaming` 과 분리다(입력은 안
+   * 잠근다). 결과 등록류 이벤트에서만 켠다: 토글·휴지통 같은 즉답 판정마다
+   * 풍선이 깜빡이면 소음이다.
+   */
+  const [judging, setJudging] = useState(false);
+
+  // 판정 페이로드 재료 — 커밋마다 동기화해 아래 판정 effect 가 늘 최신을 읽는다
+  // (선언 순서상 이 effect 가 먼저 돈다).
+  const judgeStateRef = useRef({
+    messages,
+    sentSnapshots,
+    skillSessions,
+    prunedScope,
+    inputValues,
+    demoState,
+    activeId,
+    workbench,
+  });
+  useEffect(() => {
+    judgeStateRef.current = {
+      messages,
+      sentSnapshots,
+      skillSessions,
+      prunedScope,
+      inputValues,
+      demoState,
+      activeId,
+      workbench,
+    };
+  });
+
+  // deps 없음이 의도다: 어떤 상태가 바뀌었든 커밋마다 pendingJudgeRef 를 확인해야
+  // 하고, 트리거가 없으면 첫 줄에서 반환하므로 setJudging 이 갱신 연쇄를 만들 수 없다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const event = pendingJudgeRef.current;
+    if (!event) return;
+    pendingJudgeRef.current = null;
+    const state = judgeStateRef.current;
+    // 데모 재생 중에는 판정을 부르지 않는다 — 시나리오 결정론 보존.
+    if (state.demoState) return;
+
+    // 연타(등록 직후 토글 등)는 앞 판정을 끊는다 — 응답 revision echo 대조와
+    // 함께 순서 역전을 막는 이중 장치다.
+    judgeAbortRef.current?.abort();
+    const controller = new AbortController();
+    judgeAbortRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS);
+    const revision = ++judgeRevisionRef.current;
+    const narrationId = `judge_${newId()}`;
+    // 결과가 제출된 이벤트다 — 서술이 올 수 있으니 생각 중 표시를 켠다.
+    // (실제로 서술이 없으면 done 과 함께 조용히 꺼진다.)
+    if (event.type === "snapshot-registered" || event.type === "snapshot-added") {
+      setJudging(true);
+    }
+
+    void judgeChatData(
+      {
+        eventId: newId(),
+        revision,
+        event,
+        messages: state.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        snapshots: toChatPayload(state.sentSnapshots),
+        runs: toRunDecls(state.skillSessions),
+        scope: toChatScope(state.prunedScope, state.skillSessions),
+        inputs: toChatInputs(state.inputValues),
+      },
+      {
+        // 서술 메시지는 **첫 token 에서만** 만든다 — 카드만 있는 응답(대다수)이
+        // 빈 회색 풍선을 남기면 안 된다.
+        onNarrationStart: () => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: narrationId,
+              role: "assistant",
+              content: "",
+              createdAt: Date.now(),
+            },
+          ]);
+          // 채팅 없이 완결된 서술도 저장돼야 한다 — 대화가 없으면 만든다.
+          if (!state.activeId) {
+            loadedIdRef.current = createConversation({
+              messages: state.messages,
+              workbench: state.workbench,
+            }).id;
+            clearPendingWorkbench();
+          }
+        },
+        onNarrationToken: (piece) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === narrationId ? { ...m, content: m.content + piece } : m,
+            ),
+          );
+        },
+      },
+      controller.signal,
+    )
+      .then((done) => {
+        if (!done) return; // 무음 폴백 — BE 없는 환경에서 에러 풍선 금지.
+        // 낡은 응답 폐기 — 이 판정 뒤에 새 판정이 이미 나갔다면 그쪽이 진실이다.
+        if (revision !== judgeRevisionRef.current) return;
+        reconcileRequests(done.openRequests ?? []);
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        // 뒤에 새 판정이 이미 켜 둔 표시를 여기서 끄면 안 된다.
+        if (revision === judgeRevisionRef.current) setJudging(false);
+      });
+  });
+
+  // 언마운트 시 진행 중 판정 정리.
+  useEffect(() => () => judgeAbortRef.current?.abort(), []);
 
   const sendToApi = useCallback(
     async (
@@ -891,6 +1029,8 @@ export function ChatContainer() {
   );
 
   const handleNewConversation = useCallback(() => {
+    // 진행 중 판정은 이 대화의 것이다 — 늦게 도착한 스트림이 새 대화에 붙으면 안 된다.
+    judgeAbortRef.current?.abort();
     setMessages([]);
     setIsStreaming(false);
     setDemoState(null);
@@ -913,6 +1053,7 @@ export function ChatContainer() {
       // Mid-stream switch would orphan the in-flight assistant message —
       // require the user to wait for the current turn to settle.
       if (isStreaming) return;
+      judgeAbortRef.current?.abort();
       setDemoState(null);
       setHistoryOpen(false);
       clearRequests();
@@ -968,10 +1109,11 @@ export function ChatContainer() {
       if (result.ok) {
         fulfillRequest(opts.queryKey);
         rememberSessionSnapshot(result.snapshot.id);
+        requestJudge({ type: "snapshot-registered", queryKey: opts.queryKey });
       }
       return result;
     },
-    [addSnapshot, fulfillRequest, rememberSessionSnapshot],
+    [addSnapshot, fulfillRequest, rememberSessionSnapshot, requestJudge],
   );
 
   /**
@@ -989,20 +1131,62 @@ export function ChatContainer() {
       if (result.ok) {
         fulfillRequest(opts.queryKey);
         rememberSessionSnapshot(result.snapshot.id);
+        requestJudge({ type: "snapshot-registered", queryKey: opts.queryKey });
       }
       return result;
     },
-    [addEmptyResult, fulfillRequest, rememberSessionSnapshot],
+    [addEmptyResult, fulfillRequest, rememberSessionSnapshot, requestJudge],
   );
 
   /** 수동 등록 — 이름을 묻지 않는다. 라벨은 내용에서 자동으로 만들어진다. */
   const handleAddSnapshot = useCallback(
     (input: string) => {
       const result = addSnapshot(input, "");
-      if (result.ok) rememberSessionSnapshot(result.snapshot.id);
+      if (result.ok) {
+        rememberSessionSnapshot(result.snapshot.id);
+        requestJudge({
+          type: "snapshot-added",
+          queryKey: result.snapshot.queryKey,
+        });
+      }
       return result;
     },
-    [addSnapshot, rememberSessionSnapshot],
+    [addSnapshot, rememberSessionSnapshot, requestJudge],
+  );
+
+  /** 판정 집합을 바꾸는 패널 액션들 — 상태를 바꾸고 다음 커밋에서 판정을 부른다. */
+  const handleToggleSnapshotIncluded = useCallback(
+    (id: string) => {
+      const key = snapshots.find((s) => s.id === id)?.queryKey;
+      toggleSnapshotIncluded(id);
+      requestJudge({
+        type: "snapshot-toggled",
+        ...(key ? { queryKey: key } : {}),
+      });
+    },
+    [snapshots, toggleSnapshotIncluded, requestJudge],
+  );
+  const handleRemoveSnapshot = useCallback(
+    (id: string) => {
+      const key = snapshots.find((s) => s.id === id)?.queryKey;
+      removeSnapshot(id);
+      requestJudge({
+        type: "snapshot-trashed",
+        ...(key ? { queryKey: key } : {}),
+      });
+    },
+    [snapshots, removeSnapshot, requestJudge],
+  );
+  const handleRestoreLastRemoved = useCallback(() => {
+    restoreSnapshot();
+    requestJudge({ type: "snapshot-restored" });
+  }, [restoreSnapshot, requestJudge]);
+  const handleRestoreSnapshotById = useCallback(
+    (id: string) => {
+      restoreSnapshotById(id);
+      requestJudge({ type: "snapshot-restored" });
+    },
+    [restoreSnapshotById, requestJudge],
   );
 
   // 재생성 / 에러 재시도 공통 핸들러. 마지막 user 메시지까지 잘라낸 뒤
@@ -1111,14 +1295,14 @@ export function ChatContainer() {
               onAdd={handleAddSnapshot}
               onFulfill={handleFulfillRequest}
               onRegisterEmpty={handleRegisterEmptyResult}
-              onToggleIncluded={toggleSnapshotIncluded}
-              onRemove={removeSnapshot}
+              onToggleIncluded={handleToggleSnapshotIncluded}
+              onRemove={handleRemoveSnapshot}
               onRename={setSnapshotLabel}
               onSetQuery={setSnapshotSourceSql}
               lastRemoved={lastRemovedSnapshot}
-              onRestore={restoreSnapshot}
+              onRestore={handleRestoreLastRemoved}
               trashed={trashedSnapshots}
-              onRestoreOne={restoreSnapshotById}
+              onRestoreOne={handleRestoreSnapshotById}
               onPurge={purgeSnapshot}
               onPurgeAll={purgeAllSnapshots}
               expanded={dataExpandedInner}
@@ -1142,17 +1326,21 @@ export function ChatContainer() {
           <div
             className={[
               "mx-auto py-xl",
-              messages.length === 0
+              messages.length === 0 && !judging
                 ? "max-w-chat-narrow px-lg"
                 : "max-w-chat-narrow px-lg xl:max-w-none xl:px-[5vw]",
             ].join(" ")}
           >
-            {messages.length === 0 ? (
+            {/* 판정 중에는 빈 채팅이라도 시작 화면 대신 목록을 그린다 — 안 그러면
+                채팅 없이 결과부터 등록한 사용자에게 생각 중 표시도, 곧 도착할
+                종결 서술의 자리도 시작 화면에 가려 보이지 않는다. */}
+            {messages.length === 0 && !judging ? (
               <ChatEmptyState onQuickStart={handleQuickStart} />
             ) : (
               <MessageList
                 messages={messages}
                 isStreaming={isStreaming}
+                judging={judging}
                 onRegenerate={demoState ? undefined : handleRegenerate}
               />
             )}
