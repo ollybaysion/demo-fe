@@ -168,12 +168,6 @@ export function RequestCard({
         이 조회를 실행한 결과를 붙여넣어 주세요.
       </p>
 
-      {request.columns && request.columns.length > 0 && (
-        <p className="text-caption text-brand-muted-soft font-mono">
-          {request.columns.join(", ")}
-        </p>
-      )}
-
       {request.sql && (
         <div className="relative">
           {/* whitespace-pre-wrap: 패널 폭(440px)을 넘는 SQL 줄도 스크롤에
