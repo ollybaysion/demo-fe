@@ -43,7 +43,12 @@ export function upsertSnapshot(
   list: DataSnapshot[],
   next: DataSnapshot,
 ): DataSnapshot[] {
-  const dupIndex = list.findIndex((s) => isSameContent(s, next));
+  // 중복은 살아 있는 것끼리만 본다 — 호출부(`commit`)의 반환 id 판정과 같은
+  // 기준이어야 한다. 휴지통의 같은 내용에 접으면 버린 항목이 옛 id 로 몰래
+  // 부활하고, 호출부는 새 id 를 돌려줘 카드가 허공을 가리킨다(미분류행 버그).
+  const dupIndex = list.findIndex(
+    (s) => s.deletedAt === undefined && isSameContent(s, next),
+  );
   if (dupIndex === -1) return [...list, next];
 
   const existing = list[dupIndex];
@@ -94,7 +99,9 @@ export function upsertFulfilling(
   next: DataSnapshot,
 ): DataSnapshot[] {
   return upsertSnapshot(list, next).map((s) =>
-    isSameContent(s, next) ? { ...s, included: true } : s,
+    s.deletedAt === undefined && isSameContent(s, next)
+      ? { ...s, included: true }
+      : s,
   );
 }
 
