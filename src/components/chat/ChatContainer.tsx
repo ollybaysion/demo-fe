@@ -54,20 +54,19 @@ import { type Skill, type SkillSession } from "@/lib/skills";
 import {
   allAnalyses,
   EMPTY_WORKBENCH as EMPTY_TREE,
-  fulfillRequestCard,
+  fulfillSlot,
   loadWorkbench as loadWorkbenchTree,
   openAnalysis,
   ownerOfSnapshot,
-  reconcileRequestCards,
   referencedSnapshotIds,
   removeAnalysis,
   runRefOf,
   sameRun,
   saveWorkbench as saveWorkbenchTree,
+  slotViews,
   toRunDecls,
   upsertEquipment,
   type Workbench as WorkbenchTree,
-  type WireRequest,
 } from "@/lib/workbench-cards";
 import {
   clearPendingWorkbench,
@@ -326,7 +325,7 @@ export function ChatContainer() {
         eq.analyses.map((an) => ({
           id: an.id,
           equipment: eq.name,
-          skill: an.skill,
+          skill: an.skills[0],
           values: an.args,
         })),
       ),
@@ -750,24 +749,11 @@ export function ChatContainer() {
       },
       controller.signal,
     )
-      .then((done) => {
-        if (!done) return; // 무음 폴백 — BE 없는 환경에서 에러 풍선 금지.
-        // 낡은 응답 폐기 — 이 판정 뒤에 새 판정이 이미 나갔다면 그쪽이 진실이다.
-        if (revision !== judgeRevisionRef.current) return;
-        // 허상 정리용 생존 조회 — 완전 삭제된 본문을 물고 있는 data 카드는
-        // 채워진 자리가 아니다(요청 재개).
-        const alive = new Set(judgeStateRef.current.snapshots.map((s) => s.id));
-        // 카드는 트리에 앉는다 — 각 분석의 request 카드만 전량 교체된다.
-        // run 참조가 어느 분석과도 안 맞는 카드는 버린다(선언은 트리에서
-        // 나갔으므로 정상 경로에선 없다 — 소속을 지어내지 않는다).
-        setTree(
-          (prev) =>
-            reconcileRequestCards(
-              prev,
-              (done.openRequests ?? []) as WireRequest[],
-              (id) => alive.has(id),
-            ).wb,
-        );
+      .then(() => {
+        // 카드 배치는 판정 응답을 읽지 않는다 — 슬롯 상태는 매 렌더 로컬
+        // 파생(slotViews)이라 화면이 상태와 어긋날 수 없다. 판정 왕복은
+        // BE 인지(진행 트레이스)와 종결 서술을 위해 남는다. openRequests 는
+        // 채팅 경로(BindResolver)와의 패리티 교차검증 재료로만 의미가 있다.
       })
       .finally(() => {
         clearTimeout(timeoutId);
@@ -1208,7 +1194,7 @@ export function ChatContainer() {
         fulfillRequest(opts.queryKey);
         // 같은 자리의 request 카드가 data 카드로 전이한다 — 본문은 IDB 참조.
         setTree((prev) =>
-          fulfillRequestCard(prev, opts.queryKey, result.snapshot.id),
+          fulfillSlot(prev, opts.queryKey, result.snapshot.id),
         );
         rememberSessionSnapshot(result.snapshot.id);
         requestJudge({ type: "snapshot-registered", queryKey: opts.queryKey });
@@ -1234,7 +1220,7 @@ export function ChatContainer() {
         fulfillRequest(opts.queryKey);
         // 0행도 채운 것이다 — 같은 자리의 카드가 data 로 전이한다.
         setTree((prev) =>
-          fulfillRequestCard(prev, opts.queryKey, result.snapshot.id),
+          fulfillSlot(prev, opts.queryKey, result.snapshot.id),
         );
         rememberSessionSnapshot(result.snapshot.id);
         requestJudge({ type: "snapshot-registered", queryKey: opts.queryKey });
@@ -1350,15 +1336,21 @@ export function ChatContainer() {
     return undefined;
   }, [messages, fulfilledRequestsFor]);
 
-  // 아직 채울 카드가 남았는가 — 구식 store 와 트리의 request 카드를 합쳐 센다.
-  const treeOpenRequestCount = useMemo(
-    () =>
-      allAnalyses(tree).reduce(
-        (n, a) => n + a.cards.filter((c) => c.type === "request").length,
-        0,
-      ),
-    [tree],
-  );
+  // 슬롯 상태 집계 — 열린 요청(쿼리 확정·미도착)과 도착(본문 산 것만)을
+  // 로컬 해석으로 센다. 카드 저장물이 아니라 파생이라 화면과 어긋날 수 없다.
+  const slotSummary = useMemo(() => {
+    const byId = new Map(snapshots.map((s) => [s.id, s]));
+    let open = 0;
+    let arrived = 0;
+    for (const an of allAnalyses(tree)) {
+      for (const v of slotViews(an, (id) => byId.get(id))) {
+        if (v.kind === "request") open++;
+        else if (v.kind === "data") arrived++;
+      }
+    }
+    return { open, arrived };
+  }, [tree, snapshots]);
+  const treeOpenRequestCount = slotSummary.open;
 
   /**
    * 다음 할 일 안내(패널 상단 스트립) — 조달 루프의 현재 상태에서만 파생한다.
@@ -1382,28 +1374,20 @@ export function ChatContainer() {
   const panelGuide = useMemo(() => {
     const analyses = allAnalyses(tree);
     const openCount =
-      treeOpenRequestCount + openRequests.filter((p) => !p.fulfilled).length;
+      slotSummary.open + openRequests.filter((p) => !p.fulfilled).length;
     if (openCount > 0) {
       return `다음 할 일 — 열린 요청 카드 ${openCount}장의 SQL을 실행해 결과를 등록하세요. 조회 결과가 없으면 [결과 없음]으로 등록해도 됩니다.`;
     }
-    // 채움 = 본문이 살아 있는 data 카드만 — 완전 삭제로 허상이 된 카드를 세면
-    // 데이터가 없는데 "모두 채워졌다"고 말하게 된다.
-    const alive = new Set(snapshots.map((s) => s.id));
-    const arrived = analyses.reduce(
-      (n, a) =>
-        n +
-        a.cards.filter((c) => c.type === "data" && alive.has(c.snapshotId))
-          .length,
-      0,
-    );
-    if (analyses.length > 0 && arrived > 0) {
+    // 도착 = 본문이 살아 있는 슬롯만(slotViews 규칙) — 완전 삭제로 허상이 된
+    // 참조를 세면 데이터가 없는데 "모두 채워졌다"고 말하게 된다.
+    if (analyses.length > 0 && slotSummary.arrived > 0) {
       return "필요한 조회가 모두 채워졌습니다 — 채팅의 결론을 확인하거나 이어서 질문하세요.";
     }
     if (tree.equipments.length > 0 && analyses.length === 0) {
       return "설비 카드에서 분석을 추가하면 필요한 조회가 요청 카드로 열립니다.";
     }
     return null;
-  }, [tree, treeOpenRequestCount, openRequests, snapshots]);
+  }, [tree, slotSummary, openRequests]);
 
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;

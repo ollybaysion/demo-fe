@@ -13,7 +13,7 @@ import { JUDGE_ORIGIN } from "@/lib/request-store";
 import type { DataSnapshot } from "@/lib/types";
 import { equipmentInputKey } from "@/lib/skills";
 import type { AnalysisCard, Workbench } from "@/lib/workbench-cards";
-import { referencedSnapshotIds } from "@/lib/workbench-cards";
+import { referencedSnapshotIds, slotViews } from "@/lib/workbench-cards";
 import type { EquipmentCardModel, EquipmentLine } from "./equipment-cards.mock";
 import type { DerivedGroup, DerivedPanel } from "./derive-cards";
 
@@ -25,7 +25,7 @@ export const UNCLASSIFIED_GROUP_KEY = "unclassified";
  * 카드 소속)이 이미 말하므로 뺀다.
  */
 export function analysisParams(an: AnalysisCard): string | null {
-  const eqKey = equipmentInputKey(an.skill);
+  const eqKey = equipmentInputKey(an.skills[0]);
   const parts = Object.entries(an.args)
     .filter(([k]) => k !== eqKey)
     .map(([k, v]) => `${k}=${v}`);
@@ -57,21 +57,26 @@ export function deriveWorkbenchPanel(
   for (const eq of wb.equipments) {
     const lines: EquipmentLine[] = [];
     for (const an of eq.analyses) {
-      const title = an.skill.name;
+      const title = an.skills[0].name;
       const params = analysisParams(an);
-      const dataSnapshots = an.cards
-        .filter((c) => c.type === "data")
-        .map((c) => byId.get(c.snapshotId))
+      // 슬롯 전량을 로컬 해석한다 — 미정은 안 그리고, 확정은 요청 카드로,
+      // 도착(본문이 산 것만)은 데이터 카드로. 판정 왕복 없이 매 렌더 파생이라
+      // 화면이 현재 상태와 어긋날 수 없다(박제 없음).
+      const views = slotViews(an, (id) => byId.get(id));
+      const dataSnapshots = views
+        .filter((v): v is Extract<typeof v, { kind: "data" }> => v.kind === "data")
+        .map((v) => byId.get(v.snapshotId))
         .filter((s): s is DataSnapshot => s !== undefined);
-      const requests: PendingRequest[] = an.cards
-        .filter((c) => c.type === "request")
-        .map((c) => ({
+      const requests: PendingRequest[] = views
+        .filter(
+          (v): v is Extract<typeof v, { kind: "request" }> =>
+            v.kind === "request",
+        )
+        .map((v) => ({
           request: {
-            queryKey: c.queryKey,
-            label: c.label,
-            ...(c.sql !== undefined ? { sql: c.sql } : {}),
-            ...(c.columns !== undefined ? { columns: c.columns } : {}),
-            ...(c.timeRange !== undefined ? { timeRange: c.timeRange } : {}),
+            queryKey: v.queryKey,
+            label: v.title,
+            sql: v.sql,
           },
           originMessageId: JUDGE_ORIGIN,
           fulfilled: false,
