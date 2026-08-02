@@ -42,7 +42,10 @@ import { SummaryPanel } from "./summary/SummaryPanel";
 import { EquipmentPanel } from "./context";
 import { EquipmentDetailDrawer } from "./context/EquipmentDetailDrawer";
 import { equipmentCardId, parseLabel } from "./context/derive-cards";
-import { deriveWorkbenchPanel } from "./context/workbench-derive";
+import {
+  deriveWorkbenchPanel,
+  UNCLASSIFIED_GROUP_KEY,
+} from "./context/workbench-derive";
 import {
   judgeChatData,
   type PanelJudgeEvent,
@@ -473,6 +476,23 @@ export function ChatContainer() {
       .find((l) => l.key === item.lineKey);
     return line?.status === "filled";
   }
+
+  /**
+   * 왼쪽 데이터 패널에 보일 그룹 — 질의 대상이 담겨 있으면 그 범위만 남긴다
+   * (담긴 게 없으면 전부). 미분류만은 예외로 늘 남긴다: 방금 붙여넣은 표가
+   * 스코프에 걷혀 조용히 사라지면 등록이 무반응처럼 보인다.
+   */
+  const visibleGroups =
+    prunedScope.length === 0
+      ? dataGroups
+      : dataGroups.filter(
+          (g) =>
+            g.key === UNCLASSIFIED_GROUP_KEY ||
+            hasEquipment(prunedScope, g.equipment) ||
+            prunedScope.some(
+              (i) => i.kind === "analysis" && i.lineKey === g.key,
+            ),
+        );
 
   /**
    * 채팅에 실어 보낼 스냅샷 — 담긴 대상의 것만.
@@ -1354,8 +1374,8 @@ export function ChatContainer() {
               onAddArtifact={handleAddArtifact}
               onRemoveArtifact={handleRemoveArtifact}
               snapshots={scopedSnapshots}
-              // 현재 세션 요청 + 스냅샷에서 파생한 그룹. viewMode 로 설비별/유형별.
-              groups={dataGroups}
+              // 작업판 트리에서 파생한 그룹 — 질의 대상이 담겨 있으면 그 범위만.
+              groups={visibleGroups}
               viewMode={dataView}
               onToggleView={() =>
                 setDataView((v) => (v === "equipment" ? "type" : "equipment"))
@@ -1372,7 +1392,7 @@ export function ChatContainer() {
               }
               onToggleGroup={(key) =>
                 setOpenGroupKeys((prev) => {
-                  const base = prev ?? dataGroups.map((g) => g.key);
+                  const base = prev ?? visibleGroups.map((g) => g.key);
                   return base.includes(key)
                     ? base.filter((k) => k !== key)
                     : [...base, key];
