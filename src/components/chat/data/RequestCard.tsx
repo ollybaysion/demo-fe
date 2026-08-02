@@ -215,10 +215,7 @@ export function RequestCard({
           <span className="font-semibold">{error.code}</span> — {error.message}
         </p>
       )}
-      <div className="flex items-center justify-between gap-xs">
-        <p className="text-caption text-brand-muted-soft min-w-0">
-          등록 후 채팅에 “등록 완료”라고 입력하면 이어서 분석합니다.
-        </p>
+      <div className="flex items-center justify-end gap-xs">
         <div className="shrink-0 flex items-center gap-xs">
           {/* 붙여넣을 것이 없는 답 — 0행도 등록되어야 이 요청이 끝난다.
               붙여넣기를 시작한 뒤에는 감춘다: 채우던 중에 "없음"을 누르면

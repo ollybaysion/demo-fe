@@ -1498,13 +1498,16 @@ export function ChatContainer() {
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="mx-auto max-w-chat-narrow px-lg pt-sm pb-lg">
-            {/* 다음 할 일 안내 — 조달 루프 상태에서 파생. 입력창 바로 위 가운데
-                영역이 "이제 뭘 하지"를 보는 자리다(채팅 버블 아님). */}
-            {panelGuide && !demoState && (
-              <p className="mb-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs text-caption text-brand-muted">
-                {panelGuide}
-              </p>
-            )}
+            {/* 질의 대상 — 안내류의 맨 위. 늘 있다: 대화 중에 사라지는 자리는
+                "내가 뭘 잘못 눌렀나"가 된다. 데모 재생 중에도 보이되, 실려
+                나가지는 않는다(시나리오는 정해진 답을 내야 한다 — 스냅샷·입력과
+                같은 규율). 데모 중에는 입력창도 잠겨 있어 결이 어긋나지 않는다. */}
+            <ScopeTray
+              items={prunedScope}
+              onRemove={removeQueryScope}
+              onDropItem={addQueryScope}
+              hasData={scopeHasData}
+            />
             {/*
               ChatInput 위 chip 슬롯 — 대화가 시작된 뒤에만 쓴다.
               - 등록이 끝났을 때: 이어가기 안내
@@ -1538,16 +1541,13 @@ export function ChatContainer() {
                   enabledQuestion={enabledFollowUp}
                 />
               )}
-            {/* 질의 대상 — 입력창 바로 위. 늘 있다: 대화 중에 사라지는 자리는
-                "내가 뭘 잘못 눌렀나"가 된다. 데모 재생 중에도 보이되, 실려
-                나가지는 않는다(시나리오는 정해진 답을 내야 한다 — 스냅샷·입력과
-                같은 규율). 데모 중에는 입력창도 잠겨 있어 결이 어긋나지 않는다. */}
-            <ScopeTray
-              items={prunedScope}
-              onRemove={removeQueryScope}
-              onDropItem={addQueryScope}
-              hasData={scopeHasData}
-            />
+            {/* 다음 할 일 안내 — 조달 루프 상태에서 파생. 입력창 바로 위가
+                "이제 뭘 하지"를 보는 자리다(채팅 버블 아님). */}
+            {panelGuide && !demoState && (
+              <p className="mb-xs rounded-md border border-brand-hairline bg-brand-surface-card px-sm py-xs text-caption text-brand-muted">
+                {panelGuide}
+              </p>
+            )}
             <ChatInput
               onSubmit={handleSubmit}
               disabled={isStreaming}
