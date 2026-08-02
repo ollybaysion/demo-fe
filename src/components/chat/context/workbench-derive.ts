@@ -18,8 +18,19 @@ import type { DerivedGroup, DerivedPanel } from "./derive-cards";
 
 export const UNCLASSIFIED_GROUP_KEY = "unclassified";
 
-/** 분석 카드의 사람이 읽는 라벨 — BE `runsProgress.label` 과 같은 꼴. */
-export function analysisLabel(an: AnalysisCard): string {
+/**
+ * 분석 카드의 사람이 읽는 라벨 — 기본은 스킬 이름만. 인자는 실행의 정체
+ * 식별자지 사람 읽으라고 있는 값이 아니라 제목에서 뺀다. 단 같은 자리에서
+ * 같은 스킬이 인자만 다르게 여럿이면 구분이 안 되니, 그때만 꼬리로 붙인다.
+ */
+export function analysisLabel(
+  an: AnalysisCard,
+  siblings: AnalysisCard[] = [],
+): string {
+  const dup = siblings.some(
+    (s) => s !== an && s.skill.name === an.skill.name,
+  );
+  if (!dup) return an.skill.name;
   const args = Object.entries(an.args)
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
@@ -51,7 +62,7 @@ export function deriveWorkbenchPanel(
   for (const eq of wb.equipments) {
     const lines: EquipmentLine[] = [];
     for (const an of eq.analyses) {
-      const label = analysisLabel(an);
+      const label = analysisLabel(an, eq.analyses);
       const dataSnapshots = an.cards
         .filter((c) => c.type === "data")
         .map((c) => byId.get(c.snapshotId))
