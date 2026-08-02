@@ -126,7 +126,49 @@ type Props = {
   onToggleGroup?: (key: string) => void;
   /** 단 제목 줄 아이콘 — 그룹을 한 번에 접거나 편다. */
   onSetAllGroups?: (open: boolean) => void;
+  /** 등록한 데이터가 판정 왕복 중 — 헤더 신호등이 돌고, 끝나면 초록으로 한 번 켜진다. */
+  judging?: boolean;
 };
+
+/**
+ * 판정 신호등 — 데이터 등록이 조용히 서버 판정으로 넘어가는 것을 눈에 보이게
+ * 한다. 왕복 동안 스피너가 돌고, 응답이 반영되는 순간 초록불이 잠깐 켜졌다
+ * 꺼진다. 지속 상태를 남기지 않는다 — 한 번의 안내다.
+ */
+function JudgeLight({ judging }: { judging: boolean }) {
+  const [flash, setFlash] = useState(false);
+  const prevRef = useRef(judging);
+  useEffect(() => {
+    const was = prevRef.current;
+    prevRef.current = judging;
+    if (was && !judging) {
+      setFlash(true);
+      const t = setTimeout(() => setFlash(false), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [judging]);
+  if (judging) {
+    return (
+      <span
+        role="status"
+        aria-label="판정 중"
+        title="등록한 데이터를 서버 판정으로 확인하는 중"
+        className="ml-xs inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-brand-muted/30 border-t-brand-primary align-middle"
+      />
+    );
+  }
+  if (flash) {
+    return (
+      <span
+        role="status"
+        aria-label="판정 반영됨"
+        title="판정 반영됨"
+        className="ml-xs inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-brand-success align-middle"
+      />
+    );
+  }
+  return null;
+}
 
 export function DataPanel({
   snapshots,
@@ -159,6 +201,7 @@ export function DataPanel({
   openGroupKeys = null,
   onToggleGroup,
   onSetAllGroups,
+  judging = false,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [seed, setSeed] = useState<{
@@ -408,6 +451,7 @@ export function DataPanel({
               {includedCount}개 포함
             </span>
           )}
+          <JudgeLight judging={judging} />
         </h2>
         <div className="shrink-0 flex items-center gap-xxs">
         {/* 전체 보기 토글 — 기본은 오른쪽 설비 패널에서 담은 것만. 문구는 늘

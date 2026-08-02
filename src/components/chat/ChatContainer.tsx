@@ -1416,6 +1416,8 @@ export function ChatContainer() {
               onAddArtifact={handleAddArtifact}
               onRemoveArtifact={handleRemoveArtifact}
               snapshots={scopedSnapshots}
+              // 데이터 등록 → 판정 왕복이 눈에 보이도록 — 헤더 신호등.
+              judging={judging}
               // 작업판 트리에서 파생한 그룹 — 질의 대상이 담겨 있으면 그 범위만.
               groups={visibleGroups}
               scopeAll={scopeAll}
