@@ -11,6 +11,7 @@
 import type { PendingRequest } from "@/lib/request-store";
 import { JUDGE_ORIGIN } from "@/lib/request-store";
 import type { DataSnapshot } from "@/lib/types";
+import { equipmentInputKey } from "@/lib/skills";
 import type { AnalysisCard, Workbench } from "@/lib/workbench-cards";
 import { referencedSnapshotIds } from "@/lib/workbench-cards";
 import type { EquipmentCardModel, EquipmentLine } from "./equipment-cards.mock";
@@ -19,22 +20,38 @@ import type { DerivedGroup, DerivedPanel } from "./derive-cards";
 export const UNCLASSIFIED_GROUP_KEY = "unclassified";
 
 /**
- * 분석 카드의 사람이 읽는 라벨 — 기본은 스킬 이름만. 인자는 실행의 정체
- * 식별자지 사람 읽으라고 있는 값이 아니라 제목에서 뺀다. 단 같은 자리에서
- * 같은 스킬이 인자만 다르게 여럿이면 구분이 안 되니, 그때만 꼬리로 붙인다.
+ * 분석 카드의 사람이 읽는 라벨 — `스킬명 · 단위 대상값` ("fdc-explain-sensor ·
+ * 센서 B"). 분석의 사람말 정체는 스킬이 아니라 **대상**이라 대표 인자 값을
+ * 상시로 세운다(키 이름 같은 개발자 표기는 안 쓴다). 같은 스킬·같은 대상이
+ * 또 있으면 그때만 나머지 인자를 꼬리로 붙여 가른다.
  */
 export function analysisLabel(
   an: AnalysisCard,
   siblings: AnalysisCard[] = [],
 ): string {
+  const primary = primaryTarget(an);
+  const base = primary
+    ? `${an.skill.name} · ${an.skill.unit} ${primary}`.trim()
+    : an.skill.name;
   const dup = siblings.some(
-    (s) => s !== an && s.skill.name === an.skill.name,
+    (s) =>
+      s !== an &&
+      s.skill.name === an.skill.name &&
+      primaryTarget(s) === primary,
   );
-  if (!dup) return an.skill.name;
+  if (!dup) return base;
   const args = Object.entries(an.args)
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
-  return args ? `${an.skill.name} (${args})` : an.skill.name;
+  return args ? `${base} (${args})` : base;
+}
+
+/** 대표 인자 값 — 설비형이 아닌 첫 필수 입력의 값. 없으면 null. */
+function primaryTarget(an: AnalysisCard): string | null {
+  const eqKey = equipmentInputKey(an.skill);
+  const input = an.skill.inputs.find((i) => i.required && i.key !== eqKey);
+  const value = input ? an.args[input.key] : undefined;
+  return value && value.trim() ? value.trim() : null;
 }
 
 /**
