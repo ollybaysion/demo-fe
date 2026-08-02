@@ -25,17 +25,26 @@ export type Settings = {
   /** 현재 ko 만 지원. 다국어는 별도 이슈. */
   language: "ko";
   model: ModelOption;
+  /** 입력창 위 "다음 할 일" 안내 스트립 표시 여부. */
+  guideStrip: boolean;
 };
 
-const SETTINGS_KEY = "fdc-fe.settings.v1";
+export const SETTINGS_KEY = "fdc-fe.settings.v1";
 
-const DEFAULT_SETTINGS: Settings = {
+export const DEFAULT_SETTINGS: Settings = {
   theme: "cool-gray",
   fontSize: "md",
   fontSet: "pretendard",
   language: "ko",
   model: "default",
+  guideStrip: true,
 };
+
+/**
+ * 설정 변경 알림 — 모달은 저장까지만 하고, 열린 화면(안내 스트립 등)이 즉시
+ * 따라오도록 같은 탭 안에 이벤트를 쏜다(`storage` 이벤트는 다른 탭에만 온다).
+ */
+export const SETTINGS_CHANGED_EVENT = "fdc:settings-changed";
 
 type Props = {
   open: boolean;
@@ -64,6 +73,7 @@ export function SettingsModal({ open, onClose }: Props) {
       writeJson(SETTINGS_KEY, next);
       if (key === "theme") applyTheme(value as Theme);
       if (key === "fontSet") applyFontSet(value as FontSet);
+      window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT));
       return next;
     });
   }
@@ -144,6 +154,17 @@ export function SettingsModal({ open, onClose }: Props) {
               { value: "sm", label: "작게" },
               { value: "md", label: "보통" },
               { value: "lg", label: "크게" },
+            ]}
+          />
+
+          <RadioGroup
+            label="다음 할 일 안내"
+            name="guideStrip"
+            value={(settings.guideStrip ?? true) ? "on" : "off"}
+            onChange={(v) => update("guideStrip", v === "on")}
+            options={[
+              { value: "on", label: "표시" },
+              { value: "off", label: "숨김" },
             ]}
           />
 

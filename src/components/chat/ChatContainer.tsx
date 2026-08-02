@@ -100,6 +100,13 @@ import {
   toChatScope,
   toggleScope,
 } from "@/lib/query-scope";
+import { readJson } from "@/lib/storage";
+import {
+  DEFAULT_SETTINGS,
+  SETTINGS_CHANGED_EVENT,
+  SETTINGS_KEY,
+  type Settings,
+} from "../settings/SettingsModal";
 import { ScopeTray } from "./scope/ScopeTray";
 
 type TokenPayload = { content: string };
@@ -1343,6 +1350,21 @@ export function ChatContainer() {
    * 다음 할 일 안내(패널 상단 스트립) — 조달 루프의 현재 상태에서만 파생한다.
    * "등록했는데 이제 뭘 하지"의 답이 화면 어딘가에는 서 있어야 한다(#163 UX).
    */
+  // 안내 스트립 표시 여부 — 설정(기본 켬)이 총괄, X 는 지금 문구만 걷는다.
+  // 문구가 바뀌면(=상태가 진행되면) 다시 뜬다: 닫음은 "이건 읽었다"지
+  // "다시는 보기 싫다"가 아니다 — 후자는 설정이 담당한다.
+  const [guideEnabled, setGuideEnabled] = useState(true);
+  const [dismissedGuide, setDismissedGuide] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => {
+      const s = readJson<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS);
+      setGuideEnabled(s.guideStrip ?? true);
+    };
+    read();
+    window.addEventListener(SETTINGS_CHANGED_EVENT, read);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, read);
+  }, []);
+
   const panelGuide = useMemo(() => {
     const analyses = allAnalyses(tree);
     const openCount =
@@ -1543,13 +1565,39 @@ export function ChatContainer() {
               )}
             {/* 다음 할 일 안내 — 조달 루프 상태에서 파생. 입력창 바로 위가
                 "이제 뭘 하지"를 보는 자리다(채팅 버블 아님). */}
-            {panelGuide && !demoState && (
-              // 한색 계열은 teal 액센트가 정본 — 배경은 그 틴트, 글씨는
-              // teal-ink(글씨용 진한 변형)로 색을 유지한 채 대비를 얻는다.
-              <p className="mb-xs rounded-md border border-brand-accent-teal/25 bg-brand-accent-teal/10 px-sm py-xs text-caption text-brand-accent-teal-ink">
-                {panelGuide}
-              </p>
-            )}
+            {panelGuide &&
+              guideEnabled &&
+              panelGuide !== dismissedGuide &&
+              !demoState && (
+                // 한색 계열은 teal 액센트가 정본 — 배경은 그 틴트, 글씨는
+                // teal-ink(글씨용 진한 변형)로 색을 유지한 채 대비를 얻는다.
+                <div className="mb-xs flex items-start gap-xs rounded-md border border-brand-accent-teal/25 bg-brand-accent-teal/10 px-sm py-xs">
+                  <p className="flex-1 min-w-0 text-caption text-brand-accent-teal-ink">
+                    {panelGuide}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setDismissedGuide(panelGuide)}
+                    aria-label="안내 닫기"
+                    title="안내 닫기 — 상태가 바뀌면 다시 뜹니다. 설정에서 끌 수 있어요."
+                    className="shrink-0 -mr-xxs inline-flex h-5 w-5 items-center justify-center rounded-sm text-brand-accent-teal-ink/70 hover:text-brand-accent-teal-ink hover:bg-brand-accent-teal/15 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      aria-hidden
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             <ChatInput
               onSubmit={handleSubmit}
               disabled={isStreaming}

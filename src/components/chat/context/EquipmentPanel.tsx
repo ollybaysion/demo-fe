@@ -393,8 +393,8 @@ function LineRow({
   };
   const picked = inScope ? inScope(scopeItem) : false;
 
-  // 줄에서도 넓은 면은 담기다 — 카드와 같은 규칙. 왼쪽에서 보기는 끝의 `←` 로
-  // 내려간다(원래도 그 자리에서 방향을 가리키고 있었다).
+  // 줄에서도 넓은 면은 담기다 — 카드와 같은 규칙. 왼쪽에서 보기는 줄 앞의
+  // `←` 로 내려간다(가리키는 방향인 왼쪽 패널 쪽에 붙어 선다).
   const row = (
     <button
       type="button"
@@ -452,9 +452,9 @@ function LineRow({
 
   return (
     <div {...scopeDragProps(scopeItem)} className="flex items-stretch gap-xxs">
-      {row}
-      {/* 대기 줄도 누를 수 있다 — 볼 데이터 대신 **그 데이터를 부른 요청 카드**로
-          데려간다(요청이 왼쪽에 실제로 있으니 갈 곳이 있다). */}
+      {/* 화살표가 가리키는 쪽(왼쪽 패널)에 붙어 선다 — 대기 줄도 누를 수 있다:
+          볼 데이터 대신 **그 데이터를 부른 요청 카드**로 데려간다(요청이
+          왼쪽에 실제로 있으니 갈 곳이 있다). */}
       <button
         type="button"
         onClick={onSelect}
@@ -468,6 +468,7 @@ function LineRow({
       >
         <ArrowLeft />
       </button>
+      {row}
     </div>
   );
 }
