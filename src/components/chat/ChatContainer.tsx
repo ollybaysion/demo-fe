@@ -30,7 +30,6 @@ import type {
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
-import { EquipmentDetailPanel } from "./equipment/EquipmentDetailPanel";
 import { MessageList } from "./message/MessageList";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { SummaryPanel } from "./summary/SummaryPanel";
@@ -129,11 +128,10 @@ export function ChatContainer() {
   const [rightTab, setRightTab] = useState<"context" | "summary">("context");
   // 대화 이력은 상주 컬럼에서 밀려나 헤더 ≡ 로 여는 오버레이 드로어.
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
   /**
    * 데이터 패널 확장 모드(#136) — 패널이 70% 마스터-디테일이 되고 우측(설비
-   * 정보/요약) 패널이 자리를 양보한다. 우측 패널의 탭·detailOpen 상태는 이
-   * 컴포넌트가 쥐고 있으므로 숨겼다 복귀해도 그대로다.
+   * 정보/요약) 패널이 자리를 양보한다. 우측 패널의 탭 상태는 이 컴포넌트가
+   * 쥐고 있으므로 숨겼다 복귀해도 그대로다.
    */
   const [dataExpanded, setDataExpanded] = useState(false);
   /**
@@ -886,7 +884,6 @@ export function ChatContainer() {
     setMessages([]);
     setIsStreaming(false);
     setDemoState(null);
-    setDetailOpen(false);
     // 요청은 낳은 질문에 매여 있다 — 대화가 사라지면 같이 사라져야 한다.
     // 스냅샷은 반대로 남는다(대화와 독립된 보관물). 채운 입력도 대화에 매인 것이라
     // 함께 걷어낸다(sticky 지만 새 대화에는 이월하지 않는다).
@@ -907,7 +904,6 @@ export function ChatContainer() {
       // require the user to wait for the current turn to settle.
       if (isStreaming) return;
       setDemoState(null);
-      setDetailOpen(false);
       setHistoryOpen(false);
       clearRequests();
       clearInputs();
@@ -918,13 +914,6 @@ export function ChatContainer() {
       selectConversation(id);
     },
     [isStreaming, selectConversation, clearRequests, clearInputs],
-  );
-
-  // 이 대화가 아는 설비 = 우측 카드가 선 설비. 폼이 따로 나르던 목록은 없어졌고,
-  // 카드는 등록·요청·스냅샷 어디에서 왔든 같은 답을 준다.
-  const equipmentNames = useMemo(
-    () => equipmentCards.map((c) => c.equipment),
-    [equipmentCards],
   );
 
   // 마지막 어시스턴트 메시지에 동봉된 추천 후속 질문. 응답 직후
@@ -940,20 +929,6 @@ export function ChatContainer() {
     return [];
   }, [messages]);
 
-  // 가장 최근 채팅 인입 비교 메시지의 마크다운 (Phase 3) —
-  // SummaryPanel 의 [비교 결과] Section + 클립보드 복사에 자동 동봉.
-  // EquipmentDetailPanel 이 buildCompareMessage 로 만든 메시지는 id 가
-  // `compare_` prefix.
-  const lastCompareDigest = useMemo<string | undefined>(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant" && m.id.startsWith("compare_")) {
-        return m.content;
-      }
-    }
-    return undefined;
-  }, [messages]);
-
   // 데모 모드에서 다음 turn 에 매칭되는 user 텍스트 — 일치하지 않는 chip
   // 은 SuggestedQuestions 가 비활성화. 비-데모 (실 백엔드) 일 때는 모든
   // chip 활성.
@@ -963,10 +938,9 @@ export function ChatContainer() {
     return scenario?.turns[demoState.turnIndex]?.user;
   }, [demoState]);
 
-  /** 우측 탭 전환. 설비 상세 확장은 설비 탭에 매인 것이라 떠날 때 접는다. */
+  /** 우측 탭 전환. */
   function handleRightTab(next: "context" | "summary") {
     setRightTab(next);
-    if (next !== "context") setDetailOpen(false);
   }
 
   /**
@@ -1316,24 +1290,11 @@ export function ChatContainer() {
                 : hasLine(prunedScope, item.lineKey)
             }
           />
-          <SummaryPanel
-            open={rightTab === "summary"}
-            compareDigest={lastCompareDigest}
-          />
+          <SummaryPanel open={rightTab === "summary"} />
         </div>
         </aside>
         )}
       </div>
-
-      <EquipmentDetailPanel
-        open={!dataExpanded && rightTab === "context" && detailOpen}
-        equipmentNames={equipmentNames}
-        onClose={() => setDetailOpen(false)}
-        onImportToChat={(msg) => {
-          setMessages((prev) => [...prev, msg]);
-          setDetailOpen(false);
-        }}
-      />
 
       <ConversationsSidebar
         open={historyOpen}

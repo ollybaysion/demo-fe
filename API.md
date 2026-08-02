@@ -16,13 +16,12 @@
 1. [POST /api/fdc/v1/chat](#1-post-apifdcv1chat) — 채팅 (SSE 스트림)
 2. [POST /api/fdc/v1/summary](#2-post-apifdcv1summary) — 운영자 인계용 대화 요약
 3. [POST /api/fdc/v1/upload](#3-post-apifdcv1upload) — 이미지 첨부 업로드
-4. [GET /api/fdc/v1/equipment/:id](#4-get-apifdcv1equipmentid) — 설비 상세
-5. [GET /api/fdc/v1/equipment/:id/peers](#5-get-apifdcv1equipmentidpeers) — 동종 설비 목록
-6. [GET /api/fdc/v1/equipment/:id/setup-events](#6-get-apifdcv1equipmentidsetup-events) — 셋업 이벤트
-7. [GET /api/fdc/v1/equipment/:id/compare](#7-get-apifdcv1equipmentidcompare) — 1:1 비교
-8. [데이터 모델](#데이터-모델) — Message / Table / Chart / Timeline / Attachment / Context
-9. [에러 형식](#에러-형식)
-10. [보안 / 운영 정책](#보안--운영-정책)
+4. [데이터 모델](#데이터-모델) — Message / Table / Chart / Timeline / Attachment
+5. [에러 형식](#에러-형식)
+6. [보안 / 운영 정책](#보안--운영-정책)
+
+> 정형 조회 GET 은 없다. 설비·센서·레시피 같은 조회 결과는 채팅이 발신한
+> **데이터 요청 카드**에 사람이 결과를 붙여넣어 들어온다.
 
 ---
 
@@ -106,7 +105,7 @@ type ChatDataSnapshot = {
 #### Validation 한도
 
 | 항목 | 한도 | 위반 시 에러 코드 |
-|---|---|---|
+| --- | --- | --- |
 | `messages` 배열 길이 | ≤ 100 | `messages_too_many` |
 | 메시지당 `content` 길이 | ≤ 10,000 chars | `message_content_too_long` |
 
@@ -266,7 +265,7 @@ type SummaryResponse = {
 `multipart/form-data` 또는 base64 JSON. 권장: `multipart/form-data`.
 
 | Field | 타입 | 한도 |
-|---|---|---|
+| --- | --- | --- |
 | `file` | binary | 단일 5MB |
 | `mime` | string | `image/png` · `image/jpeg` · `image/webp` · `image/gif` 만 |
 
@@ -289,130 +288,6 @@ type UploadResponse = {
 ```
 
 위 `url` 을 메시지 `attachments[].url` 에 채워 `/api/fdc/v1/chat` 으로 보냄.
-
----
-
-## 4. GET /api/fdc/v1/equipment/:id
-
-설비 상세 정보. 컨텍스트 패널에 입력된 설비명으로 호출.
-
-### Response
-
-```typescript
-type EquipmentDetail = {
-  id: string;
-  name: string;
-  model: string;     // 동종설비 매칭 키
-  values: string[];  // 칼럼 값 (도메인 명세 별도)
-  chambers: { id: string; values: string[] }[];
-  sensors: { id: string; values: string[] }[];
-};
-```
-
-칼럼 명세 (현재 col1~col10 mock) 는 도메인 정의 후 갱신 필요.
-
----
-
-## 5. GET /api/fdc/v1/equipment/:id/peers
-
-같은 model 의 다른 설비 목록 (자기 자신 제외).
-
-### Response
-
-```typescript
-type PeersResponse = EquipmentDetail[];
-```
-
----
-
-## 6. GET /api/fdc/v1/equipment/:id/setup-events
-
-설비별 셋업/설비 변경 이벤트 시점 — 비교의 post-setup 매칭 모드용.
-
-### Response
-
-```typescript
-type SetupEventsResponse = Array<{
-  /** ISO datetime. */
-  time: string;
-  type: "setup" | "info_change" | "maintenance" | "other";
-  label?: string;
-}>;
-```
-
-가장 최근 이벤트가 매칭 anchor (t=0).
-
----
-
-## 7. GET /api/fdc/v1/equipment/:id/compare
-
-1:1 비교 (v2). 현재 설비 vs 단일 동종설비.
-
-### Query
-
-| 파라미터 | 필수 | 설명 |
-|---|---|---|
-| `peerId` | ✓ | baseline 동종설비 id |
-| `recipe` | ✓ | 매칭할 레시피 (`RECIPE_X` 등) |
-| `mode` | | `post-setup` (기본) / `calendar` |
-| `window` | post-setup 일 때 | `1d` / `7d` / `30d` 등 |
-| `from` / `to` | calendar 일 때 | datetime-local |
-
-### Response
-
-```typescript
-type CompareResponse = {
-  recipe: string;
-  windowDays?: number;
-  current: CompareSide;
-  baseline: CompareSide;
-  /** 센서별 시계열 — 매칭 run 양쪽에 있을 때만. */
-  series: SensorSeries[];
-  chamberEvents: { current: ChamberEvent[]; baseline: ChamberEvent[] };
-  alarms: { current: AlarmEvent[]; baseline: AlarmEvent[] };
-};
-
-type CompareSide = {
-  equipmentId: string;
-  setupTime: string;                // ISO
-  matchedRun: { id: string; startTime: string; durationMin: number } | null;
-  sensorStats: Array<{
-    sensor: string;
-    mean: number; stddev: number;
-    max: number; min: number;
-    anomalies: number;
-  }>;
-};
-
-type SensorSeries = {
-  sensor: string;
-  /** 각 point 에 양쪽 설비 값 병합. key = equipmentId. */
-  data: Array<{ t: number; [equipmentId: string]: number }>;
-};
-
-type ChamberEvent = {
-  start: number;             // 경과 분
-  end?: number;              // range 일 때
-  type: "setup" | "recipe_change" | "cleaning" | "maintenance" | "other";
-  label: string;
-};
-
-type AlarmEvent = {
-  time: number;
-  end?: number;
-  code: string;
-  label: string;
-  severity: "info" | "warning" | "critical";
-  rootCause?: {
-    sensor?: string;
-    chamber?: string;
-    condition?: string;
-    value?: number;
-  };
-};
-```
-
-매칭 run 한쪽이라도 없으면 `series` / `chamberEvents` / `alarms` 는 빈 배열/객체.
 
 ---
 
@@ -560,7 +435,7 @@ type ErrorResponse = {
 대표 코드:
 
 | 코드 | HTTP | 의미 |
-|---|---|---|
+| --- | --- | --- |
 | `invalid_json` | 400 | request body 파싱 실패 |
 | `messages_required` | 400 | `messages` 누락 |
 | `messages_too_many` | 400 | 메시지 배열 ≤ 100 위반 |
@@ -568,10 +443,15 @@ type ErrorResponse = {
 | `unauthorized` | 401 | 인증 도입 후 |
 | `forbidden` | 403 | |
 | `not_found` | 404 | 설비/run id 등 |
+| `method_not_allowed` | 405 | 그 경로가 지원하지 않는 HTTP 메서드 (응답에 `Allow` 헤더 동봉) |
+| `unsupported_media_type` | 415 | `Content-Type` 미지원 — 본문은 `application/json` 이어야 한다 |
 | `rate_limited` | 429 | per-user rate limit 도입 후 |
 | `internal` | 500 | 일반 서버 오류 |
 
 응답 헤더에 항상 `X-Request-Id` 첨부.
+
+예외가 하나 있다: `Accept` 가 JSON 을 받지 않는 요청은 **406 + 빈 본문**이다. 호출자가
+JSON 을 거부한 상황이라 위 형식조차 실어 보낼 수 없어, 상태코드만이 전달 수단이다.
 
 ### SSE 도중 에러 (`event: error`)
 

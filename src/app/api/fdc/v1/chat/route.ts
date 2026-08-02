@@ -517,25 +517,9 @@ function buildInputRequestResponse(missing: InputRequest[]): string {
  * 반대쪽 REQUESTABLE 을 먼저 둔다.
  */
 function recommendNext(question: string): string[] {
-  if (question.includes("센서 목록")) {
-    return [
-      "레시피 STEP 구성 알려줘",
-      "ETCH-01 상세 정보 보여줘",
-      "ETCH-01 동종 설비 알려줘",
-    ];
-  }
-  if (question.includes("레시피")) {
-    return [
-      "챔버별 센서 목록 보여줘",
-      "ETCH-01 상세 정보 보여줘",
-      "ETCH-01 셋업 이력 알려줘",
-    ];
-  }
-  return [
-    "챔버별 센서 목록 보여줘",
-    "레시피 STEP 구성 알려줘",
-    "ETCH-01 상세 정보 보여줘",
-  ];
+  if (question.includes("센서 목록")) return ["레시피 STEP 구성 알려줘"];
+  if (question.includes("레시피")) return ["챔버별 센서 목록 보여줘"];
+  return ["챔버별 센서 목록 보여줘", "레시피 STEP 구성 알려줘"];
 }
 
 function buildDataRequestResponse(missing: DataRequest[]): string {
