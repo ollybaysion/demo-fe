@@ -194,6 +194,7 @@
   --animate-cursor-blink: cursor-blink 800ms ease-in-out infinite;
   --animate-typing-bounce: typing-bounce 600ms ease-in-out infinite;
   --animate-step-rise: step-rise 200ms cubic-bezier(0, 0, 0.2, 1);
+  --animate-tip-fade: tip-fade 400ms ease-out;
 }
 
 @keyframes cursor-blink {
@@ -225,6 +226,25 @@
   40% {
     transform: translateY(-4px);
     opacity: 1;
+  }
+}
+
+/* 한 줄 팁이 바뀐다 — 자리를 지킨 채 문구만 갈린다(4px 은 들썩임이 아니라 숨). */
+@keyframes tip-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 움직임을 줄이도록 설정했다면 문구는 그대로 바뀌되 미끄러지지 않는다. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-tip-fade {
+    animation: none;
   }
 }
 
