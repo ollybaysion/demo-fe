@@ -21,6 +21,13 @@ import { SnapshotDetail } from "./SnapshotDetail";
 import type { AddSnapshotResult } from "./useDataSnapshots";
 
 /**
+ * 답변 산출물 단을 화면에 세울지. **지금은 안 세운다** — 쓰임이 아직 없어
+ * 왼쪽 칸만 차지한다. 수집·저장 경로(모델이 낸 표·차트·그림, 붙여넣은 그림·주소)는
+ * 그대로 살아 있으므로, 다시 필요해지면 이 값을 true 로 돌리면 된다.
+ */
+const SHOW_ARTIFACTS = false;
+
+/**
  * 데이터 패널 — 3분할 레이아웃의 좌측 상주 컬럼.
  *
  * NotebookLM 의 소스 패널 관례를 따른다(따라 그리진 않는다): 항상 떠 있고,
@@ -724,6 +731,7 @@ export function DataPanel({
               스냅샷과 **섞지 않는다**: 스냅샷은 사람이 올린 근거고 이쪽은 모델이
               만든 결과라, 한 목록이 되면 "이 답의 근거가 뭐였지"를 못 되짚는다.
             */}
+            {SHOW_ARTIFACTS && (
             <CollapsibleSection
               title={`답변 산출물 (${artifacts.length})`}
               open={artifactsOpen}
@@ -763,6 +771,7 @@ export function DataPanel({
                 </div>
               )}
             </CollapsibleSection>
+            )}
 
           </div>
 
