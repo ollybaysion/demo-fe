@@ -54,7 +54,7 @@ export function SnapshotDetail({ snapshot }: { snapshot: DataSnapshot }) {
       <div className="shrink-0 px-lg pt-md pb-sm border-b border-brand-hairline-soft">
         <div className="flex items-baseline gap-xs min-w-0">
           <h3
-            className="min-w-0 truncate font-sans text-body-md font-medium text-brand-ink"
+            className="min-w-0 break-words font-sans text-body-md font-medium text-brand-ink"
             title={snapshot.label}
           >
             {snapshot.label}

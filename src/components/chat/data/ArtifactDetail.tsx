@@ -23,7 +23,7 @@ export function ArtifactDetail({
     <div className="flex-1 min-w-0 flex flex-col">
       <div className="shrink-0 px-lg pt-md pb-sm border-b border-brand-hairline-soft">
         <h3
-          className="min-w-0 truncate font-sans text-body-md font-medium text-brand-ink"
+          className="min-w-0 break-words font-sans text-body-md font-medium text-brand-ink"
           title={artifact.label}
         >
           {artifact.label}

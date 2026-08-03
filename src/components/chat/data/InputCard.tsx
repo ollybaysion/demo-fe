@@ -37,7 +37,7 @@ export function InputCard({ request, onSubmit }: Props) {
         <span className="shrink-0 inline-flex items-center h-5 px-xs rounded-full bg-brand-primary/15 text-brand-primary text-caption font-medium">
           입력
         </span>
-        <span className="flex-1 min-w-0 text-body-sm text-brand-ink truncate">
+        <span className="flex-1 min-w-0 text-body-sm text-brand-ink break-words">
           {request.label}
         </span>
       </div>

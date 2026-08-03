@@ -874,7 +874,7 @@ export function DataPanel({
                 className="flex items-center gap-xs rounded-md border border-brand-hairline-soft bg-brand-canvas px-sm py-xs"
               >
                 <span className="flex-1 min-w-0">
-                  <span className="block truncate text-caption text-brand-muted">
+                  <span className="block break-words text-caption text-brand-muted">
                     {s.label}
                   </span>
                   <span className="block text-[11px] leading-[1.5] text-brand-muted-soft">
@@ -974,12 +974,14 @@ function SnapshotGroup({
         aria-expanded={open}
         className="w-full flex items-center gap-xs px-sm py-xs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
+        {/* 자르지 않는다 — sublabel 은 인자 전문(`start=…, end=…`)이라 끝이
+            잘리면 어느 분석의 그룹인지 구별이 안 된다. 좁으면 줄을 늘린다. */}
         <span className="min-w-0 flex-1 flex flex-col">
-          <span className="truncate text-caption font-medium text-brand-ink">
+          <span className="break-words text-caption font-medium text-brand-ink">
             {label}
           </span>
           {sublabel && (
-            <span className="truncate text-caption text-brand-muted-soft">
+            <span className="break-words text-caption text-brand-muted-soft">
               {sublabel}
             </span>
           )}
@@ -1173,7 +1175,7 @@ function CollapsibleSection({
           aria-expanded={open}
           className="flex-1 min-w-0 flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
         >
-          <h3 className="flex-1 min-w-0 font-sans text-body-sm font-medium text-brand-ink truncate">
+          <h3 className="flex-1 min-w-0 font-sans text-body-sm font-medium text-brand-ink break-words">
             {title}
           </h3>
           <SectionChevron open={open} />
