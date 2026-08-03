@@ -284,7 +284,7 @@ function EquipmentCard({
         className="group flex-1 min-w-0 pr-sm pl-xxs py-sm text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
       >
         <span className="flex items-center gap-xs">
-          <span className="flex-1 min-w-0 text-body-md font-medium text-brand-ink truncate">
+          <span className="flex-1 min-w-0 text-body-md font-medium text-brand-ink break-words">
             {card.equipment}
           </span>
           {/* 라인은 아는 경우에만 말한다 — 모르면서 숫자를 붙이면 그 숫자가
@@ -439,11 +439,15 @@ function LineRow({
     >
       {/* 무엇을 봤는지(category)가 먼저, 언제인지(구간)가 그 아래.
           표 수는 싣지 않는다 — 누르면 왼쪽에 그 카드들이 그대로 보이고,
-          채워짐/대기 구분은 글자 색(잉크/뮤트)으로만 말한다. */}
+          채워짐/대기 구분은 글자 색(잉크/뮤트)으로만 말한다.
+
+          **자르지 않는다.** 인자와 구간은 어느 분석인지를 가르는 값이라
+          (`start=2026-07-01, end=2026-07-31`), 끝이 잘리면 카드가 서로
+          구별되지 않아 줄 자체가 무의미해진다. 좁은 칸에서는 줄을 늘린다. */}
       <span className="flex items-baseline gap-xs">
         <span
           className={[
-            "flex-1 min-w-0 text-caption truncate",
+            "flex-1 min-w-0 text-caption break-words",
             waiting ? "text-brand-muted" : "text-brand-ink",
           ].join(" ")}
         >
@@ -451,12 +455,12 @@ function LineRow({
         </span>
       </span>
       {line.sub && (
-        <span className="text-caption text-brand-muted-soft truncate">
+        <span className="text-caption text-brand-muted-soft break-words">
           {line.sub}
         </span>
       )}
       {line.start && line.end && (
-        <span className="text-caption text-brand-muted-soft tabular-nums whitespace-nowrap">
+        <span className="text-caption text-brand-muted-soft tabular-nums break-words">
           {formatRange(line.start, line.end)}
         </span>
       )}

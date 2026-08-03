@@ -144,7 +144,7 @@ export function RequestCard({
         className="w-full px-sm py-xs flex items-start gap-xxs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
         <span className="flex-1 min-w-0">
-          <span className="block text-body-sm text-brand-ink truncate">
+          <span className="block text-body-sm text-brand-ink break-words">
             {request.label}
           </span>
           {/* 구간은 제목에 이어 붙이면 잘린다 — 한 줄 아래에 따로 적는다.

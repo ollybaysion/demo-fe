@@ -55,7 +55,7 @@ export function ArtifactCard({
           className="flex-1 min-w-0 flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
         >
           <KindBadge kind={artifact.kind} />
-          <span className="flex-1 min-w-0 truncate text-caption text-brand-ink">
+          <span className="flex-1 min-w-0 break-words text-caption text-brand-ink">
             {artifact.label}
           </span>
           {/* 어느 답에서 나왔는지 — 대화를 거슬러 올라가지 않고도 짚을 수 있게. */}
@@ -128,7 +128,7 @@ function Body({ artifact }: { artifact: Artifact }) {
           rel="noreferrer noopener"
           className="block rounded-md border border-brand-hairline-soft px-sm py-xs hover:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
         >
-          <span className="block truncate text-caption text-brand-primary underline underline-offset-2">
+          <span className="block break-all text-caption text-brand-primary underline underline-offset-2">
             {artifact.payload.url}
           </span>
           {artifact.payload.description && (

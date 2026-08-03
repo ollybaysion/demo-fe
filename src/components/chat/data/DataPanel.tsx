@@ -21,6 +21,13 @@ import { SnapshotDetail } from "./SnapshotDetail";
 import type { AddSnapshotResult } from "./useDataSnapshots";
 
 /**
+ * 답변 산출물 단을 화면에 세울지. **지금은 안 세운다** — 쓰임이 아직 없어
+ * 왼쪽 칸만 차지한다. 수집·저장 경로(모델이 낸 표·차트·그림, 붙여넣은 그림·주소)는
+ * 그대로 살아 있으므로, 다시 필요해지면 이 값을 true 로 돌리면 된다.
+ */
+const SHOW_ARTIFACTS = false;
+
+/**
  * 데이터 패널 — 3분할 레이아웃의 좌측 상주 컬럼.
  *
  * NotebookLM 의 소스 패널 관례를 따른다(따라 그리진 않는다): 항상 떠 있고,
@@ -724,6 +731,7 @@ export function DataPanel({
               스냅샷과 **섞지 않는다**: 스냅샷은 사람이 올린 근거고 이쪽은 모델이
               만든 결과라, 한 목록이 되면 "이 답의 근거가 뭐였지"를 못 되짚는다.
             */}
+            {SHOW_ARTIFACTS && (
             <CollapsibleSection
               title={`답변 산출물 (${artifacts.length})`}
               open={artifactsOpen}
@@ -763,6 +771,7 @@ export function DataPanel({
                 </div>
               )}
             </CollapsibleSection>
+            )}
 
           </div>
 
@@ -874,7 +883,7 @@ export function DataPanel({
                 className="flex items-center gap-xs rounded-md border border-brand-hairline-soft bg-brand-canvas px-sm py-xs"
               >
                 <span className="flex-1 min-w-0">
-                  <span className="block truncate text-caption text-brand-muted">
+                  <span className="block break-words text-caption text-brand-muted">
                     {s.label}
                   </span>
                   <span className="block text-[11px] leading-[1.5] text-brand-muted-soft">
@@ -974,12 +983,14 @@ function SnapshotGroup({
         aria-expanded={open}
         className="w-full flex items-center gap-xs px-sm py-xs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
       >
+        {/* 자르지 않는다 — sublabel 은 인자 전문(`start=…, end=…`)이라 끝이
+            잘리면 어느 분석의 그룹인지 구별이 안 된다. 좁으면 줄을 늘린다. */}
         <span className="min-w-0 flex-1 flex flex-col">
-          <span className="truncate text-caption font-medium text-brand-ink">
+          <span className="break-words text-caption font-medium text-brand-ink">
             {label}
           </span>
           {sublabel && (
-            <span className="truncate text-caption text-brand-muted-soft">
+            <span className="break-words text-caption text-brand-muted-soft">
               {sublabel}
             </span>
           )}
@@ -1173,7 +1184,7 @@ function CollapsibleSection({
           aria-expanded={open}
           className="flex-1 min-w-0 flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm"
         >
-          <h3 className="flex-1 min-w-0 font-sans text-body-sm font-medium text-brand-ink truncate">
+          <h3 className="flex-1 min-w-0 font-sans text-body-sm font-medium text-brand-ink break-words">
             {title}
           </h3>
           <SectionChevron open={open} />

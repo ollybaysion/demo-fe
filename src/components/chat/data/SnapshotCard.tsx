@@ -183,7 +183,7 @@ export function SnapshotCard({
           <div className="flex-1 min-w-0">
             <span
               className={[
-                "block min-w-0 truncate text-body-sm",
+                "block min-w-0 break-words text-body-sm",
                 snapshot.included ? "text-brand-ink" : "text-brand-muted",
               ].join(" ")}
               title={snapshot.label}
@@ -405,7 +405,7 @@ function QueryModal({
       />
       <div className="relative w-full max-w-[32rem] bg-brand-canvas rounded-lg shadow-xl flex flex-col">
         <div className="flex items-center justify-between px-md py-sm border-b border-brand-hairline">
-          <h2 className="min-w-0 truncate font-sans text-body-md text-brand-ink">
+          <h2 className="min-w-0 break-words font-sans text-body-md text-brand-ink">
             SQL — {label}
           </h2>
           <div className="flex items-center gap-xxs">
@@ -520,20 +520,20 @@ function Chips({ snapshot }: { snapshot: DataSnapshot }) {
     >
       {sourceTable && (
         <span
-          className="inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[6px] py-[3px] font-mono text-[11px] leading-none font-medium text-brand-primary max-w-[160px]"
+          className="inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[6px] py-[3px] font-mono text-[11px] leading-none font-medium text-brand-primary"
           title="출처 테이블 — 쿼리의 FROM 에서 인식됨"
         >
-          <span className="truncate">{sourceTable}</span>
+          <span className="break-all">{sourceTable}</span>
         </span>
       )}
       {chipCols.map((c, i) => (
         // 실데이터엔 중복 컬럼명이 온다(조인 SELECT 등) — key 는 위치가 정체성.
         <span
           key={`${i}-${c}`}
-          className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft bg-brand-ink-translucent-04 px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted max-w-[140px]"
+          className="inline-flex items-center rounded-[4px] border border-brand-hairline-soft bg-brand-ink-translucent-04 px-[6px] py-[3px] font-mono text-[11px] leading-none text-brand-muted"
           title={c}
         >
-          <span className="truncate">{c}</span>
+          <span className="break-all">{c}</span>
         </span>
       ))}
       {restCols.length > 0 && (
