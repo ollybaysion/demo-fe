@@ -30,17 +30,23 @@ const LINE_B1: ScopeItem = {
 const TRACE: Skill = {
   skill: "fdc_trace_reading",
   name: "fdc-trace-reading",
-  unit: "센서",
-  focus: "센서 측정값",
   description: "…",
   inputs: [{ key: "equipment", required: true }],
-  steps: [
+  needs: [
     {
-      title: "1단계",
-      produces: "측정 분포",
+      id: "reading_stats",
+      what: "측정 분포",
+      filledBy: [{ query: "reading_stats", column: "CNT" }],
+    },
+  ],
+  queries: [
+    {
+      id: "reading_stats",
+      // 조달 라벨 = 그것이 채우는 need 의 말. 줄 category 와 맞물리는 자리다.
+      label: "측정 분포",
       sql: "SELECT 1",
       argBinds: {},
-      priorStepBinds: [],
+      priorQueryBinds: [],
     },
   ],
 };

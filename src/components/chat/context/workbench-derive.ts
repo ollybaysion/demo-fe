@@ -10,14 +10,43 @@
 
 import type { PendingRequest } from "@/lib/request-store";
 import { JUDGE_ORIGIN } from "@/lib/request-store";
-import type { DataSnapshot } from "@/lib/types";
+import type { DataRequest, DataSnapshot } from "@/lib/types";
 import { equipmentInputKey } from "@/lib/skills";
 import type { AnalysisCard, Workbench } from "@/lib/workbench-cards";
-import { referencedSnapshotIds, slotViews } from "@/lib/workbench-cards";
+import {
+  referencedSnapshotIds,
+  runRefOf,
+  sameRun,
+  slotQueryKey,
+} from "@/lib/workbench-cards";
 import type { EquipmentCardModel, EquipmentLine } from "./equipment-cards.mock";
 import type { DerivedGroup, DerivedPanel } from "./derive-cards";
 
 export const UNCLASSIFIED_GROUP_KEY = "unclassified";
+
+/**
+ * 이 분석 카드에 속한 원장 줄들 — 소속은 `run`(스킬+원문 인자)이 정본이다.
+ * `queryKey` 는 손실 인코딩이라 역파싱하지 않는다.
+ *
+ * 원장 줄의 순서는 BE 카탈로그 순서인데, 화면은 **분석 카드가 세워 둔 슬롯 순서**로
+ * 다시 세운다 — 판정 왕복마다 카드가 자리를 바꾸면 사람이 읽던 자리를 잃는다.
+ */
+function ledgerOf(ledger: DataRequest[], an: AnalysisCard): DataRequest[] {
+  const ref = runRefOf(an);
+  const mine = ledger.filter((row) => sameRun(row.run, ref));
+  if (mine.length === 0) return [];
+  const byKey = new Map(mine.map((row) => [row.queryKey, row]));
+  const ordered: DataRequest[] = [];
+  for (const slot of an.dataList) {
+    const hit = byKey.get(slotQueryKey(an, slot.queryId));
+    if (hit) {
+      ordered.push(hit);
+      byKey.delete(hit.queryKey);
+    }
+  }
+  // 트리가 모르는 줄(카탈로그가 바뀐 뒤 열린 조회)도 버리지 않는다.
+  return [...ordered, ...byKey.values()];
+}
 
 /**
  * 분석 카드 제목은 **2줄**이다: 제목줄 = 스킬 이름, 둘째 줄 = 파라미터
@@ -41,12 +70,18 @@ export function analysisParams(an: AnalysisCard): string | null {
  * @param unclassified   미분류 후보 — 세션 스코프를 **거친** 목록을 받는다.
  *                       (붙여넣기 잔여는 지금까지처럼 현재 세션 것만 기본 노출.)
  * @param legacyRequests 구식 요청 카드(채팅 릴레이 등 트리 밖) — 미분류로 흘린다.
+ * @param ledger         BE 조달 원장(`/chat/data` 의 `dataRequests`) — **요청 카드의
+ *                       진실원**. 상태가 `ready` 인 줄만 실행 가능한 카드가 되고,
+ *                       잠긴 줄(`blocked`·`unreachable`)은 사유만 보여 준다.
+ *                       원장이 아직 안 왔으면 요청 카드도 없다: 화면이 SQL 을
+ *                       지어내느니 한 왕복 늦는 편이 낫다.
  */
 export function deriveWorkbenchPanel(
   wb: Workbench,
   snapshots: DataSnapshot[],
   unclassified: DataSnapshot[],
   legacyRequests: PendingRequest[] = [],
+  ledger: DataRequest[] = [],
 ): DerivedPanel {
   const byId = new Map(snapshots.map((s) => [s.id, s]));
   const referenced = referencedSnapshotIds(wb);
@@ -59,25 +94,17 @@ export function deriveWorkbenchPanel(
     for (const an of eq.analyses) {
       const title = an.skills[0].name;
       const params = analysisParams(an);
-      // 슬롯 전량을 로컬 해석한다 — 미정은 안 그리고, 확정은 요청 카드로,
-      // 도착(본문이 산 것만)은 데이터 카드로. 판정 왕복 없이 매 렌더 파생이라
-      // 화면이 현재 상태와 어긋날 수 없다(박제 없음).
-      const views = slotViews(an, (id) => byId.get(id));
-      const dataSnapshots = views
-        .filter((v): v is Extract<typeof v, { kind: "data" }> => v.kind === "data")
-        .map((v) => byId.get(v.snapshotId))
+      // 도착은 트리가 안다(슬롯 → IDB 본문). 본문이 죽었으면 도착이 아니다 —
+      // 다음 판정이 그 조회를 다시 연다.
+      const dataSnapshots = an.dataList
+        .map((slot) => (slot.snapshotId ? byId.get(slot.snapshotId) : undefined))
         .filter((s): s is DataSnapshot => s !== undefined);
-      const requests: PendingRequest[] = views
-        .filter(
-          (v): v is Extract<typeof v, { kind: "request" }> =>
-            v.kind === "request",
-        )
-        .map((v) => ({
-          request: {
-            queryKey: v.queryKey,
-            label: v.title,
-            sql: v.sql,
-          },
+      // 요청 카드는 원장이 준다 — 화면은 스킬을 읽지 않는다. 도착한 줄은 이미
+      // 데이터 카드로 서 있고, 안 열리는 줄(inactive)은 아예 안 그린다.
+      const requests: PendingRequest[] = ledgerOf(ledger, an)
+        .filter((row) => row.state !== "arrived" && row.state !== "inactive")
+        .map((row) => ({
+          request: row,
           originMessageId: JUDGE_ORIGIN,
           fulfilled: false,
         }));

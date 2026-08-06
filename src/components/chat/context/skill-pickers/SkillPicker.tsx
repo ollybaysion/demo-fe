@@ -86,7 +86,7 @@ export function SkillPicker({
                     type="button"
                     onClick={() => onSelect(s.skill)}
                     aria-pressed={on}
-                    title={`${s.name} · ${s.focus}`}
+                    title={s.anchorTable ? `${s.name} · ${s.anchorTable}` : s.name}
                     className={[
                       "max-w-full truncate rounded-full border px-xs h-6 font-mono text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
                       on

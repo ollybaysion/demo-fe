@@ -1,11 +1,15 @@
 /**
  * `POST /api/fdc/v1/chat/data` (panel-judge) 클라이언트 — 데이터 패널의 변경을
- * BE 결정론 판정으로 보내고, 선언적 결과(`openRequests` 리컨사일·종결 서술)를
- * 받아 온다. BE 계약 = fdc-agent-be-spring #38 (`PanelBody`/`ChatDataDone`).
+ * BE 결정론 판정으로 보내고, **조달 원장**(`dataRequests`)과 종결 서술을 받아 온다.
+ * BE 계약 = fdc-agent-be-spring #38·#60 (`PanelBody`/`ChatDataDone`).
  *
- * 판정은 **부가 경로**다: 실패(네트워크·404·비호환)는 전부 무음으로 접는다 —
- * BE 없는 데모에서 패널을 만질 때마다 에러 풍선이 뜨면 안 되고, 판정이 죽어도
- * 채팅 경로(조달 릴레이)는 그대로 산다.
+ * 원장은 이벤트가 아니라 **상태 전량**이다 — 그 절차의 조회가 매번 전부 상태를 달고
+ * 오고 화면은 replace 한다. 그래서 멱등성이 규칙이 아니라 구조이고, 카드 배치를
+ * 화면이 판단할 일이 없다.
+ *
+ * 판정 자체의 실패(네트워크·404·비호환)는 무음으로 접는다 — 에러 풍선이 패널 조작
+ * 때마다 뜨면 안 된다. 다만 원장이 안 오면 **카드도 안 선다**: v3 부터 카드의
+ * 진실원은 서버다.
  */
 
 import { parseSseStream } from "./sse";
@@ -17,30 +21,46 @@ export type RunDecl = { skill: string; args: Record<string, string> };
 /** 패널에서 방금 일어난 액션 — 서술 전이 감지에만 쓰인다(판정 입력이 아니다). */
 export type PanelJudgeEvent = { type: string; queryKey?: string };
 
-/** run 하나의 판정 보고 — 카드가 안 나온 이유(needsPick/holds)까지 명시된다. */
+/**
+ * 알아야 할 것 하나의 상태 — 진행의 단위가 spec v3 에서 **조회에서 need 로** 바뀌었다.
+ * "3단계 중 1단계 도착"은 조회를 세는 말이라 질문에 답했는지는 세어지지 않는다.
+ *
+ * `source` 는 지목한 조회가 **아닌** 경로로 채워졌을 때 그 스냅샷 키다(채움 폭포의
+ * 2·3차) — 요청한 것과 다르게 받았다는 사실을 화면이 말할 수 있어야 한다.
+ */
+export type NeedProgress = {
+  id: string;
+  what: string;
+  state: "INACTIVE" | "PENDING_GATE" | "UNFILLED" | "FILLED" | "UNPROCURABLE";
+  source?: string;
+};
+
+/** run 하나의 판정 보고 — 판정 불가 사유(holds)까지 명시된다. */
 export type RunProgress = {
   skill: string;
   args: Record<string, string>;
   label: string;
-  stepCount: number;
-  arrivedCount: number;
-  nextStep: number;
+  /** 활성 need 수 / 그중 찬 것 — 진행률의 분모와 분자. */
+  needCount: number;
+  metCount: number;
+  /** 지금 돌려야 할 조달의 정식 id(`스킬#조달id`). */
+  wanted: string[];
   terminal: boolean;
-  emptyAtStep?: number;
-  needsPick?: { queryId: string; column: string; candidates: string[] }[];
+  /** `SUFFICIENT` | `PROCURABLE` | `UNANSWERABLE` | `UNKNOWN_SKILL`. */
+  outcome: string;
+  needs: NeedProgress[];
   holds?: { queryId: string; reason: string }[];
 };
 
-/** `done` 페이로드 — `openRequests` 는 지금 열려 있어야 할 카드 **전체**다. */
+/** `done` 페이로드 — `dataRequests` 는 그 절차의 조회 **전량**(상태 포함)이다. */
 export type ChatDataDone = {
   messageId: string;
   eventId?: string;
   revision?: number;
   poolRev?: string;
-  openRequests?: DataRequest[];
+  dataRequests?: DataRequest[];
   runsProgress?: RunProgress[];
   terminalRuns?: string[];
-  needsRows?: string[];
   narratedRun?: string;
 };
 

@@ -23,31 +23,43 @@ export type SkillPickerProps = {
   onSelect: (skill: string) => void;
 };
 
-/** 단위별로 묶는다 — 카탈로그가 주는 유일한 분류축(`unit`). */
-export function groupByUnit(skills: Skill[]): Array<[string, Skill[]]> {
-  const byUnit = new Map<string, Skill[]>();
+/** 분류축이 없는 스킬이 모이는 자리 — 없는 값을 지어내지 않는다. */
+export const NO_ANCHOR_GROUP = "기타";
+
+/**
+ * 앵커 테이블별로 묶는다 — spec v3 가 남긴 유일한 분류축이다.
+ *
+ * v2 의 `unit`(센서·설비·레시피…)은 사람이 손으로 적던 두 번째 분류법이라
+ * 제거됐다. 그 자리를 `anchorTable` 이 받는 게 v3 의 결정이다: 무엇을 보는
+ * 스킬인지는 그 스킬이 딛고 선 테이블이 이미 말한다.
+ */
+export function groupByAnchor(skills: Skill[]): Array<[string, Skill[]]> {
+  const byAnchor = new Map<string, Skill[]>();
   for (const s of skills) {
-    const list = byUnit.get(s.unit);
+    const key = s.anchorTable?.trim() || NO_ANCHOR_GROUP;
+    const list = byAnchor.get(key);
     if (list) list.push(s);
-    else byUnit.set(s.unit, [s]);
+    else byAnchor.set(key, [s]);
   }
-  return [...byUnit.entries()];
+  return [...byAnchor.entries()];
 }
 
 /**
- * 검색 — 이름·focus·설명·앵커 테이블·인자 이름까지 본다. 30개에서는 사용자가
- * 기억하는 단서가 제각각이라(테이블명만 아는 경우도 있다) 좁게 잡으면 안 걸린다.
+ * 검색 — 이름·설명·**답하는 질문**·앵커 테이블·인자 이름·알아내는 것까지 본다.
+ * 30개에서는 사용자가 기억하는 단서가 제각각이라(테이블명만 아는 경우도, 물어보고
+ * 싶은 문장만 아는 경우도 있다) 좁게 잡으면 안 걸린다.
  */
 export function matches(skill: Skill, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const hay = [
     skill.name,
-    skill.focus,
-    skill.unit,
     skill.description,
+    skill.rephrasing ?? "",
+    ...(skill.questions ?? []),
     skill.anchorTable ?? "",
     ...skill.inputs.map((i) => i.key),
+    ...skill.needs.map((n) => n.what),
   ]
     .join(" ")
     .toLowerCase();

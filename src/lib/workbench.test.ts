@@ -11,11 +11,10 @@ import type { Skill, SkillSession } from "@/lib/skills";
 const TRACE: Skill = {
   skill: "fdc_trace_reading",
   name: "fdc-trace-reading",
-  unit: "센서",
-  focus: "센서 측정값",
   description: "…",
   inputs: [{ key: "param_index", required: true }],
-  steps: [],
+  needs: [],
+  queries: [],
 };
 
 function session(id: string, equipment = "CVD-01"): SkillSession {

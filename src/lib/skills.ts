@@ -2,16 +2,17 @@
  * 스킬 카탈로그 — 사람이 **고르는** 스킬.
  *
  * 채팅에서는 LLM 이 스킬을 고르지만, 오른쪽 패널의 "설비 추가" 진입은 사람이
- * 고른다: 설비명 + 스킬을 정하면 그 스킬이 요구하는 것들이 즉시 카드로 선다 —
- * 스칼라 인자는 **입력 카드**로, 조회 스텝은 **데이터 요청 카드**로. 즉 백엔드가
- * 되물어 만들던 카드(`inputRequests`/`dataRequests`)를 사람이 먼저 세우는 것이고,
- * 채워진 값은 똑같이 `inputs[skill][key]` 로 실려 나가 백엔드가 이어받는다.
+ * 고른다: 설비명 + 스킬을 정하면 그 스킬이 요구하는 것들이 즉시 자리를 잡는다 —
+ * 스칼라 인자는 **입력 카드**로, 조달 수단은 **데이터 슬롯**으로.
+ *
+ * **spec v3 에서 실행 판단은 전부 BE 로 갔다.** 여기 실리는 `sql` 은 bind 가
+ * `:var` 로 남은 미완성 문장이라 화면에 내보내지 않는다 — 사람이 복사해 실행할
+ * 문장도, "이 조회를 지금 열 수 있나"도 조달 원장(`/chat/data` 의 `dataRequests`)이
+ * 답한다. 카탈로그는 **무엇을 알아내려는 절차인지**를 미리 보여 주는 데 쓴다.
  *
  * 카탈로그의 출처는 `GET /api/fdc/v1/skills`(BE `SkillsController`) — 채팅이 툴로
  * 컴파일해 쓰는 것과 같은 spec 이다. 여기 타입은 그 응답의 거울이다.
  */
-
-import type { DataRequest } from "./types";
 
 export type SkillInput = {
   /** 스킬 인자 이름 — 회신 `inputs[skill][key]` 의 key 그대로. */
@@ -20,26 +21,41 @@ export type SkillInput = {
   description?: string;
 };
 
-/** bind 하나의 배선 — 인자에서 오거나, 앞 스텝 결과의 컬럼에서 온다. */
+/** bind 하나의 배선 — 인자에서 오거나, 다른 조회 결과의 컬럼에서 온다. */
 export type SkillBind =
   | { from: "arg"; arg: string }
-  | { from: "step"; step: number; column: string };
+  | { from: "query"; query: string; column: string };
 
-export type SkillStep = {
-  title: string;
-  /** 이 스텝이 답에 기여하는 차원 한 마디. 데이터 카드의 category 로 쓴다. */
-  produces?: string;
-  /** bind 자리가 `:var` 로 남은 미완성 SQL. */
+/**
+ * 알아야 할 것 하나 — spec v3 의 세 번째 칸. 조회는 이것을 채우는 **수단**이다.
+ *
+ * `when` 이 있으면 조건부고(그 조건이 맞을 때만 활성), `filledBy` 가 비면 이 스킬로는
+ * 못 얻는다는 선언이다. 판정은 BE 소관이라 화면은 이 목록을 **설명으로만** 쓴다.
+ */
+export type SkillNeed = {
+  id: string;
+  what: string;
+  when?: string;
+  filledBy: { query: string; column: string }[];
+};
+
+/**
+ * 조달 수단 하나 = 분석 카드의 데이터 슬롯 하나.
+ *
+ * `sql` 은 bind 자리가 `:var` 로 남은 **미완성** 문장이다 — 화면에 그대로 내보내지
+ * 않는다. 실행 가능한 SQL 은 BE 조달 원장(`dataRequests[].sql`)이 완성해 준다.
+ * 여기 실리는 것은 카드를 미리 세우기 위한 자리표(라벨·의존 여부)다.
+ */
+export type SkillQuery = {
+  /** 조달 id — 조회 키(`스킬#조달id__인자`)의 가운데 토막. 순서가 아니라 이름이다. */
+  id: string;
+  /** 이 조회가 채우는 need 의 말 — 카드가 조회 이름 대신 **답에 기여하는 것**을 말한다. */
+  label: string;
+  table?: string;
   sql: string;
-  /** bind 이름 → 스킬 인자 이름. 사용자가 채울 수 있는 자리. */
   argBinds: Record<string, string>;
-  /** 앞 스텝 결과가 채우는 bind — 사용자가 채울 수 없다. */
-  priorStepBinds: string[];
-  /**
-   * 배선 전문 — bind 이름마다 출처(인자 or 앞 스텝의 컬럼). FE 가 판정 왕복
-   * 없이 스텝 상태(미정/요청 가능)를 로컬로 파생하는 재료다(dataList).
-   * 구 BE 응답에는 없을 수 있어 선택 필드로 둔다.
-   */
+  /** 다른 조회 결과가 채우는 bind — 사용자가 채울 수 없다. */
+  priorQueryBinds: string[];
   binds?: Record<string, SkillBind>;
 };
 
@@ -48,13 +64,16 @@ export type Skill = {
   skill: string;
   /** spec 이름(하이픈) — 화면의 보조 표기. */
   name: string;
-  unit: string;
-  focus: string;
   description: string;
+  /** 이 스킬이 답하는 질문들(말투 변형 포함) — 라우팅 신호이자 사람이 읽는 소개. */
+  questions?: string[];
+  /** "이 질문에 답한다는 건 …" — 스킬이 무엇을 말해 주는지의 한 문단. */
+  rephrasing?: string;
   argumentHint?: string;
   anchorTable?: string;
   inputs: SkillInput[];
-  steps: SkillStep[];
+  needs: SkillNeed[];
+  queries: SkillQuery[];
 };
 
 /**
@@ -108,15 +127,17 @@ export function skillExtraInputs(skill: Skill): SkillInput[] {
 /**
  * 목록 한 줄에 붙일 **짧은 설명**.
  *
- * 카탈로그의 `description` 은 LLM 이 툴을 고르라고 쓴 문장이라 사람이 훑기엔
- * 꼬리가 둘 붙어 있다: 인자 목록 괄호(`… (equipment·param_index 필요)`)와
- * 호출 지시(`… 묻는 상황에서 호출한다`). 둘 다 떼면 남는 것이 곧 그 스킬이
- * 보는 대상이다 — "특정 센서의 알람 발생 이력".
+ * spec v3 부터는 `rephrasing`("이 질문에 답한다는 건 …")이 사람이 읽을 문장이다 —
+ * 저자가 사람에게 쓴 것이고, 그 스킬이 무엇을 말해 주는지가 그대로 들어 있다.
  *
- * 두 꼬리는 카탈로그 문장 형식에 기댄 것이라, 형식이 다르면 아무것도 못 떼고
- * 원문이 그대로 나온다(설명이 사라지느니 길게라도 보이는 편이 낫다).
+ * 없으면 `description` 으로 물러난다. 그쪽은 LLM 이 툴을 고르라고 합성한 문장이라
+ * 꼬리가 둘 붙어 있다: 인자 목록 괄호(`… (equipment·param_index 필요)`)와 호출
+ * 지시(`… 묻는 상황에서 호출한다`). 둘 다 떼면 남는 것이 그 스킬이 보는 대상이다.
+ * 형식이 다르면 아무것도 못 떼고 원문이 그대로 나온다(설명이 사라지느니 길게라도
+ * 보이는 편이 낫다).
  */
 export function skillSummary(skill: Skill): string {
+  if (skill.rephrasing?.trim()) return skill.rephrasing.trim();
   return skill.description
     .replace(/\s*\([^)]*\)\s*\.?\s*$/, "")
     .replace(/\s*[를을]?\s*묻는 상황에서 호출한다\.?\s*$/, "")
@@ -124,71 +145,16 @@ export function skillSummary(skill: Skill): string {
 }
 
 /**
- * SQL 의 `:bind` 자리를 아는 값으로 메운다. 모르는 자리는 **그대로 둔다** —
- * 빈칸으로 지우면 사용자가 뭘 채워야 하는지 알 수 없는 SQL 이 된다.
- *
- * 값은 숫자면 그대로, 아니면 작은따옴표로 감싼다(내부 `'` 는 두 번 써서 이스케이프).
- * 사용자가 복사해 그대로 실행할 수 있어야 하므로 bind 변수로 남기지 않는다.
+ * 이 조회가 아직 못 채운 인자들 — 카드에 "무엇이 더 필요한지" 적기 위한 것.
+ * 실행 문장 자체는 BE 가 만든다(FE 는 SQL 을 짓지 않는다).
  */
-export function renderStepSql(
-  step: SkillStep,
-  args: Record<string, string>,
-): string {
-  let sql = step.sql;
-  for (const [bind, argName] of Object.entries(step.argBinds)) {
-    const raw = args[argName]?.trim();
-    if (!raw) continue;
-    sql = sql.replaceAll(`:${bind}`, sqlLiteral(raw));
-  }
-  return sql;
-}
-
-function sqlLiteral(value: string): string {
-  return /^-?\d+(\.\d+)?$/.test(value)
-    ? value
-    : `'${value.replaceAll("'", "''")}'`;
-}
-
-/** 이 스텝이 아직 못 채운 인자들 — 카드에 "무엇이 더 필요한지" 적기 위한 것. */
 export function missingArgs(
-  step: SkillStep,
+  query: SkillQuery,
   args: Record<string, string>,
 ): string[] {
-  return Object.values(step.argBinds).filter((argName) => !args[argName]?.trim());
-}
-
-/**
- * 등록된 세션이 세울 **데이터 요청 카드** — 스텝 하나가 카드 하나.
- *
- * 라벨은 파생이 읽는 `설비 · category` 규칙을 지킨다(`derive-cards`) — 그래야
- * 이 카드가 그 설비 카드 밑으로 들어가고, 결과를 붙여넣으면 같은 그룹에서
- * pending → filled 로 바뀐다.
- *
- * 앞 스텝 결과에 묶인 bind(`priorStepBinds`)가 있는 스텝은 사용자가 채울 수
- * 없으므로 카드로 세우지 않는다 — 조달할 수 없는 요구를 세우면 영영 안 지워진다.
- */
-export function skillDataRequests(session: SkillSession): DataRequest[] {
-  const args: Record<string, string> = { ...session.values };
-  const eq = equipmentInputKey(session.skill);
-  if (eq) args[eq] = session.equipment;
-
-  return session.skill.steps
-    .map((step, i) => ({ step, i }))
-    .filter(({ step }) => step.priorStepBinds.length === 0)
-    .map(({ step, i }) => ({
-      queryKey: skillQueryKey(session, i),
-      label: `${session.equipment} · ${step.produces ?? step.title}`,
-      sql: renderStepSql(step, args),
-    }));
-}
-
-/** 세션·스텝 하나의 조달 키 — 설비까지 넣어 같은 스킬의 다른 설비와 안 겹친다. */
-export function skillQueryKey(session: SkillSession, stepIndex: number): string {
-  return `${session.skill.skill}__${slug(session.equipment)}__s${stepIndex}`;
-}
-
-function slug(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return Object.values(query.argBinds).filter(
+    (argName) => !args[argName]?.trim(),
+  );
 }
 
 /** 카탈로그 조회 — 실패는 빈 목록으로 흘린다(스킬을 못 받아도 화면은 산다). */

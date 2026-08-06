@@ -3,17 +3,19 @@
  *
  *   EquipmentCard (설비)
  *   └─ analyses[] ── AnalysisCard (분석)
- *      ├─ dataList[] ── DataSlot (데이터 슬롯 — 스킬 스텝 전량을 개설 때 선생성)
- *      └─ attachments[] ── docs | link | image (스텝에 안 매인 보관물)
+ *      ├─ dataList[] ── DataSlot (조달 수단 전량을 개설 때 선생성)
+ *      └─ attachments[] ── docs | link | image (조회에 안 매인 보관물)
  *
- * 분석 카드는 **필요한 데이터 목록 전체를 처음부터 안다** — `dataList` 가 스킬
- * 스텝 그대로이고, 각 슬롯의 상태(미정/요청/도착)는 저장하지 않고 렌더마다
- * `slot-resolve` 로 로컬 파생한다. 판정 왕복이 카드를 발급하던 이전 세대
- * (request→data 전이·리컨사일)는 폐기됐다 — 화면은 현재 상태의 순수 함수다.
+ * 분석 카드는 **알아내려는 것의 목록을 처음부터 안다** — `dataList` 가 스킬의
+ * `queries[]` 그대로다. 다만 각 슬롯이 **지금 실행 가능한지는 여기서 판단하지
+ * 않는다**: spec v3 부터 그 판정과 실행 문장은 BE 조달 원장(`/chat/data` 의
+ * `dataRequests`)이 준다. 화면이 스킬을 읽어 SQL 을 완성하던 세대(`slot-resolve`)는
+ * 폐기됐다 — 같은 규칙을 두 곳에 두면 반드시 갈라진다.
  *
+ * 그래서 슬롯이 들고 있는 것은 **정체(조달 id·라벨)와 소유(snapshotId)뿐**이다.
  * 소속은 위치가 말한다(inode 방식). 표 본문(rows)만 IDB 스냅샷 저장소에 두고
  * 슬롯이 `snapshotId` 로 참조한다. 본문이 완전 삭제돼 참조가 허공이 되면 그
- * 슬롯은 도착이 아니다 — 해석이 다시 요청으로 파생한다(허상 정리가 공짜).
+ * 슬롯은 도착이 아니다 — 다음 판정이 그 조회를 다시 연다(허상 정리가 공짜).
  *
  * 트리는 대화와 무관한 보관물이다: localStorage 에 통째로 영속하고, 새 대화·
  * 대화 전환에서 초기화하지 않는다. 미분류(카드를 거치지 않은 붙여넣기)는
@@ -22,13 +24,8 @@
  */
 
 import { newId } from "./id";
-import type { Skill, SkillBind, SkillStep } from "./skills";
+import type { Skill, SkillQuery } from "./skills";
 import { equipmentInputKey } from "./skills";
-import {
-  type PriorRows,
-  queryKeyOf,
-  resolveSlot,
-} from "./slot-resolve";
 
 // ── 카드·슬롯 ─────────────────────────────────────────────────────────────
 
@@ -56,15 +53,16 @@ export type AnalysisCard = {
 };
 
 /**
- * 데이터 슬롯 — 스킬 스텝 하나의 자리. spec 사본(title·sql·binds)과 상태
- * (`snapshotId`)만 담는다. 요청/도착 여부는 저장하지 않는다 — 파생이다.
+ * 데이터 슬롯 — 조달 수단 하나의 자리.
+ *
+ * 정체(`queryId`·`label`)와 소유(`snapshotId`)만 담는다. **SQL 도 배선도 없다** —
+ * 실행 문장과 "지금 열 수 있나"는 BE 원장이 답하고, 화면은 그것을 그린다.
  */
 export type DataSlot = {
-  title: string;
-  /** bind 자리가 `:var` 로 남은 spec 원문 SQL. */
-  sql: string;
-  /** bind 이름 → 배선(인자 or 앞 슬롯의 컬럼). */
-  binds: Record<string, SkillBind>;
+  /** 조달 id — 조회 키(`스킬#조달id__인자`)의 가운데 토막. 순서가 아니라 이름이다. */
+  queryId: string;
+  /** 이 조회가 채우는 need 의 말 — 원장이 오기 전에도 무엇을 알아내려는지 보인다. */
+  label: string;
   /** 데이터가 붙으면 IDB 스냅샷 참조 — 본문이 죽으면 도착이 아니다. */
   snapshotId?: string;
 };
@@ -110,65 +108,31 @@ function requiredArgNames(skill: Skill): string[] {
     .sort();
 }
 
-/** 슬롯의 queryKey — BE `QueryKey.of` 와 같은 표기(0-기반 스텝). */
-export function slotQueryKey(an: AnalysisCard, step: number): string {
-  return queryKeyOf(
-    an.skills[0].name,
-    step,
-    an.args,
-    requiredArgNames(an.skills[0]),
-  );
+/**
+ * 슬롯의 조회 키 — BE `QueryKey.of` 와 같은 표기(`스킬#조달id__이름표`).
+ *
+ * 가운데가 스텝 인덱스가 아니라 **조달 id** 다(spec v3). `queries[]` 는 카탈로그라
+ * 순서에 뜻이 없어져, 위치로 가리키면 목록 재배열만으로 남의 조회를 가리키게 된다.
+ * 이름표에는 그 조회가 쓰는 바인드가 아니라 **스킬의 필수 인자 전량**이 들어간다 —
+ * 그래야 한 절차의 모든 조회가 같은 이름표를 단다.
+ */
+export function slotQueryKey(an: AnalysisCard, queryId: string): string {
+  const skill = an.skills[0];
+  const parts: string[] = [];
+  for (const name of requiredArgNames(skill)) {
+    const value = an.args[name];
+    if (value !== undefined && value.trim() !== "") {
+      parts.push(`${name}=${sanitize(value)}`);
+    }
+  }
+  const label = parts.join("&");
+  const head = `${skill.name}#${queryId}`;
+  return label ? `${head}__${label}` : head;
 }
 
-// ── 슬롯 상태 파생 ────────────────────────────────────────────────────────
-
-/** 본문 조회 — 렌더 층이 가진 스냅샷 목록을 얇게 받는다. */
-export type SnapshotLookup = (snapshotId: string) =>
-  | { columns: string[]; rows: (string | null)[][] }
-  | undefined;
-
-export type SlotView =
-  /** 바인드 미해결 — 카드를 그리지 않는다. */
-  | { kind: "pending"; step: number; title: string; reason: string }
-  /** 쿼리 확정 — 점선 요청 카드. */
-  | { kind: "request"; step: number; title: string; queryKey: string; sql: string }
-  /** 도착 — 본문이 살아 있는 데이터 카드. */
-  | { kind: "data"; step: number; title: string; queryKey: string; snapshotId: string };
-
-/**
- * 분석 카드의 슬롯 전량을 해석한다 — 화면·안내·판정 페이로드가 전부 이 결과를
- * 읽는다. `snapshotId` 가 있어도 본문이 죽었으면(완전 삭제) 도착으로 치지
- * 않는다 — 해석이 앞 슬롯을 미도착으로 보고 요청을 다시 파생한다.
- */
-export function slotViews(an: AnalysisCard, lookup: SnapshotLookup): SlotView[] {
-  const priorRowsOf = (step: number): PriorRows => {
-    const slot = an.dataList[step];
-    if (!slot?.snapshotId) return null;
-    const body = lookup(slot.snapshotId);
-    return body ?? null;
-  };
-  return an.dataList.map((slot, step) => {
-    if (slot.snapshotId !== undefined && lookup(slot.snapshotId) !== undefined) {
-      return {
-        kind: "data",
-        step,
-        title: slot.title,
-        queryKey: slotQueryKey(an, step),
-        snapshotId: slot.snapshotId,
-      };
-    }
-    const r = resolveSlot(slot.sql, slot.binds, an.args, priorRowsOf);
-    if (r.kind === "ready") {
-      return {
-        kind: "request",
-        step,
-        title: slot.title,
-        queryKey: slotQueryKey(an, step),
-        sql: r.sql,
-      };
-    }
-    return { kind: "pending", step, title: slot.title, reason: r.reason };
-  });
+/** 구분자 충돌만 막는다 — 값의 다른 문자는 그대로 둔다(사람이 읽는 키다). */
+function sanitize(value: string): string {
+  return value.trim().replace(/#/g, "_").replace(/&/g, "_").replace(/=/g, "_");
 }
 
 // ── 트리 연산 (전부 불변 — 바뀐 가지만 새 객체) ───────────────────────────
@@ -197,27 +161,15 @@ export function upsertEquipment(
   return replaceEquipment(wb, { ...existing, line });
 }
 
-/**
- * 스텝 → 슬롯. 배선 전문(`binds`)이 없는 구식 spec 은 argBinds 만이라도
- * 살린다 — priorStep 자리는 배선을 몰라 영영 미정으로 남는데, 지어내는 것보다
- * 낫고 재등록(새 카탈로그)이 자연 치유한다.
- */
-function slotOf(step: SkillStep): DataSlot {
-  const binds =
-    step.binds ??
-    Object.fromEntries(
-      Object.entries(step.argBinds).map(([bind, arg]) => [
-        bind,
-        { from: "arg", arg } as SkillBind,
-      ]),
-    );
-  return { title: step.title, sql: step.sql, binds };
+/** 조달 수단 → 슬롯. 자리와 이름만 가져온다 — 실행 판단은 BE 원장 소관이다. */
+function slotOf(query: SkillQuery): DataSlot {
+  return { queryId: query.id, label: query.label };
 }
 
 /**
  * 분석 카드 개설 — 설비가 없으면 함께 세운다. 같은 설비에 같은 run 이 이미
- * 있으면 그대로 둔다(중복 개설 아님). 슬롯은 스킬 스텝 **전량**을 여기서
- * 선생성한다 — 분석 카드는 태어날 때부터 필요한 데이터 목록을 다 안다.
+ * 있으면 그대로 둔다(중복 개설 아님). 슬롯은 스킬의 조달 수단 **전량**을 여기서
+ * 선생성한다 — 분석 카드는 태어날 때부터 무엇을 알아내려는지 다 안다.
  */
 export function openAnalysis(
   wb: Workbench,
@@ -239,7 +191,7 @@ export function openAnalysis(
     id: newId("an_"),
     skills: [skill],
     args,
-    dataList: skill.steps.map(slotOf),
+    dataList: skill.queries.map(slotOf),
     attachments: [],
   };
   return {
@@ -273,12 +225,12 @@ export function fulfillSlot(
   snapshotId: string,
 ): Workbench {
   return mapAnalyses(wb, (an) => {
-    const step = an.dataList.findIndex(
-      (_, i) => slotQueryKey(an, i) === queryKey,
+    const at = an.dataList.findIndex(
+      (slot) => slotQueryKey(an, slot.queryId) === queryKey,
     );
-    if (step === -1) return an;
+    if (at === -1) return an;
     const dataList = an.dataList.map((s, i) =>
-      i === step ? { ...s, snapshotId } : s,
+      i === at ? { ...s, snapshotId } : s,
     );
     return { ...an, dataList };
   });
@@ -350,7 +302,13 @@ function mapAnalyses(
 
 // ── 영속 (localStorage) ──────────────────────────────────────────────────
 
-const STORAGE_KEY = "fdc.workbench.v1";
+/**
+ * v2 = spec v3 슬롯 세대. 키를 올려 **옛 저장분을 버린다** — 조회 키의 가운데가
+ * 스텝 인덱스(`#0`)에서 조달 id(`#sensor_row`)로 바뀌어, 옛 카드의 참조는 어느
+ * 조회도 가리키지 못한다. 옮길 수 있는 것도 아니다(인덱스 → id 대응이 없다).
+ * 데모의 보관물이라 버리는 편이 낫고, 새 등록이 곧바로 자리를 채운다.
+ */
+const STORAGE_KEY = "fdc.workbench.v2";
 
 /** 저장 — 트리는 가볍다(본문은 IDB). 실패(용량 등)는 조용히 넘긴다: 다음 저장이 또 온다. */
 export function saveWorkbench(wb: Workbench): void {
@@ -362,11 +320,11 @@ export function saveWorkbench(wb: Workbench): void {
 }
 
 /**
- * 구식 분석(카드 세대: skill 단수 + cards[] request/data)을 슬롯 세대로 옮긴다.
- * data 카드의 참조는 queryKey 의 스텝 번호(`#N`)로 슬롯에 앉힌다 — 등록 데이터를
- * 버리지 않기 위한 **마이그레이션 한정** 파싱이다(정상 경로의 역파싱 금지와 무관).
+ * 저장분 한 건 수용 — 모양이 어긋나면 버린다(부분 수용). 세대 간 변환은 없다:
+ * 키를 올려 옛 세대를 통째로 떨어뜨렸으므로 여기 오는 것은 v2 뿐이고, 그래도
+ * 손으로 고친 저장분이 있을 수 있어 필드는 하나씩 확인한다.
  */
-function migrateAnalysis(raw: unknown): AnalysisCard | null {
+function readAnalysis(raw: unknown): AnalysisCard | null {
   if (typeof raw !== "object" || raw === null) return null;
   const a = raw as {
     id?: unknown;
@@ -374,41 +332,26 @@ function migrateAnalysis(raw: unknown): AnalysisCard | null {
     skills?: unknown;
     dataList?: unknown;
     attachments?: unknown;
-    skill?: Skill;
-    cards?: unknown[];
   };
   if (typeof a.id !== "string" || typeof a.args !== "object" || a.args === null) {
     return null;
   }
-  if (Array.isArray(a.skills) && Array.isArray(a.dataList)) {
-    return {
-      id: a.id,
-      skills: a.skills as Skill[],
-      args: a.args as Record<string, string>,
-      dataList: a.dataList as DataSlot[],
-      attachments: Array.isArray(a.attachments)
-        ? (a.attachments as AttachmentCard[])
-        : [],
-    };
-  }
-  if (!a.skill || !Array.isArray(a.skill.steps)) return null;
-  const dataList = a.skill.steps.map(slotOf);
-  for (const c of a.cards ?? []) {
-    const card = c as { type?: string; queryKey?: string; snapshotId?: string };
-    if (card.type !== "data" || !card.queryKey || !card.snapshotId) continue;
-    const m = /#(\d{1,3})(?:__|$)/.exec(card.queryKey);
-    if (!m) continue;
-    const step = Number(m[1]);
-    if (step >= 0 && step < dataList.length) {
-      dataList[step] = { ...dataList[step], snapshotId: card.snapshotId };
-    }
-  }
+  if (!Array.isArray(a.skills) || a.skills.length === 0) return null;
+  if (!Array.isArray(a.dataList)) return null;
+  const dataList = a.dataList.filter(
+    (s): s is DataSlot =>
+      typeof s === "object" &&
+      s !== null &&
+      typeof (s as DataSlot).queryId === "string",
+  );
   return {
     id: a.id,
-    skills: [a.skill],
+    skills: a.skills as Skill[],
     args: a.args as Record<string, string>,
     dataList,
-    attachments: [],
+    attachments: Array.isArray(a.attachments)
+      ? (a.attachments as AttachmentCard[])
+      : [],
   };
 }
 
@@ -439,7 +382,7 @@ export function loadWorkbench(): Workbench {
         name: e.name,
         line: typeof e.line === "string" ? e.line : null,
         analyses: e.analyses
-          .map(migrateAnalysis)
+          .map(readAnalysis)
           .filter((a): a is AnalysisCard => a !== null),
       }));
     return { equipments };

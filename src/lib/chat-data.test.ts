@@ -5,14 +5,13 @@ import { EMPTY_WORKBENCH, openAnalysis, toRunDecls } from "./workbench-cards";
 const SKILL: Skill = {
   skill: "fdc_trace_reading",
   name: "fdc-trace-reading",
-  unit: "센서",
-  focus: "측정 분포",
   description: "테스트",
   inputs: [
     { key: "equipment", required: true },
     { key: "param_index", required: true },
   ],
-  steps: [],
+  needs: [],
+  queries: [],
 };
 
 describe("toRunDecls (작업판 트리)", () => {

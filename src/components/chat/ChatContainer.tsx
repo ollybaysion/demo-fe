@@ -63,7 +63,6 @@ import {
   runRefOf,
   sameRun,
   saveWorkbench as saveWorkbenchTree,
-  slotViews,
   toRunDecls,
   upsertEquipment,
   type Workbench as WorkbenchTree,
@@ -303,6 +302,16 @@ export function ChatContainer() {
   }, []);
 
   /**
+   * 조달 원장 — **요청 카드의 진실원**(BE `/chat/data` 의 `dataRequests`).
+   * 상태 전량이 매번 오므로 통째로 갈아끼운다(replace): 병합하면 지난 판정의
+   * 줄이 남아 이미 닫힌 조회가 유령으로 선다.
+   *
+   * 대화가 아니라 작업판에 매인 것이라 새 대화에서 지우지 않는다. 다만
+   * 새로고침 뒤에는 비어 있으므로, 트리가 복원되면 판정을 한 번 불러 되채운다.
+   */
+  const [ledger, setLedger] = useState<DataRequest[]>([]);
+
+  /**
    * 작업판 트리 — 설비⊃분석⊃카드 3종 보관물의 정본(#168). 대화와 무관하게
    * 살고(localStorage 영속), 새 대화·대화 전환에서 초기화하지 않는다.
    * SSR 첫 렌더와의 hydration 불일치를 피하려고 빈 트리로 시작해 클라이언트
@@ -311,9 +320,15 @@ export function ChatContainer() {
   const [tree, setTree] = useState<WorkbenchTree>(EMPTY_TREE);
   const [treeHydrated, setTreeHydrated] = useState(false);
   useEffect(() => {
+    const restored = loadWorkbenchTree();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTree(loadWorkbenchTree());
+    setTree(restored);
     setTreeHydrated(true);
+    // 원장은 대화 밖 상태라 새로고침으로 사라진다 — 트리에 분석이 있으면 판정을
+    // 한 번 불러 카드를 되세운다. 이게 없으면 새로고침 후 화면이 비어 보인다.
+    if (restored.equipments.some((eq) => eq.analyses.length > 0)) {
+      pendingJudgeRef.current = { type: "tree-restored" };
+    }
   }, []);
   useEffect(() => {
     if (treeHydrated) saveWorkbenchTree(tree);
@@ -446,6 +461,7 @@ export function ChatContainer() {
     snapshots,
     scopedSnapshots,
     [...openRequests],
+    ledger,
   );
   const detailCard =
     equipmentCards.find((c) => c.id === detailCardId) ?? null;
@@ -749,11 +765,12 @@ export function ChatContainer() {
       },
       controller.signal,
     )
-      .then(() => {
-        // 카드 배치는 판정 응답을 읽지 않는다 — 슬롯 상태는 매 렌더 로컬
-        // 파생(slotViews)이라 화면이 상태와 어긋날 수 없다. 판정 왕복은
-        // BE 인지(진행 트레이스)와 종결 서술을 위해 남는다. openRequests 는
-        // 채팅 경로(BindResolver)와의 패리티 교차검증 재료로만 의미가 있다.
+      .then((done) => {
+        // 카드 배치의 진실원은 서버 원장이다 — 화면은 스킬을 읽어 SQL 을
+        // 완성하지 않는다. 늦게 도착한 응답이 최신 원장을 덮지 않도록
+        // revision 으로 거른다(연타·토글에서 순서가 역전된다).
+        if (!done || revision !== judgeRevisionRef.current) return;
+        setLedger(done.dataRequests ?? []);
       })
       .finally(() => {
         clearTimeout(timeoutId);
@@ -1336,20 +1353,20 @@ export function ChatContainer() {
     return undefined;
   }, [messages, fulfilledRequestsFor]);
 
-  // 슬롯 상태 집계 — 열린 요청(쿼리 확정·미도착)과 도착(본문 산 것만)을
-  // 로컬 해석으로 센다. 카드 저장물이 아니라 파생이라 화면과 어긋날 수 없다.
+  // 슬롯 상태 집계 — **지금 실행할 수 있는 요청**은 원장이 세고(잠긴 줄은 사람이
+  // 할 일이 아니므로 안 센다), 도착은 트리가 센다(본문이 산 것만 — 완전 삭제로
+  // 허상이 된 참조를 세면 데이터가 없는데 "다 채워졌다"고 말하게 된다).
   const slotSummary = useMemo(() => {
     const byId = new Map(snapshots.map((s) => [s.id, s]));
-    let open = 0;
     let arrived = 0;
     for (const an of allAnalyses(tree)) {
-      for (const v of slotViews(an, (id) => byId.get(id))) {
-        if (v.kind === "request") open++;
-        else if (v.kind === "data") arrived++;
+      for (const slot of an.dataList) {
+        if (slot.snapshotId && byId.has(slot.snapshotId)) arrived++;
       }
     }
+    const open = ledger.filter((row) => row.state === "ready").length;
     return { open, arrived };
-  }, [tree, snapshots]);
+  }, [tree, snapshots, ledger]);
   const treeOpenRequestCount = slotSummary.open;
 
   /**

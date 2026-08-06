@@ -14,45 +14,50 @@ import {
   sameRun,
   saveWorkbench,
   slotQueryKey,
-  slotViews,
   toRunDecls,
   upsertEquipment,
-  type SnapshotLookup,
   type Workbench,
 } from "./workbench-cards";
 
-// 실 spec(fdc-explain-sensor)의 골격 — 1단계는 인자만, 2·3단계는 앞 단계
-// 결과(EQP_ID)로 묶인다. queryKey·SQL 골든은 slot-resolve.test 가 진다.
+// 실 spec(fdc-explain-sensor)의 골격 — sensor_row 는 인자만, equipment_row 는 앞
+// 조회 결과(EQP_ID)로 묶인다. 다만 **그 판정은 여기 없다**: 실행 가능 여부와 SQL 은
+// BE 조달 원장이 준다. 트리는 자리와 이름만 안다.
 const SKILL: Skill = {
   skill: "fdc_explain_sensor",
   name: "fdc-explain-sensor",
-  unit: "센서",
-  focus: "상태",
   description: "센서 설명",
   inputs: [{ key: "snsr_id", required: true }],
-  steps: [
+  needs: [
     {
-      title: "1단계 — 센서 기본 정보",
+      id: "measure_kind",
+      what: "무엇을 재는 센서인지",
+      filledBy: [{ query: "sensor_row", column: "SNSR_TYPE_CD" }],
+    },
+    {
+      id: "equipment_identity",
+      what: "그 설비의 이름과 모델",
+      filledBy: [{ query: "equipment_row", column: "EQP_NAME" }],
+    },
+  ],
+  queries: [
+    {
+      id: "sensor_row",
+      label: "무엇을 재는 센서인지",
       sql: "SELECT snsr_id, eqp_id FROM fdc_sensor WHERE snsr_id = :id",
       argBinds: { id: "snsr_id" },
-      priorStepBinds: [],
+      priorQueryBinds: [],
       binds: { id: { from: "arg", arg: "snsr_id" } },
     },
     {
-      title: "2단계 — 소속 설비",
+      id: "equipment_row",
+      label: "그 설비의 이름과 모델",
       sql: "SELECT eqp_id, eqp_name FROM fdc_equipment WHERE eqp_id = :eqp",
       argBinds: {},
-      priorStepBinds: ["eqp"],
-      binds: { eqp: { from: "step", step: 0, column: "EQP_ID" } },
+      priorQueryBinds: ["eqp"],
+      binds: { eqp: { from: "query", query: "sensor_row", column: "EQP_ID" } },
     },
   ],
-} as Skill;
-
-const STEP0_ROWS = { columns: ["SNSR_ID", "EQP_ID"], rows: [["B", "CVD-01"]] };
-
-function lookupOf(map: Record<string, { columns: string[]; rows: (string | null)[][] }>): SnapshotLookup {
-  return (id) => map[id];
-}
+};
 
 function seeded(): { wb: Workbench; analysisId: string } {
   const { wb, analysis } = openAnalysis(
@@ -81,14 +86,21 @@ describe("설비 카드", () => {
 });
 
 describe("분석 카드 — dataList 선생성", () => {
-  it("개설하면 설비 안에 서고, 슬롯은 스킬 스텝 전량이 미리 만들어진다", () => {
+  it("개설하면 설비 안에 서고, 슬롯은 조달 수단 전량이 미리 만들어진다", () => {
     const { wb } = seeded();
     const an = wb.equipments[0].analyses[0];
     expect(an.args).toEqual({ snsr_id: "B" });
-    expect(an.dataList.map((s) => s.title)).toEqual([
-      "1단계 — 센서 기본 정보",
-      "2단계 — 소속 설비",
+    expect(an.dataList.map((s) => s.queryId)).toEqual([
+      "sensor_row",
+      "equipment_row",
     ]);
+    // 라벨은 조회 이름이 아니라 그 조회가 답에 기여하는 것이다.
+    expect(an.dataList.map((s) => s.label)).toEqual([
+      "무엇을 재는 센서인지",
+      "그 설비의 이름과 모델",
+    ]);
+    // SQL·배선은 슬롯에 없다 — 실행 판단은 BE 원장 소관이다.
+    expect(an.dataList[0]).not.toHaveProperty("sql");
     expect(an.dataList.every((s) => s.snapshotId === undefined)).toBe(true);
     expect(an.attachments).toEqual([]);
   });
@@ -113,66 +125,34 @@ describe("분석 카드 — dataList 선생성", () => {
     expect(sameRun(runRefOf(an), { skill: "fdc-explain-sensor", args: { snsr_id: "C" } })).toBe(false);
   });
 
-  it("슬롯 queryKey 는 BE 표기(0-기반·필수 인자 이름표)와 같다", () => {
+  it("슬롯 queryKey 는 BE 표기(조달 id·필수 인자 이름표)와 같다", () => {
+    // 가운데가 스텝 인덱스가 아니라 조달 id 다 — 목록 재배열이 남의 조회를
+    // 가리키게 하면 안 된다.
     const { wb } = seeded();
     const an = wb.equipments[0].analyses[0];
-    expect(slotQueryKey(an, 0)).toBe("fdc-explain-sensor#0__snsr_id=B");
-    expect(slotQueryKey(an, 1)).toBe("fdc-explain-sensor#1__snsr_id=B");
-  });
-});
-
-describe("slotViews — 미정/요청/도착 파생", () => {
-  it("개설 직후: 1단계는 요청(SQL 확정), 2단계는 미정(앞 단계 미도착)", () => {
-    const { wb } = seeded();
-    const views = slotViews(wb.equipments[0].analyses[0], lookupOf({}));
-    expect(views[0]).toMatchObject({
-      kind: "request",
-      queryKey: "fdc-explain-sensor#0__snsr_id=B",
-      sql: "SELECT snsr_id, eqp_id FROM fdc_sensor WHERE snsr_id = 'B'",
-    });
-    expect(views[1]).toMatchObject({ kind: "pending", reason: "upstream" });
-  });
-
-  it("1단계 도착 후: 1단계는 데이터, 2단계는 요청으로 파생된다", () => {
-    const { wb } = seeded();
-    const filled = fulfillSlot(wb, "fdc-explain-sensor#0__snsr_id=B", "snap-1");
-    const views = slotViews(
-      filled.equipments[0].analyses[0],
-      lookupOf({ "snap-1": STEP0_ROWS }),
+    expect(slotQueryKey(an, "sensor_row")).toBe(
+      "fdc-explain-sensor#sensor_row__snsr_id=B",
     );
-    expect(views[0]).toMatchObject({ kind: "data", snapshotId: "snap-1" });
-    expect(views[1]).toMatchObject({
-      kind: "request",
-      sql: "SELECT eqp_id, eqp_name FROM fdc_equipment WHERE eqp_id = 'CVD-01'",
-    });
-  });
-
-  it("본문이 죽은 참조는 도착이 아니다 — 요청으로 되돌아간다(허상 정리 공짜)", () => {
-    const { wb } = seeded();
-    const filled = fulfillSlot(wb, "fdc-explain-sensor#0__snsr_id=B", "snap-1");
-    // IDB 에서 완전 삭제됨 — lookup 이 못 찾는다.
-    const views = slotViews(filled.equipments[0].analyses[0], lookupOf({}));
-    expect(views[0]).toMatchObject({ kind: "request" });
-    expect(views[1]).toMatchObject({ kind: "pending", reason: "upstream" });
-  });
-
-  it("1단계가 0행이면 2단계는 미정(empty-upstream) — 절차가 거기서 멈춘다", () => {
-    const { wb } = seeded();
-    const filled = fulfillSlot(wb, "fdc-explain-sensor#0__snsr_id=B", "snap-1");
-    const views = slotViews(
-      filled.equipments[0].analyses[0],
-      lookupOf({ "snap-1": { columns: ["SNSR_ID", "EQP_ID"], rows: [] } }),
+    expect(slotQueryKey(an, "equipment_row")).toBe(
+      "fdc-explain-sensor#equipment_row__snsr_id=B",
     );
-    expect(views[0]).toMatchObject({ kind: "data" });
-    expect(views[1]).toMatchObject({ kind: "pending", reason: "empty-upstream" });
+  });
+
+  it("이름표의 구분자는 접는다 — 키가 깨지지 않게", () => {
+    const { wb } = openAnalysis(EMPTY_WORKBENCH, "CVD-01", null, SKILL, {
+      snsr_id: "A#B&C=D",
+    });
+    expect(slotQueryKey(wb.equipments[0].analyses[0], "sensor_row")).toBe(
+      "fdc-explain-sensor#sensor_row__snsr_id=A_B_C_D",
+    );
   });
 });
 
 describe("fulfillSlot", () => {
   it("queryKey 가 가리키는 슬롯에 앉고, 재등록은 참조만 갱신된다", () => {
     const { wb } = seeded();
-    let next = fulfillSlot(wb, "fdc-explain-sensor#0__snsr_id=B", "snap-1");
-    next = fulfillSlot(next, "fdc-explain-sensor#0__snsr_id=B", "snap-2");
+    let next = fulfillSlot(wb, "fdc-explain-sensor#sensor_row__snsr_id=B", "snap-1");
+    next = fulfillSlot(next, "fdc-explain-sensor#sensor_row__snsr_id=B", "snap-2");
     const an = next.equipments[0].analyses[0];
     expect(an.dataList[0].snapshotId).toBe("snap-2");
     expect(an.dataList[1].snapshotId).toBeUndefined();
@@ -180,7 +160,7 @@ describe("fulfillSlot", () => {
 
   it("어느 슬롯과도 안 맞는 키는 트리를 건드리지 않는다 — 소속을 지어내지 않는다", () => {
     const { wb } = seeded();
-    const next = fulfillSlot(wb, "unknown#0", "snap-1");
+    const next = fulfillSlot(wb, "unknown#nope", "snap-1");
     expect(next).toEqual(wb);
   });
 });
@@ -188,7 +168,7 @@ describe("fulfillSlot", () => {
 describe("cascade 삭제·역인덱스", () => {
   it("분석 삭제는 슬롯 참조도 함께 걷는다", () => {
     const { wb, analysisId } = seeded();
-    const filled = fulfillSlot(wb, "fdc-explain-sensor#0__snsr_id=B", "snap-1");
+    const filled = fulfillSlot(wb, "fdc-explain-sensor#sensor_row__snsr_id=B", "snap-1");
     const removed = removeAnalysis(filled, analysisId);
     expect(removed.equipments[0].analyses).toHaveLength(0);
     expect(referencedSnapshotIds(removed).size).toBe(0);
@@ -202,7 +182,7 @@ describe("cascade 삭제·역인덱스", () => {
 
   it("referencedSnapshotIds / ownerOfSnapshot 이 슬롯 참조를 본다", () => {
     const { wb, analysisId } = seeded();
-    const filled = fulfillSlot(wb, "fdc-explain-sensor#0__snsr_id=B", "snap-1");
+    const filled = fulfillSlot(wb, "fdc-explain-sensor#sensor_row__snsr_id=B", "snap-1");
     expect([...referencedSnapshotIds(filled)]).toEqual(["snap-1"]);
     const owner = ownerOfSnapshot(filled, "snap-1");
     expect(owner?.equipment.name).toBe("CVD-01");
@@ -237,14 +217,16 @@ describe("영속", () => {
   it("저장 → 복원 왕복이 트리를 보존한다", () => {
     withStorage({}, () => {
       const { wb } = seeded();
-      const filled = fulfillSlot(wb, "fdc-explain-sensor#0__snsr_id=B", "snap-1");
+      const filled = fulfillSlot(wb, "fdc-explain-sensor#sensor_row__snsr_id=B", "snap-1");
       saveWorkbench(filled);
       const back = loadWorkbench();
       expect(back).toEqual(filled);
     });
   });
 
-  it("구식 저장분(skill 단수 + cards 세대)은 슬롯 세대로 이관된다", () => {
+  it("옛 세대 저장분(v1)은 읽지 않는다 — 조회 키가 다른 것을 가리킨다", () => {
+    // 스텝 인덱스(`#0`)로 앉힌 참조는 조달 id 세대에서 어느 조회도 아니다.
+    // 옮길 대응이 없으므로 버린다 — 새 등록이 곧바로 자리를 채운다.
     const legacy = {
       equipments: [
         {
@@ -254,22 +236,10 @@ describe("영속", () => {
           analyses: [
             {
               id: "an_old",
-              skill: SKILL,
+              skills: [SKILL],
               args: { snsr_id: "B" },
-              cards: [
-                {
-                  type: "data",
-                  id: "card-1",
-                  queryKey: "fdc-explain-sensor#0__snsr_id=B",
-                  label: "1단계",
-                  snapshotId: "snap-old",
-                },
-                {
-                  type: "request",
-                  id: "card-2",
-                  queryKey: "fdc-explain-sensor#1__snsr_id=B",
-                  label: "2단계",
-                },
+              dataList: [
+                { title: "1단계", sql: "…", binds: {}, snapshotId: "snap-old" },
               ],
             },
           ],
@@ -277,17 +247,36 @@ describe("영속", () => {
       ],
     };
     withStorage({ "fdc.workbench.v1": JSON.stringify(legacy) }, () => {
-      const back = loadWorkbench();
-      const an = back.equipments[0].analyses[0];
-      expect(an.skills[0].name).toBe("fdc-explain-sensor");
-      // data 카드 참조는 스텝 자리로 옮겨 앉고, request 카드는 파생이라 버린다.
-      expect(an.dataList[0].snapshotId).toBe("snap-old");
-      expect(an.dataList[1].snapshotId).toBeUndefined();
+      expect(loadWorkbench()).toEqual(EMPTY_WORKBENCH);
     });
   });
 
-  it("깨진 저장분은 빈 작업판 — 부분 수용", () => {
-    withStorage({ "fdc.workbench.v1": "{broken" }, () => {
+  it("모양이 어긋난 슬롯은 버리고 나머지는 산다 — 부분 수용", () => {
+    const { wb } = seeded();
+    const tampered = {
+      equipments: [
+        {
+          ...wb.equipments[0],
+          analyses: [
+            {
+              ...wb.equipments[0].analyses[0],
+              dataList: [
+                { queryId: "sensor_row", label: "센서" },
+                { label: "id 가 없다" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    withStorage({ "fdc.workbench.v2": JSON.stringify(tampered) }, () => {
+      const back = loadWorkbench();
+      expect(back.equipments[0].analyses[0].dataList).toHaveLength(1);
+    });
+  });
+
+  it("깨진 저장분은 빈 작업판", () => {
+    withStorage({ "fdc.workbench.v2": "{broken" }, () => {
       expect(loadWorkbench()).toEqual(EMPTY_WORKBENCH);
     });
   });
