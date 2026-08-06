@@ -168,7 +168,10 @@ export function toChatScope(
   };
 }
 
-/** 이 줄을 세운 세션 — 같은 설비의, 그 category 를 내는 스텝을 가진 스킬. */
+/**
+ * 이 줄을 세운 세션 — 같은 설비의, 그 category 를 내는 조달을 가진 스킬.
+ * v3 에서 조달의 라벨은 그것이 채우는 need 의 말이다(스텝 제목이 사라진 자리).
+ */
 function findSession(
   sessions: SkillSession[],
   equipment: string,
@@ -177,6 +180,6 @@ function findSession(
   return sessions.find(
     (s) =>
       s.equipment === equipment &&
-      s.skill.steps.some((step) => (step.produces ?? step.title) === category),
+      s.skill.queries.some((query) => query.label === category),
   );
 }

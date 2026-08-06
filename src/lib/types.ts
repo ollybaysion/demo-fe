@@ -291,11 +291,30 @@ export type DataSnapshot = {
 };
 
 /**
+ * 조달 원장 한 줄의 상태 — 그 조회를 **지금 실행할 수 있는가**, 못 한다면 왜인가.
+ * BE `RequestState` 의 거울이다.
+ *
+ * `blocked`(아직 — 앞 조회가 오면 열린다)와 `unreachable`(영영 — 앞 조회가 빈손으로
+ * 확정됐다)을 가르는 것이 요점이다. 뭉치면 화면이 기다리라고 말해야 할 자리에서
+ * 포기하라고 말하거나 그 반대가 된다.
+ */
+export type RequestState =
+  | "ready"
+  | "blocked"
+  | "arrived"
+  | "inactive"
+  | "unreachable";
+
+/**
  * 데이터 요청 — 백엔드가 "이게 있어야 답할 수 있다"고 알려오는 것.
  *
  * DB 에 붙지 못하는 환경에서는 모델이 스스로 조회할 수 없으므로, 없는 데이터를
  * 지어내는 대신 사용자에게 조달을 요청한다. 사용자가 그 결과를 붙여넣어 스냅샷으로
  * 등록하면 다시 분석할 수 있다.
+ *
+ * `/chat/data` 판정에서는 이것이 **조달 원장**으로 온다 — 그 절차의 조회 전량이
+ * 상태를 달고 매번 전부. 화면은 그 상태대로 그리기만 한다: 무엇을 보일지도, SQL 을
+ * 어떻게 완성할지도 화면이 판단하지 않는다.
  */
 export type DataRequest = {
   /**
@@ -320,6 +339,12 @@ export type DataRequest = {
    * `queryKey` 는 손실 인코딩이라 역파싱하면 안 되고, 소속은 이 필드가 정본이다.
    */
   run?: { skill: string; args: Record<string, string> };
+  /** 원장으로 왔으면 그 줄의 상태. 채팅 경로의 요청 카드에는 없다(언제나 실행 가능). */
+  state?: RequestState;
+  /** 못 여는 사유 — `blocked`·`unreachable` 일 때만. */
+  blocked?: string;
+  /** 이 조회가 채우는 need 의 id 들 — 카드를 "무엇을 알아내려는 것"으로 되짚는 근거. */
+  needs?: string[];
 };
 
 /**

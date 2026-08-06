@@ -12,7 +12,13 @@ import type { Skill } from "@/lib/skills";
  * 스킬이 늘어나는 게 아니다.
  */
 
-/** 지어낸 스킬 하나의 씨앗 — 아래 `expand` 가 카탈로그 항목으로 편다. */
+/**
+ * 지어낸 스킬 하나의 씨앗 — 아래 `expand` 가 spec v3 카탈로그 항목으로 편다.
+ *
+ * 씨앗은 v2 어휘(`unit`·`focus`·`steps`)를 그대로 둔다: 이건 **저작 편의**지
+ * 계약이 아니고, v3 로 펴는 일은 `expand` 하나가 맡는다. 계약이 어디인지는
+ * `@/lib/skills` 의 `Skill` 타입이 말한다.
+ */
 type Seed = {
   name: string;
   unit: string;
@@ -20,7 +26,7 @@ type Seed = {
   table: string;
   /** [인자 이름, 설명] — 전부 required. 첫 인자가 그 스킬의 조회 대상이다. */
   args: Array<[string, string]>;
-  /** [스텝 제목, produces] — bind 는 인자 순서대로 붙는다. */
+  /** [조달 제목, 알아내는 것] — bind 는 인자 순서대로 붙는다. */
   steps: Array<[string, string]>;
 };
 
@@ -338,14 +344,23 @@ const SEEDS: Seed[] = [
   },
 ];
 
+/** 조달 id — 씨앗에 없으므로 순번으로 짓는다(`q1`·`q2` …). 순서가 아니라 이름이다. */
+function queryIdOf(index: number): string {
+  return `q${index + 1}`;
+}
+
 function expand(seed: Seed): Skill {
   const argNames = seed.args.map(([key]) => key);
+  const questions = [
+    `${seed.args[0][0]} 의 ${seed.focus} 알려줘`,
+    `이 ${seed.unit} ${seed.focus} 어때?`,
+  ];
   return {
     skill: seed.name.replace(/-/g, "_"),
     name: seed.name,
-    unit: seed.unit,
-    focus: seed.focus,
     description: `특정 ${seed.unit}의 ${seed.focus}를 묻는 상황에서 호출한다 (${argNames.join("·")} 필요).`,
+    questions,
+    rephrasing: `이 ${seed.unit}의 ${seed.focus}가 어떠한지.`,
     argumentHint: argNames.map((a) => `{${a}}`).join(" "),
     anchorTable: seed.table,
     inputs: seed.args.map(([key, description]) => ({
@@ -353,17 +368,28 @@ function expand(seed: Seed): Skill {
       required: true,
       description,
     })),
-    steps: seed.steps.map(([title, produces], i) => {
-      // 1단계는 인자를 전부 쓰고, 이후 스텝은 첫 인자(대상)만 쓴다.
+    // v3 의 뒤집힌 화살표 — 알아낼 것이 먼저고, 조달이 그걸 채운다.
+    needs: seed.steps.map(([, produces], i) => ({
+      id: `n${i + 1}`,
+      what: produces,
+      filledBy: [{ query: queryIdOf(i), column: "VALUE" }],
+    })),
+    queries: seed.steps.map(([, produces], i) => {
+      // 첫 조달은 인자를 전부 쓰고, 이후는 첫 인자(대상)만 쓴다.
       const used = i === 0 ? argNames : argNames.slice(0, 1);
       return {
-        title,
-        produces,
+        id: queryIdOf(i),
+        // 라벨은 조회 이름이 아니라 그 조회가 답에 기여하는 것이다.
+        label: produces,
+        table: seed.table.toLowerCase(),
         sql: `SELECT * FROM ${seed.table.toLowerCase()}\n WHERE ${used
           .map((a) => `${a} = :${a}`)
           .join("\n   AND ")}`,
         argBinds: Object.fromEntries(used.map((a) => [a, a])),
-        priorStepBinds: [],
+        priorQueryBinds: [],
+        binds: Object.fromEntries(
+          used.map((a) => [a, { from: "arg" as const, arg: a }]),
+        ),
       };
     }),
   };

@@ -41,10 +41,10 @@ export function SkillRow({
         <span className="min-w-0 truncate font-mono text-caption text-brand-ink">
           {skill.name}
         </span>
-        {/* focus 는 이름 옆에 낮은 무게로 — 무엇을 보는 스킬인지 가리키는 꼬리표지
-            이름 자리를 대신하는 값이 아니다. */}
-        <span className="min-w-0 shrink truncate text-caption text-brand-muted">
-          {skill.focus}
+        {/* 앵커 테이블은 이름 옆에 낮은 무게로 — 무엇을 딛고 선 스킬인지 가리키는
+            꼬리표지 이름 자리를 대신하는 값이 아니다(v2 의 focus 자리). */}
+        <span className="min-w-0 shrink truncate font-mono text-caption text-brand-muted">
+          {skill.anchorTable ?? ""}
         </span>
       </span>
       <span

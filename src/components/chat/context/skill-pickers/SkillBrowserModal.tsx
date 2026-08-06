@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { equipmentInputKey, type Skill } from "@/lib/skills";
+import { equipmentInputKey, skillSummary, type Skill } from "@/lib/skills";
 import { SkillRow } from "./SkillRow";
-import { groupByUnit, matches, pickRecent } from "./types";
+import { groupByAnchor, matches, pickRecent } from "./types";
 
 /**
  * 스킬을 **넓게 펴 놓고 고르는 화면**.
@@ -123,10 +123,10 @@ export function SkillBrowserModal({
                       <div className="border-t border-brand-hairline my-xxs" />
                     </>
                   )}
-                  {groupByUnit(skills).map(([unit, list]) => (
-                    <div key={unit} className="flex flex-col gap-xxs">
-                      <p className="text-caption text-brand-muted px-xs pt-xxs">
-                        {unit}{" "}
+                  {groupByAnchor(skills).map(([anchor, list]) => (
+                    <div key={anchor} className="flex flex-col gap-xxs">
+                      <p className="font-mono text-caption text-brand-muted px-xs pt-xxs">
+                        {anchor}{" "}
                         <span className="text-brand-muted-soft tabular-nums">
                           ({list.length})
                         </span>
@@ -198,14 +198,28 @@ function SkillDetail({ skill }: { skill: Skill }) {
       <div>
         {/* 제목은 이름 — 목록·칩·고른 뒤 한 줄과 같은 말로 세운다. */}
         <h3 className="font-mono text-body-md text-brand-ink">{skill.name}</h3>
-        <p className="text-caption text-brand-muted-soft">
-          {skill.focus} · {skill.unit}
-          {skill.anchorTable ? ` · ${skill.anchorTable}` : ""}
+        <p className="font-mono text-caption text-brand-muted-soft">
+          {skill.anchorTable ?? ""}
         </p>
       </div>
+      {/* rephrasing — "이 질문에 답한다는 건 …". 저자가 사람에게 쓴 문장이라
+          합성 description 보다 이 자리에 맞다. */}
       <p className="text-body-sm text-brand-body leading-relaxed">
-        {skill.description}
+        {skillSummary(skill)}
       </p>
+
+      {skill.questions && skill.questions.length > 0 && (
+        <div>
+          <p className="text-caption text-brand-muted mb-xxs">이런 질문에 답한다</p>
+          <ul className="flex flex-col gap-xxs">
+            {skill.questions.map((q) => (
+              <li key={q} className="text-caption text-brand-ink">
+                “{q}”
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div>
         <p className="text-caption text-brand-muted mb-xxs">필요한 값</p>
@@ -224,20 +238,43 @@ function SkillDetail({ skill }: { skill: Skill }) {
         </ul>
       </div>
 
+      {/* v3 의 본론 — 조회 목록이 아니라 **알아내는 것**이다. 조회는 그걸 채우는
+          수단이라 아래 한 줄로만 적는다. */}
       <div>
-        <p className="text-caption text-brand-muted mb-xxs">조회</p>
+        <p className="text-caption text-brand-muted mb-xxs">알아내는 것</p>
         <ul className="flex flex-col gap-xxs">
-          {skill.steps.map((s) => (
-            <li key={s.title} className="text-caption text-brand-ink">
-              {s.title}
-              {s.produces && (
-                <span className="text-brand-muted-soft"> — {s.produces}</span>
+          {skill.needs.map((n) => (
+            <li key={n.id} className="text-caption text-brand-ink">
+              {n.what}
+              {n.when && (
+                <span className="text-brand-muted-soft"> — {n.when} 일 때만</span>
               )}
-              {s.priorStepBinds.length > 0 && (
+              {n.filledBy.length === 0 && (
                 <span className="text-brand-muted-soft">
                   {" "}
-                  (앞 조회 결과 필요 — 카드로 서지 않음)
+                  (이 스킬로는 조달 수단 없음)
                 </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div>
+        <p className="text-caption text-brand-muted mb-xxs">
+          조달 <span className="text-brand-muted-soft tabular-nums">
+            ({skill.queries.length}건)
+          </span>
+        </p>
+        <ul className="flex flex-col gap-xxs">
+          {skill.queries.map((q) => (
+            <li key={q.id} className="text-caption text-brand-ink">
+              <span className="font-mono">{q.id}</span>
+              {q.table && (
+                <span className="font-mono text-brand-muted-soft"> · {q.table}</span>
+              )}
+              {q.priorQueryBinds.length > 0 && (
+                <span className="text-brand-muted-soft"> — 앞 조회 결과 필요</span>
               )}
             </li>
           ))}
