@@ -58,6 +58,11 @@ type Props = {
    * 표 본문(IDB)은 남아 미분류로 흘러간다. 안 넘기면 버튼을 안 그린다.
    */
   onRemoveLine?: (lineKey: string) => void;
+  /**
+   * 설비 카드 삭제 — 머리 줄의 휴지통 버튼. 그 안의 분석·요청 카드도 함께
+   * 사라지고 표 본문(IDB)은 남아 미분류로 흘러간다. 안 넘기면 버튼을 안 그린다.
+   */
+  onRemoveEquipment?: (equipmentId: string) => void;
 };
 
 export function EquipmentPanel({
@@ -72,6 +77,7 @@ export function EquipmentPanel({
   onToggleScope,
   inScope,
   onRemoveLine,
+  onRemoveEquipment,
 }: Props) {
   // 첫 카드는 펼쳐 둔다 — 빈 목록처럼 보이지 않게.
   const [expanded, setExpanded] = useState<string[]>(() =>
@@ -154,6 +160,9 @@ export function EquipmentPanel({
                 onToggleScope={onToggleScope}
                 inScope={inScope}
                 onRemoveLine={onRemoveLine}
+                {...(onRemoveEquipment
+                  ? { onRemove: () => onRemoveEquipment(card.id) }
+                  : {})}
               />
             ))
           )}
@@ -188,6 +197,7 @@ function EquipmentCard({
   onToggleScope,
   inScope,
   onRemoveLine,
+  onRemove,
 }: {
   card: EquipmentCardModel;
   open: boolean;
@@ -202,6 +212,8 @@ function EquipmentCard({
   onToggleScope?: (item: ScopeItem) => void;
   inScope?: (item: ScopeItem) => boolean;
   onRemoveLine?: (lineKey: string) => void;
+  /** 설비 카드 삭제 — hover 에만 드러나는 휴지통(줄의 삭제와 같은 규칙). */
+  onRemove?: () => void;
 }) {
   const known = card.descriptors.length > 0;
   const ref = useRef<HTMLDivElement | null>(null);
@@ -250,7 +262,7 @@ function EquipmentCard({
           음영은 **머리 줄 전체가 한 면으로** 받는다. 안쪽 버튼들이 각자 칠하면
           `‹` 칼럼만 빠진 채 본문만 물들고, 마우스를 옮길 때마다 조각난 영역이
           번갈아 켜져 카드가 흔들리는 것처럼 보인다. 안쪽은 글자색만 바꾼다. */}
-      <div className="flex items-start transition-colors hover:bg-brand-ink-translucent-04">
+      <div className="group/head flex items-start transition-colors hover:bg-brand-ink-translucent-04">
       {onOpenDetail && (
         <button
           type="button"
@@ -326,6 +338,19 @@ function EquipmentCard({
           )}
         </span>
       </button>
+      {onRemove && (
+        // 삭제 = 선언 철회의 설비판. 분석·요청 카드가 함께 사라지고, 표 본문(IDB)은
+        // 남아 미분류로 흘러간다 — 데이터를 지우는 버튼이 아니다.
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`${card.equipment} 설비 카드 삭제`}
+          title="설비 카드 삭제 — 분석 카드도 함께 사라지고, 데이터 본문은 미분류로 남습니다"
+          className="shrink-0 pl-xxs pr-sm py-sm text-brand-muted-soft opacity-0 group-hover/head:opacity-100 focus:opacity-100 hover:text-brand-error focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-all"
+        >
+          <TrashMini />
+        </button>
+      )}
       </div>
 
       {/* 펼침 = 라벨이 붙은 disclosure. 무엇이 열리는지 글자로 말한다.

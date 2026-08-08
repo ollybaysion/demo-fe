@@ -60,6 +60,7 @@ import {
   ownerOfSnapshot,
   referencedSnapshotIds,
   removeAnalysis,
+  removeEquipment,
   runRefOf,
   sameRun,
   saveWorkbench as saveWorkbenchTree,
@@ -1276,6 +1277,19 @@ export function ChatContainer() {
     [requestJudge],
   );
 
+  /**
+   * 설비 카드 삭제 — 그 안의 분석·요청 카드까지 함께 사라진다(cascade). 표 본문은
+   * 분석 삭제와 같은 규칙으로 미분류로 흘러가고, 열려 있던 확장 패널은 파생 조회가
+   * 스스로 닫는다. 선언이 줄었으니 판정을 다시 받는다.
+   */
+  const handleRemoveEquipment = useCallback(
+    (equipmentId: string) => {
+      setTree((prev) => removeEquipment(prev, equipmentId));
+      requestJudge({ type: "session-registered" });
+    },
+    [requestJudge],
+  );
+
   /** 판정 집합을 바꾸는 패널 액션들 — 상태를 바꾸고 다음 커밋에서 판정을 부른다. */
   const handleToggleSnapshotIncluded = useCallback(
     (id: string) => {
@@ -1702,6 +1716,7 @@ export function ChatContainer() {
             focusNonce={equipmentFocus.n}
             onAddEquipment={handleAddEquipment}
             onRemoveLine={handleRemoveAnalysis}
+            onRemoveEquipment={handleRemoveEquipment}
             onToggleScope={toggleQueryScope}
             inScope={(item) =>
               item.kind === "equipment"

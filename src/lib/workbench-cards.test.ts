@@ -176,8 +176,10 @@ describe("cascade 삭제·역인덱스", () => {
 
   it("설비 삭제는 분석까지 함께 사라진다", () => {
     const { wb } = seeded();
-    const removed = removeEquipment(wb, "eq-cvd-01");
+    const filled = fulfillSlot(wb, "fdc-explain-sensor#sensor_row__snsr_id=B", "snap-1");
+    const removed = removeEquipment(filled, "eq-cvd-01");
     expect(removed.equipments).toHaveLength(0);
+    expect(referencedSnapshotIds(removed).size).toBe(0);
   });
 
   it("referencedSnapshotIds / ownerOfSnapshot 이 슬롯 참조를 본다", () => {
