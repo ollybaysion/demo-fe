@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { Skill } from "@/lib/skills";
 import type { DataRequest, DataSnapshot } from "@/lib/types";
-import { EMPTY_WORKBENCH, fulfillSlot, openAnalysis } from "@/lib/workbench-cards";
-import { deriveWorkbenchPanel } from "./workbench-derive";
+import {
+  EMPTY_WORKBENCH,
+  fulfillSlot,
+  openAnalysis,
+  removeEquipment,
+} from "@/lib/workbench-cards";
+import { deriveWorkbenchPanel, UNCLASSIFIED_GROUP_KEY } from "./workbench-derive";
 
 /**
  * 원장 소비 — spec v3 에서 요청 카드의 진실원은 **서버**다. 화면은 상태대로
@@ -134,6 +139,19 @@ describe("조달 원장 → 요청 카드", () => {
     ];
     const { groups } = deriveWorkbenchPanel(seeded(), [], [], [], ledger);
     expect(groups[0].requests).toEqual([]);
+  });
+
+  it("설비를 지우면 남은 본문은 미분류로 흐른다 — 데이터는 안 죽는다", () => {
+    const wb = fulfillSlot(seeded(), SENSOR_KEY, "snap-1");
+    const removed = removeEquipment(wb, "eq-cvd-01");
+    const { equipmentCards, groups } = deriveWorkbenchPanel(
+      removed,
+      [snapshot("snap-1")],
+      [snapshot("snap-1")],
+    );
+    expect(equipmentCards).toEqual([]);
+    expect(groups.map((g) => g.key)).toEqual([UNCLASSIFIED_GROUP_KEY]);
+    expect(groups[0].snapshots.map((s) => s.id)).toEqual(["snap-1"]);
   });
 
   it("카드 순서는 트리의 슬롯 순서를 따른다 — 판정마다 자리가 안 바뀐다", () => {
