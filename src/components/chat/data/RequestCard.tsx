@@ -69,6 +69,8 @@ export function RequestCard({
     null,
   );
   const [copied, setCopied] = useState(false);
+  // SQL 본문은 접힌 채로 시작한다 — 카드에서 흔히 하는 일은 복사지 통독이 아니다.
+  const [sqlOpen, setSqlOpen] = useState(false);
   // 요청 카드는 SQL·붙여넣기 칸까지 안고 있어 세로로 길다 — 여러 건이 쌓이면
   // 목록을 삼키므로 접을 수 있어야 한다(제목 줄만 남는다).
   const [openSelf, setOpenSelf] = useState(true);
@@ -162,22 +164,44 @@ export function RequestCard({
         <div className="px-sm pb-xs flex flex-col gap-xxs">
 
       {request.sql && (
-        <div className="relative">
+        /*
+          SQL 은 접어 둔다 — 카드 목록에서 전문이 펼쳐져 있으면 요청 몇 개만
+          쌓여도 패널이 쿼리 벽이 된다. 정작 카드에서 할 일은 "복사해서 돌리고
+          결과를 붙여넣기"라, 본문은 확인하고 싶을 때만 열면 된다.
+
+          복사는 접힌 줄에 그대로 둔다: 본업이 한 번 더 눌러야 하는 일이 되면
+          접은 이득보다 손해가 크다.
+        */
+        <div className="rounded-sm bg-brand-canvas overflow-hidden">
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setSqlOpen((v) => !v)}
+              aria-expanded={sqlOpen}
+              className="flex-1 min-w-0 px-sm py-xxs flex items-center gap-xxs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              <span className="flex-1 min-w-0 font-mono text-caption text-brand-muted">
+                SQL
+              </span>
+              <ChevronIcon open={sqlOpen} />
+            </button>
+            <button
+              type="button"
+              onClick={copySql}
+              aria-label={copied ? "복사됨" : "SQL 복사"}
+              title={copied ? "복사됨" : "SQL 복사"}
+              className="shrink-0 mr-xxs p-xxs rounded-sm text-brand-muted hover:text-brand-primary hover:bg-brand-primary/10 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              {copied ? <CheckIcon /> : <CopyIcon />}
+            </button>
+          </div>
           {/* whitespace-pre-wrap: 패널 폭(440px)을 넘는 SQL 줄도 스크롤에
-              숨기지 않고 줄바꿈해 전문이 보이게 — 폭은 안전망일 뿐이다.
-              pr-xl 은 우상단 복사 아이콘 밑으로 첫 줄이 깔리지 않게. */}
-          <pre className="text-caption font-mono text-brand-ink bg-brand-canvas rounded-sm px-sm py-xs pr-xl whitespace-pre-wrap">
-            {request.sql}
-          </pre>
-          <button
-            type="button"
-            onClick={copySql}
-            aria-label={copied ? "복사됨" : "SQL 복사"}
-            title={copied ? "복사됨" : "SQL 복사"}
-            className="absolute top-xxs right-xxs p-xxs rounded-sm text-brand-muted hover:text-brand-primary hover:bg-brand-primary/10 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          >
-            {copied ? <CheckIcon /> : <CopyIcon />}
-          </button>
+              숨기지 않고 줄바꿈해 전문이 보이게 — 폭은 안전망일 뿐이다. */}
+          {sqlOpen && (
+            <pre className="text-caption font-mono text-brand-ink px-sm pb-xs whitespace-pre-wrap">
+              {request.sql}
+            </pre>
+          )}
         </div>
       )}
 

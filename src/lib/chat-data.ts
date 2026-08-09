@@ -57,12 +57,21 @@ export type RunProgress = {
  * 값 전부가 LLM 산출물이라 오차 허용(편의성 기능) — 원문이 진실원이다.
  */
 export type FormattedMessage = {
-  /** 원문을 구조화한 객체 — 문자열이 아니다(pretty-print 는 화면 소유). */
-  json: unknown;
+  /**
+   * 원문을 구조화한 객체 — 문자열이 아니다(pretty-print 는 화면 소유).
+   * 없으면 그 조각은 변환에 실패한 것이다(원문은 `raw` 에 남는다).
+   */
+  json?: unknown;
+  /** 이 한 건의 원문 조각 — 자른 건 BE 라 FE 는 보낸 것으로 되짚을 수 없다. */
+  raw?: string;
   /** 한 줄 요약. */
   comment?: string;
   eqpId?: string;
   className?: string;
+  /** 목록에서 이 한 건을 알아볼 짧은 이름 — 없으면 className·원문 머리로 물러난다. */
+  title?: string;
+  /** 메시지 안에 찍힌 발생 시각 — 등록 시각이 아니다(소수초 원문 정밀도). */
+  occurredAt?: string;
   docId?: string;
 };
 
@@ -77,6 +86,13 @@ export type ChatDataDone = {
   terminalRuns?: string[];
   narratedRun?: string;
   /** 메시지 판정 왕복에만 — 없으면 비메시지(불가침), 로컬 표 파싱으로 폴백. */
+  /**
+   * 메시지 판정 왕복의 결과 전량 — 붙여넣기 하나가 여러 건일 수 있어 배열이고,
+   * BE 가 자른 순서 그대로다. 각 항목의 `raw` 가 그 한 건의 원문이다. 변환에 실패한
+   * 조각도 `json` 없이 자리를 지킨다 — 무엇이 빠졌는지 보이지 않으면 안 된다.
+   */
+  formattedMessages?: FormattedMessage[];
+  /** 한 건일 때만 함께 오는 호환 필드 — 배열이 정본이다. */
   formattedMessage?: FormattedMessage;
 };
 
@@ -105,7 +121,15 @@ export type JudgeHooks = {
   /** 첫 token 이 도착했을 때 한 번 — 여기서 서술 메시지를 만든다(빈 풍선 금지). */
   onNarrationStart?: () => void;
   onNarrationToken?: (piece: string) => void;
+  /**
+   * 메시지 판정의 진척 — 붙여넣기가 100건이면 BE 가 묶음마다 한 줄씩 흘린다.
+   * 총량은 첫 줄(`done: 0`)에서 온다.
+   */
+  onMessageProgress?: (progress: MessageProgress) => void;
 };
+
+/** 몇 건 중 몇 건이 끝났나 — 변환된 건수가 아니라 **물어본** 건수다. */
+export type MessageProgress = { done: number; total: number };
 
 type TokenPayload = { content: string };
 
@@ -141,6 +165,8 @@ export async function judgeChatData(
           hooks.onNarrationStart?.();
         }
         hooks.onNarrationToken?.((ev.data as TokenPayload).content);
+      } else if (ev.event === "progress") {
+        hooks.onMessageProgress?.(ev.data as MessageProgress);
       } else if (ev.event === "done") {
         done = ev.data as ChatDataDone;
         break;
