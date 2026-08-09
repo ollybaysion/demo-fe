@@ -9,7 +9,15 @@
  */
 
 import { loadMessages, persistMessages, replaceAllSnapshots } from "@/lib/snapshot-idb";
+import type { Skill, SkillInput } from "@/lib/skills";
 import type { DataMessage, DataSnapshot } from "@/lib/types";
+import {
+  EMPTY_WORKBENCH,
+  fulfillSlot,
+  openAnalysis,
+  saveWorkbench,
+  slotQueryKey,
+} from "@/lib/workbench-cards";
 
 const KINDS: { name: string; cols: string[]; sql?: string }[] = [
   {
@@ -194,8 +202,77 @@ function buildMessageSeed(name: string): DataMessage[] {
   });
 }
 
+// ── 예시 카드(작업판 트리) ───────────────────────────────────────────────
+
 /**
- * 스토리지를 읽기 전에 호출 — seed·msgs param 이 있으면 쓰고 URL 에서 지운다.
+ * 데이터 카드 한 벌 — 설비 카드 + 분석 카드 + 슬롯 하나에 붙은 스냅샷.
+ *
+ * 스킬은 **BE 카탈로그에서 그대로 가져온다** — 여기서 지어내면 BE 원장이 모르는
+ * 절차가 되어 요청 카드가 서지 않는다(요청 카드의 SQL 은 원장이 준다). 그래서 이
+ * 시드는 BE 가 떠 있을 때만 동작한다.
+ */
+async function buildCardSeed(): Promise<{
+  tree: ReturnType<typeof openAnalysis>["wb"];
+  snapshot: DataSnapshot;
+} | null> {
+  let skill: Skill | undefined;
+  try {
+    const res = await fetch("/api/fdc/v1/skills");
+    const body: unknown = await res.json();
+    skill = (body as { skills?: Skill[] }).skills?.[0];
+  } catch {
+    skill = undefined;
+  }
+  if (!skill || skill.queries.length === 0) return null;
+
+  const values: Record<string, string> = {};
+  for (const input of skill.inputs) {
+    if (input.required) values[input.key] = sampleArg(input);
+  }
+  const { wb, analysis } = openAnalysis(
+    EMPTY_WORKBENCH,
+    "CVD-01",
+    null,
+    skill,
+    values,
+  );
+
+  // 첫 조달 수단은 도착한 것으로 — 한 카드 안에서 "온 것"과 "아직 안 온 것"이
+  // 어떻게 보이는지 같이 봐야 한다(도착 = 스냅샷 카드, 미도착 = 요청 카드).
+  const slot = analysis.dataList[0];
+  const columns = ["EQPID", "SNSR_ID", "SNSR_NM", "USE_YN", "UPDATED_AT"];
+  const snapshot: DataSnapshot = {
+    id: "snap-card-seed",
+    queryKey: slotQueryKey(analysis, slot.queryId),
+    label: slot.label,
+    capturedAt: new Date().toISOString(),
+    columns,
+    rows: Array.from({ length: 12 }, (_, r) =>
+      columns.map((c) =>
+        c === "EQPID"
+          ? "CVD-01"
+          : c === "USE_YN"
+            ? (r % 4 === 3 ? "N" : "Y")
+            : `${c}_${r + 1}`,
+      ),
+    ),
+    contentHash: "cd".repeat(32),
+    included: true,
+    warnings: ["INTEGRITY_ABSENT"],
+  };
+  return {
+    tree: fulfillSlot(wb, snapshot.queryKey, snapshot.id),
+    snapshot,
+  };
+}
+
+/** 인자 예시값 — 스킬 설명의 `(예: S-0004)` 를 그대로 쓴다(지어내지 않는다). */
+function sampleArg(input: SkillInput): string {
+  return input.description?.match(/예:\s*([^)\s,]+)/)?.[1] ?? "1";
+}
+
+/**
+ * 스토리지를 읽기 전에 호출 — seed·msgs·cards param 이 있으면 쓰고 URL 에서 지운다.
  *
  * 스냅샷과 메시지는 각자의 훅이 따로 읽는다. 둘 다 이걸 먼저 기다리되 실제 시딩은
  * 한 번만 돌아야 하므로 약속을 기억해 둔다 — 안 그러면 늦게 읽는 쪽이 시딩 전
@@ -214,12 +291,21 @@ async function applyDevSeed(): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const raw = params.get("seed");
   const msgs = params.get("msgs");
-  if (raw === null && msgs === null) return;
+  const cards = params.get("cards");
+  if (raw === null && msgs === null && cards === null) return;
 
-  if (raw !== null) {
-    const count = Math.min(Math.max(Number.parseInt(raw, 10) || 0, 0), 100);
+  const card = cards !== null && cards !== "0" ? await buildCardSeed() : null;
+  if (cards !== null) {
+    // 트리는 localStorage 다 — 카드가 서는 씨앗이고, 스냅샷은 그 슬롯이 가리킨다.
+    saveWorkbench(card ? card.tree : EMPTY_WORKBENCH);
+  }
+  if (raw !== null || card) {
+    const count = Math.min(Math.max(Number.parseInt(raw ?? "0", 10) || 0, 0), 100);
     // seed=0 → 빈 목록으로 교체 = 전부 비움(localStorage 세대까지 같이 지운다).
-    await replaceAllSnapshots(count === 0 ? [] : buildSeed(count));
+    await replaceAllSnapshots([
+      ...(count === 0 ? [] : buildSeed(count)),
+      ...(card ? [card.snapshot] : []),
+    ]);
   }
   if (msgs !== null) {
     // 교체다 — 표본을 갈아 끼울 때마다 지난 표본이 섞이면 비교가 안 된다.
@@ -228,10 +314,13 @@ async function applyDevSeed(): Promise<void> {
 
   params.delete("seed");
   params.delete("msgs");
+  params.delete("cards");
   const qs = params.toString();
-  window.history.replaceState(
-    null,
-    "",
-    window.location.pathname + (qs ? `?${qs}` : ""),
-  );
+  /*
+    다시 연다 — 저장소를 채웠다고 화면이 따라오지 않는다. 작업판 트리·대화·
+    스냅샷·메시지를 저마다 다른 시점에 읽는 자리가 여럿이라, 시딩이 그 사이
+    어디에 끼어드느냐에 따라 어떤 것은 보이고 어떤 것은 안 보인다. dev 시드는
+    한 번 더 부팅해서 전부 같은 저장소를 보게 하는 편이 확실하다.
+  */
+  window.location.replace(window.location.pathname + (qs ? `?${qs}` : ""));
 }
