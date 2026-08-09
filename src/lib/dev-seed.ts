@@ -5,11 +5,12 @@
  * - `?seed=20` — 다양한 모양의 스냅샷 20장(`?seed=0` 은 비움). 카드가 스무 장쯤
  *   쌓였을 때 목록이 어떻게 보이는지를 손으로 스무 번 등록하지 않고 보기 위한 것.
  * - `?msgs=days` — 메시지 표본 한 벌(`hour`·`days`·`spread`, `0` 은 비움).
- *   파일/붙여넣기 → N건 분할이 아직 없어, 다건 목록을 볼 수 있는 유일한 길이다.
+ * - `?cards=3` — 설비 카드 N 장(최대 5). 설비마다 분석 카드 하나와, 첫 조달이
+ *   도착한 스냅샷 카드 하나가 붙는다(나머지 조달은 요청 카드로 선다). `0` 은 비움.
  */
 
 import { loadMessages, persistMessages, replaceAllSnapshots } from "@/lib/snapshot-idb";
-import type { Skill, SkillInput } from "@/lib/skills";
+import { equipmentInputKey, type Skill, type SkillInput } from "@/lib/skills";
 import type { DataMessage, DataSnapshot } from "@/lib/types";
 import {
   EMPTY_WORKBENCH,
@@ -204,70 +205,92 @@ function buildMessageSeed(name: string): DataMessage[] {
 
 // ── 예시 카드(작업판 트리) ───────────────────────────────────────────────
 
+/** 예시 설비 이름 — 카드가 여러 장 섰을 때의 목록을 보려고 이름을 달리한다. */
+const CARD_EQUIPMENTS = ["CVD-01", "ETCH-02", "PHOTO-07", "CMP-03", "DIFF-05"];
+
 /**
- * 데이터 카드 한 벌 — 설비 카드 + 분석 카드 + 슬롯 하나에 붙은 스냅샷.
+ * 데이터 카드 몇 벌 — 설비 카드 + 분석 카드 + 슬롯 하나에 붙은 스냅샷.
  *
  * 스킬은 **BE 카탈로그에서 그대로 가져온다** — 여기서 지어내면 BE 원장이 모르는
  * 절차가 되어 요청 카드가 서지 않는다(요청 카드의 SQL 은 원장이 준다). 그래서 이
- * 시드는 BE 가 떠 있을 때만 동작한다.
+ * 시드는 BE 가 떠 있을 때만 동작한다. 설비마다 다른 스킬을 물려 카탈로그를
+ * 돌린다 — 같은 카드가 N 장 서면 목록을 볼 이유가 없다.
  */
-async function buildCardSeed(): Promise<{
+async function buildCardSeed(count: number): Promise<{
   tree: ReturnType<typeof openAnalysis>["wb"];
-  snapshot: DataSnapshot;
+  snapshots: DataSnapshot[];
 } | null> {
-  let skill: Skill | undefined;
+  let skills: Skill[] = [];
   try {
     const res = await fetch("/api/fdc/v1/skills");
     const body: unknown = await res.json();
-    skill = (body as { skills?: Skill[] }).skills?.[0];
+    skills = ((body as { skills?: Skill[] }).skills ?? []).filter(
+      (s) => s.queries.length > 0,
+    );
   } catch {
-    skill = undefined;
+    skills = [];
   }
-  if (!skill || skill.queries.length === 0) return null;
+  if (skills.length === 0) return null;
 
-  const values: Record<string, string> = {};
-  for (const input of skill.inputs) {
-    if (input.required) values[input.key] = sampleArg(input);
+  let tree = EMPTY_WORKBENCH;
+  const snapshots: DataSnapshot[] = [];
+  for (let i = 0; i < Math.min(count, CARD_EQUIPMENTS.length); i++) {
+    const skill = skills[i % skills.length]!;
+    // 설비형 입력은 건드리지 않는다 — 그건 이 카드가 선 설비 이름이고,
+    // `openAnalysis` 가 채운다. 여기서 덮으면 PHOTO-07 카드가 CVD-01 을 묻게 된다.
+    const equipmentKey = equipmentInputKey(skill);
+    const values: Record<string, string> = {};
+    for (const input of skill.inputs) {
+      if (input.required && input.key !== equipmentKey) {
+        values[input.key] = sampleArg(input);
+      }
+    }
+    const opened = openAnalysis(tree, CARD_EQUIPMENTS[i], null, skill, values);
+    const analysis = opened.analysis;
+    tree = opened.wb;
+
+    const slot = analysis.dataList[0];
+    const query = skill.queries[0];
+    // 컬럼도 SQL 도 그 조회에서 온다 — 표와 출처가 어긋난 예시는 볼 값어치가 없다.
+    const parsed = selectedColumns(query.sql);
+    const columns = parsed.length > 0 ? parsed : ["EQP_ID", "VALUE", "UPDATED_AT"];
+    const snapshot: DataSnapshot = {
+      id: `snap-card-seed-${i}`,
+      queryKey: slotQueryKey(analysis, slot.queryId),
+      label: slot.label,
+      capturedAt: new Date(Date.now() - i * 600_000).toISOString(),
+      columns,
+      rows: Array.from({ length: 12 }, (_, r) =>
+        columns.map((c) => cellValue(c, r, { ...values, eqp_id: CARD_EQUIPMENTS[i] })),
+      ),
+      contentHash: String(i).repeat(64).slice(0, 64),
+      included: true,
+      warnings: ["INTEGRITY_ABSENT"],
+      sourceSql: boundSql(query.sql, query.argBinds, values),
+    };
+    snapshots.push(snapshot);
+    tree = fulfillSlot(tree, snapshot.queryKey, snapshot.id);
   }
-  const { wb, analysis } = openAnalysis(
-    EMPTY_WORKBENCH,
-    "CVD-01",
-    null,
-    skill,
-    values,
-  );
-
-  // 첫 조달 수단은 도착한 것으로 — 한 카드 안에서 "온 것"과 "아직 안 온 것"이
-  // 어떻게 보이는지 같이 봐야 한다(도착 = 스냅샷 카드, 미도착 = 요청 카드).
-  const slot = analysis.dataList[0];
-  const query = skill.queries[0];
-  // 컬럼도 SQL 도 그 조회에서 온다 — 표와 출처가 어긋난 예시는 볼 값어치가 없다.
-  const sql = boundSql(query.sql, query.argBinds, values);
-  const parsed = selectedColumns(query.sql);
-  const columns = parsed.length > 0 ? parsed : ["EQP_ID", "VALUE", "UPDATED_AT"];
-  const snapshot: DataSnapshot = {
-    id: "snap-card-seed",
-    queryKey: slotQueryKey(analysis, slot.queryId),
-    label: slot.label,
-    capturedAt: new Date().toISOString(),
-    columns,
-    rows: Array.from({ length: 12 }, (_, r) =>
-      columns.map((c) => cellValue(c, r, values)),
-    ),
-    contentHash: "cd".repeat(32),
-    included: true,
-    warnings: ["INTEGRITY_ABSENT"],
-    sourceSql: sql,
-  };
-  return {
-    tree: fulfillSlot(wb, snapshot.queryKey, snapshot.id),
-    snapshot,
-  };
+  return { tree, snapshots };
 }
 
-/** 인자 예시값 — 스킬 설명의 `(예: S-0004)` 를 그대로 쓴다(지어내지 않는다). */
+/**
+ * 인자 예시값 — 스킬 설명의 `(예: S-0004)` 가 먼저다(지어내지 않는다).
+ *
+ * 설명에 예가 없으면 키 이름으로 종류만 가른다. 아무 값이나 넣으면 안 되는 이유는
+ * 화면 때문이 아니라 판정 때문이다: 구간 입력에 `1` 이 들어가면 BE 원장이 그 조회를
+ * 열지 못해 요청 카드가 아예 서지 않는다.
+ */
 function sampleArg(input: SkillInput): string {
-  return input.description?.match(/예:\s*([^)\s,]+)/)?.[1] ?? "1";
+  const example = input.description?.match(/예:\s*([^)\s,]+)/)?.[1];
+  if (example) return example;
+  const key = input.key.toLowerCase();
+  const day = (back: number) =>
+    new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 19);
+  if (/(start|from|begin)/.test(key)) return day(1);
+  if (/(end|to|until)/.test(key)) return day(0);
+  if (/(index|idx|no|num|count)/.test(key)) return "12";
+  return "1";
 }
 
 /** `:bind` 를 인자값으로 — BE 원장이 요청 카드에 싣는 문장과 같은 모양으로. */
@@ -323,7 +346,9 @@ async function applyDevSeed(): Promise<void> {
   const cards = params.get("cards");
   if (raw === null && msgs === null && cards === null) return;
 
-  const card = cards !== null && cards !== "0" ? await buildCardSeed() : null;
+  // cards=N → 설비 카드 N 장(`cards=1` 도 그대로 한 장). 0 이면 트리를 비운다.
+  const cardCount = Math.min(Math.max(Number.parseInt(cards ?? "0", 10) || 0, 0), 5);
+  const card = cardCount > 0 ? await buildCardSeed(cardCount) : null;
   if (cards !== null) {
     // 트리는 localStorage 다 — 카드가 서는 씨앗이고, 스냅샷은 그 슬롯이 가리킨다.
     saveWorkbench(card ? card.tree : EMPTY_WORKBENCH);
@@ -333,7 +358,7 @@ async function applyDevSeed(): Promise<void> {
     // seed=0 → 빈 목록으로 교체 = 전부 비움(localStorage 세대까지 같이 지운다).
     await replaceAllSnapshots([
       ...(count === 0 ? [] : buildSeed(count)),
-      ...(card ? [card.snapshot] : []),
+      ...(card ? card.snapshots : []),
     ]);
   }
   if (msgs !== null) {

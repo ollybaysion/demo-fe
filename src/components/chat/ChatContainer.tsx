@@ -724,6 +724,19 @@ export function ChatContainer() {
    * 도는 동안에만 값이 있고(끝나면 null), 데이터 패널의 메시지 탭이 이걸 그린다.
    */
   const [messageProgress, setMessageProgress] = useState<MessageProgress | null>(null);
+  /**
+   * 방금 [메시지로] 로 바꾼 표 — 되돌릴 거리다.
+   *
+   * 표는 휴지통에 있어 데이터가 사라진 건 아니지만, 그 서랍은 넓게 보기에서 잠기고
+   * 새로 선 메시지는 따로 지워야 한다. 오판 교정은 **잘못 누르기 쉬운 버튼**이라
+   * (카드 하나에 달린 hover 동작) 한 번에 물릴 길이 보이는 자리에 있어야 한다.
+   */
+  const [asMessageUndo, setAsMessageUndo] = useState<{
+    snapshotId: string;
+    messageIds: string[];
+  } | null>(null);
+  /** 방금 등록된 메시지 id 들 — 되돌리기가 지울 대상(렌더와 무관해 ref). */
+  const lastAddedMessageIds = useRef<string[]>([]);
 
   // 판정 페이로드 재료 — 커밋마다 동기화해 아래 판정 effect 가 늘 최신을 읽는다
   // (선언 순서상 이 effect 가 먼저 돈다).
@@ -899,6 +912,7 @@ export function ChatContainer() {
         const stored = addAllMessagesFromJudge(
           all.map((formatted) => ({ raw: formatted.raw ?? text, formatted })),
         );
+        lastAddedMessageIds.current = stored.map((m) => m.id);
         // 설비 id 가 뽑혔으면 그 설비 카드부터 세운다(같은 이름은 병합) —
         // 메시지 한 줄은 파생 데코레이션이 이름 매칭으로 단다.
         const eqpIds = [...new Set(stored.flatMap((m) => (m.eqpId ? [m.eqpId] : [])))];
@@ -934,11 +948,26 @@ export function ChatContainer() {
           ...snap.rows.map((r) => r.map((c) => c ?? "").join("\t")),
         ].join("\n");
       void tryMessageJudge(raw, true).then((ok) => {
-        if (ok) removeSnapshot(id);
+        if (!ok) return;
+        removeSnapshot(id);
+        // 되돌릴 거리를 남긴다 — 표가 휴지통에 있어도 그 서랍은 넓게 보기에서
+        // 잠기고, 새로 선 메시지는 따로 지워야 한다. 한 번에 되돌릴 수 있어야 한다.
+        setAsMessageUndo({ snapshotId: id, messageIds: lastAddedMessageIds.current });
       });
     },
     [snapshots, tryMessageJudge, removeSnapshot],
   );
+
+  /** [메시지로] 를 통째로 물린다 — 새로 선 메시지를 지우고 표를 휴지통에서 꺼낸다. */
+  const undoAsMessage = useCallback(() => {
+    if (!asMessageUndo) return;
+    for (const messageId of asMessageUndo.messageIds) {
+      removeDataMessage(messageId);
+    }
+    restoreSnapshotById(asMessageUndo.snapshotId);
+    requestJudge({ type: "snapshot-restored" });
+    setAsMessageUndo(null);
+  }, [asMessageUndo, removeDataMessage, restoreSnapshotById, requestJudge]);
 
   const sendToApi = useCallback(
     async (
@@ -1740,6 +1769,9 @@ export function ChatContainer() {
               onToggleExpanded={toggleDataExpanded}
               dataMessages={dataMessages}
               messageProgress={messageProgress}
+              asMessageUndo={asMessageUndo !== null}
+              onUndoAsMessage={undoAsMessage}
+              onDismissAsMessageUndo={() => setAsMessageUndo(null)}
               onRemoveMessage={removeDataMessage}
               onTryMessagePaste={(text) => tryMessageJudge(text, false)}
               onSubmitMessage={(text) => tryMessageJudge(text, true)}
