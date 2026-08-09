@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import type { MessageProgress } from "@/lib/chat-data";
 import { messageStamp, type GroupMode } from "@/lib/message-store";
 import type { MessageView } from "./useMessageView";
 import type { DataMessage } from "@/lib/types";
@@ -21,6 +22,8 @@ import type { DataMessage } from "@/lib/types";
 
 type SectionProps = {
   view: MessageView;
+  /** 판정이 도는 동안의 진척 — 없으면 도는 중이 아니다. */
+  progress?: MessageProgress | null;
   onRemove: (id: string) => void;
   /** 제목 클릭 — 확장 모드 상세 면에 이 메시지를 띄운다(닫혀 있으면 넓히면서). */
   onSelectMessage?: (id: string) => void;
@@ -44,6 +47,7 @@ const MODES: { key: GroupMode; name: string }[] = [
 
 export function MessageSection({
   view,
+  progress = null,
   onRemove,
   onSelectMessage,
   selectedId = null,
@@ -56,11 +60,14 @@ export function MessageSection({
 
   return (
     <div className="flex flex-col gap-xs">
+      {progress && <JudgeProgress progress={progress} />}
       {inputOpen && (
         <MessageInputCard onClose={onCloseInput} onSubmit={onSubmitInput} />
       )}
       {view.total === 0 ? (
-        !inputOpen && (
+        // 판정이 도는 중이면 "아직 없습니다"가 아니다 — 오고 있는 중이다.
+        !inputOpen &&
+        !progress && (
           <p className="text-caption text-brand-muted-soft">
             설비 메시지를 붙여넣거나 [데이터 추가]의 [메시지]로 직접 등록하면
             여기에 쌓입니다.
@@ -160,6 +167,44 @@ export function MessageSection({
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 판정 진행 — "지금 돌고 있다"와 "얼마나 왔나".
+ *
+ * 총량은 자르고 나서야 알 수 있다(자르는 건 BE). 그래서 처음 한 박자는 건수 없이
+ * 돌기만 하고, 첫 진행 줄이 오면 그때부터 `n / N` 과 막대가 선다. 몇 건인지 모르는
+ * 동안 0/0 같은 숫자를 지어내지 않는다.
+ */
+function JudgeProgress({ progress }: { progress: MessageProgress }) {
+  const { done, total } = progress;
+  const ratio = total > 0 ? Math.min(done / total, 1) : 0;
+  return (
+    <div
+      role="status"
+      className="rounded-md border border-brand-hairline bg-brand-surface-soft px-xs py-xxs flex flex-col gap-[5px]"
+    >
+      <div className="flex items-center gap-xs">
+        <span className="shrink-0 w-3 h-3 rounded-full border-2 border-brand-primary/30 border-t-brand-primary animate-spin" />
+        <span className="flex-1 min-w-0 truncate text-caption text-brand-muted">
+          메시지 변환 중…
+        </span>
+        {total > 0 && (
+          <span className="shrink-0 text-caption text-brand-muted-soft tabular-nums">
+            {done} / {total}
+          </span>
+        )}
+      </div>
+      {total > 0 && (
+        <span className="block h-[3px] rounded-full bg-brand-ink-translucent-04 overflow-hidden">
+          <span
+            className="block h-full bg-brand-primary transition-[width] duration-300"
+            style={{ width: `${Math.round(ratio * 100)}%` }}
+          />
+        </span>
       )}
     </div>
   );

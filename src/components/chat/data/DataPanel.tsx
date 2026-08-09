@@ -7,6 +7,7 @@ import {
   planClipboardIngest,
   splitDroppedFiles,
 } from "@/lib/clipboard-ingest";
+import type { MessageProgress } from "@/lib/chat-data";
 import type { PendingInput } from "@/lib/input-store";
 import type { DerivedGroup } from "../context/derive-cards";
 import type { DataMessage, DataSnapshot } from "@/lib/types";
@@ -130,8 +131,13 @@ type Props = {
   onSetAllGroups?: (open: boolean) => void;
   /** 등록한 데이터가 판정 왕복 중 — 헤더 신호등이 돌고, 끝나면 초록으로 한 번 켜진다. */
   judging?: boolean;
-  /** 데이터 메시지 목록(BE #64 MVP) — 설비별 제목 줄 + 상세 모달로 그린다. */
+  /** 데이터 메시지 목록(BE #64) — 시각·설비·제목 한 줄씩 + 상세 면으로 그린다. */
   dataMessages?: DataMessage[];
+  /**
+   * 메시지 판정이 도는 동안의 진척 — 100건이면 수십 초다. 값이 있으면 메시지 탭에
+   * 그 줄이 서고, 없으면 판정 중이 아니다.
+   */
+  messageProgress?: MessageProgress | null;
   onRemoveMessage?: (id: string) => void;
   /**
    * 붙여넣기 텍스트의 메시지 판정 왕복 — true 면 메시지 카드가 섰다(표 등록
@@ -227,6 +233,7 @@ export function DataPanel({
   onSetAllGroups,
   judging = false,
   dataMessages = [],
+  messageProgress = null,
   onRemoveMessage,
   onTryMessagePaste,
   onSubmitMessage,
@@ -323,6 +330,15 @@ export function DataPanel({
       : null;
   // 목록의 묶기·거르개는 여기 산다 — 상세의 순회가 그 결과 순서를 따라야 한다.
   const messageView = useMessageView(dataMessages);
+
+  // 판정이 시작되면 메시지 탭으로 — 진행이 안 보이는 탭에서 돌면 멈춘 것처럼 보인다.
+  // 도는 동안 계속 끌어오지는 않는다(시작 한 번): 사용자가 다른 탭을 볼 수 있어야 한다.
+  const judgingMessages = messageProgress !== null;
+  useEffect(() => {
+    if (!judgingMessages) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTab("messages");
+  }, [judgingMessages]);
   const detailTarget =
     expanded && !pickedImage && !pickedMessage
       ? (snapshots.find((s) => picked?.kind === "snapshot" && s.id === picked.id) ??
@@ -877,6 +893,7 @@ export function DataPanel({
               <div className="px-lg py-md">
                 <MessageSection
                   view={messageView}
+                  progress={messageProgress}
                   onRemove={(id) => onRemoveMessage?.(id)}
                   onSelectMessage={selectMessage}
                   selectedId={pickedMessage?.id ?? null}

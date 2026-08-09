@@ -121,7 +121,15 @@ export type JudgeHooks = {
   /** 첫 token 이 도착했을 때 한 번 — 여기서 서술 메시지를 만든다(빈 풍선 금지). */
   onNarrationStart?: () => void;
   onNarrationToken?: (piece: string) => void;
+  /**
+   * 메시지 판정의 진척 — 붙여넣기가 100건이면 BE 가 묶음마다 한 줄씩 흘린다.
+   * 총량은 첫 줄(`done: 0`)에서 온다.
+   */
+  onMessageProgress?: (progress: MessageProgress) => void;
 };
+
+/** 몇 건 중 몇 건이 끝났나 — 변환된 건수가 아니라 **물어본** 건수다. */
+export type MessageProgress = { done: number; total: number };
 
 type TokenPayload = { content: string };
 
@@ -157,6 +165,8 @@ export async function judgeChatData(
           hooks.onNarrationStart?.();
         }
         hooks.onNarrationToken?.((ev.data as TokenPayload).content);
+      } else if (ev.event === "progress") {
+        hooks.onMessageProgress?.(ev.data as MessageProgress);
       } else if (ev.event === "done") {
         done = ev.data as ChatDataDone;
         break;

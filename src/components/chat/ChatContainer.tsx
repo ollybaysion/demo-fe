@@ -49,6 +49,7 @@ import {
 } from "./context/workbench-derive";
 import {
   judgeChatData,
+  type MessageProgress,
   type PanelJudgeEvent,
 } from "@/lib/chat-data";
 import { type Skill, type SkillSession } from "@/lib/skills";
@@ -680,6 +681,11 @@ export function ChatContainer() {
    * 풍선이 깜빡이면 소음이다.
    */
   const [judging, setJudging] = useState(false);
+  /**
+   * 메시지 판정이 도는 동안의 진척 — 붙여넣기가 100건이면 열 번에 걸쳐 수십 초다.
+   * 도는 동안에만 값이 있고(끝나면 null), 데이터 패널의 메시지 탭이 이걸 그린다.
+   */
+  const [messageProgress, setMessageProgress] = useState<MessageProgress | null>(null);
 
   // 판정 페이로드 재료 — 커밋마다 동기화해 아래 판정 effect 가 늘 최신을 읽는다
   // (선언 순서상 이 effect 가 먼저 돈다).
@@ -828,6 +834,8 @@ export function ChatContainer() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS);
       setJudging(true);
+      // 몇 건인지는 자르고 나서야 안다(자르는 건 BE) — 첫 진행 줄이 총량을 준다.
+      setMessageProgress({ done: 0, total: 0 });
       try {
         const done = await judgeChatData(
           {
@@ -837,7 +845,7 @@ export function ChatContainer() {
             pasted: text,
             ...(force ? { pastedForce: true } : {}),
           },
-          {},
+          { onMessageProgress: setMessageProgress },
           controller.signal,
         );
         // 배열이 정본이다 — 붙여넣기 하나가 여러 건일 수 있고, 자르는 건 BE 다.
@@ -865,6 +873,7 @@ export function ChatContainer() {
       } finally {
         clearTimeout(timeoutId);
         setJudging(false);
+        setMessageProgress(null);
       }
     },
     [addAllMessagesFromJudge],
@@ -1687,6 +1696,7 @@ export function ChatContainer() {
               detailVisible={dataDetailVisible}
               onToggleExpanded={toggleDataExpanded}
               dataMessages={dataMessages}
+              messageProgress={messageProgress}
               onRemoveMessage={removeDataMessage}
               onTryMessagePaste={(text) => tryMessageJudge(text, false)}
               onSubmitMessage={(text) => tryMessageJudge(text, true)}
