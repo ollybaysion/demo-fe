@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { MessageProgress } from "@/lib/chat-data";
 import { messageStamp, type GroupMode } from "@/lib/message-store";
+import { KindPicker } from "./KindPicker";
 import type { MessageView } from "./useMessageView";
 import type { DataMessage } from "@/lib/types";
 
@@ -450,19 +451,24 @@ export function MessageDetail({
           </span>
         )}
         {converted && pill("raw", "원문")}
-        {/* 표로 되돌리기 — 스냅샷 카드의 [메시지로] 와 짝. 오판은 양쪽으로 난다. */}
+        {/* 종류 칩 — 스냅샷 카드와 같은 물건이다. 오판은 양쪽으로 난다. */}
         {onAsSnapshot && (
-          <button
-            type="button"
-            onClick={() => {
-              const result = onAsSnapshot();
-              setAsSnapshotError(result.ok ? null : result.message);
-            }}
-            title="이 원문을 표로 다시 읽어 데이터 카드로 등록합니다"
-            className="ml-auto h-7 px-xs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          >
-            표로
-          </button>
+          <span className="ml-auto">
+            <KindPicker
+              subject={message.label}
+              current="message"
+              options={[
+                { kind: "message", label: "메시지" },
+                { kind: "table", label: "표", note: "원문을 표로" },
+                { kind: "image", label: "그림", blocked: "원문이 텍스트" },
+              ]}
+              onPick={(kind) => {
+                if (kind !== "table") return;
+                const result = onAsSnapshot();
+                setAsSnapshotError(result.ok ? null : result.message);
+              }}
+            />
+          </span>
         )}
         <button
           type="button"

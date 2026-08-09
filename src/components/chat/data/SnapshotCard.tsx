@@ -9,6 +9,7 @@ import {
 } from "@/lib/snapshot-export";
 import { formatRange } from "@/lib/format-range";
 import type { DataSnapshot } from "@/lib/types";
+import { KindPicker } from "./KindPicker";
 
 /**
  * 스냅샷 한 장.
@@ -52,7 +53,7 @@ type Props = {
   /**
    * 오판 교정(BE #64) — 붙여넣기가 표로 잘못 판별됐을 때, 이 카드를 원문
    * 그대로 **메시지 판정에 강제 재왕복**시킨다. 성공하면 호스트가 이 스냅샷을
-   * 메시지 카드로 교체한다. 안 넘기면 버튼을 안 그린다.
+   * 메시지 카드로 교체한다. 안 넘기면 종류 칩을 안 그린다.
    */
   onAsMessage?: () => void;
 };
@@ -215,6 +216,24 @@ export function SnapshotCard({
             아이콘 **왼쪽**에 둔다: 안 보일 때도 자리는 차지하므로(레이아웃 점프
             방지), 오른쪽에 두면 상시 아이콘이 가장자리에서 떠 보인다. */}
         <span className="flex items-center gap-[2px] -mr-[4px] -mt-[2px] shrink-0">
+          {/* 종류 칩 — 이 카드를 무엇으로 읽고 있는지. 방향 버튼([메시지로])을
+              대신한다: 종류가 늘어도 칩은 하나다. */}
+          {onAsMessage && !editing && (
+            <span className="mr-[3px] mt-[1px]">
+              <KindPicker
+                subject={snapshot.label}
+                current="table"
+                options={[
+                  { kind: "table", label: "표" },
+                  { kind: "message", label: "메시지", note: "원문을 메시지로" },
+                  { kind: "image", label: "그림", blocked: "원문이 텍스트" },
+                ]}
+                onPick={(kind) => {
+                  if (kind === "message") onAsMessage();
+                }}
+              />
+            </span>
+          )}
           {!editing && (
             <button
               type="button"
@@ -236,20 +255,6 @@ export function SnapshotCard({
               >
                 <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
               </svg>
-            </button>
-          )}
-
-          {/* 오판 교정 — 자주 쓰는 동작이 아니라 hover 뒤에 둔다. 글자 버튼이다:
-              봉투 아이콘은 "메시지로 다시 판정"으로 읽히지 않는다. */}
-          {onAsMessage && !editing && (
-            <button
-              type="button"
-              onClick={onAsMessage}
-              aria-label={`${snapshot.label} 메시지로 재판정`}
-              title="메시지로 — 표가 아니라 설비 메시지면 다시 판정해 메시지 카드로 바꿉니다"
-              className="shrink-0 inline-flex items-center h-6 px-[6px] rounded-full text-[11px] text-brand-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-opacity"
-            >
-              메시지로
             </button>
           )}
 
