@@ -197,6 +197,15 @@ describe("migrateMessages", () => {
     expect(out[0].id).toBe("dmsg-1");
   });
 
+  it("json 이 없어도 받는다 — 변환 실패 건은 원문으로 서야 한다", () => {
+    const out = migrateMessages([
+      { id: "a", raw: "AlarmEvent{alarmId=AL-201}", createdAt: "t", label: "" },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].json).toBeUndefined();
+    expect(out[0].label).toBe("AlarmEvent{alarmId=AL-201}");
+  });
+
   it("모양이 어긋난 발생 시각은 떼고 받는다 — 정렬 키로 쓸 수 없다", () => {
     const out = migrateMessages([
       msg({ occurredAt: "2026-08-08T11:58:03.412765" }),

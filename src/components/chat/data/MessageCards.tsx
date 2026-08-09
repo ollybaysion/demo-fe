@@ -271,9 +271,12 @@ export function MessageDetail({
   order?: DataMessage[];
   onSelect?: (id: string) => void;
 }) {
+  // 변환에 실패한 건은 JSON 이 없다 — 원문만 보여 준다(빈 탭을 남기지 않는다).
+  const converted = message.json !== undefined && message.json !== null;
   const [view, setView] = useState<"json" | "raw">("json");
   const [copied, setCopied] = useState(false);
-  const pretty = JSON.stringify(message.json, null, 2) ?? "";
+  const pretty = converted ? (JSON.stringify(message.json, null, 2) ?? "") : "";
+  const shown = converted ? view : "raw";
   const stamp = messageStamp(message);
   const index = order.findIndex((m) => m.id === message.id);
 
@@ -293,7 +296,7 @@ export function MessageDetail({
 
   async function copyShown() {
     try {
-      await navigator.clipboard.writeText(view === "json" ? pretty : message.raw);
+      await navigator.clipboard.writeText(shown === "json" ? pretty : message.raw);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -306,10 +309,10 @@ export function MessageDetail({
     <button
       type="button"
       onClick={() => setView(target)}
-      aria-pressed={view === target}
+      aria-pressed={shown === target}
       className={[
         "h-7 px-sm rounded-full border text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
-        view === target
+        shown === target
           ? "bg-brand-primary border-brand-primary text-brand-on-primary font-medium"
           : "border-brand-hairline text-brand-muted hover:text-brand-ink",
       ].join(" ")}
@@ -382,10 +385,17 @@ export function MessageDetail({
         )}
       </div>
 
-      {/* 필 세그먼트 — JSON 이 기본, 원문이 안전망. 복사는 보이는 쪽을 담는다. */}
+      {/* 필 세그먼트 — JSON 이 기본, 원문이 안전망. 복사는 보이는 쪽을 담는다.
+          변환 실패 건은 JSON 이 없으니 그 쪽에 사실을 적는다(빈 탭 금지). */}
       <div className="shrink-0 flex items-center gap-xxs px-lg pt-sm">
-        {pill("json", "JSON")}
-        {pill("raw", "원문")}
+        {converted ? (
+          pill("json", "JSON")
+        ) : (
+          <span className="h-7 inline-flex items-center text-caption text-brand-muted-soft">
+            변환하지 못했습니다 — 원문만 보관합니다
+          </span>
+        )}
+        {converted && pill("raw", "원문")}
         <button
           type="button"
           onClick={() => void copyShown()}
@@ -396,7 +406,7 @@ export function MessageDetail({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-lg py-sm">
-        {view === "json" ? (
+        {shown === "json" ? (
           <pre className="font-mono text-[12px] leading-[1.75] whitespace-pre overflow-x-auto text-brand-ink">
             {highlightJson(pretty)}
           </pre>

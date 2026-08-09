@@ -331,10 +331,13 @@ export type DataMessage = {
    * 등록 시각으로 줄 선다.
    */
   occurredAt?: string;
-  /** 붙여넣은 원문 — 진실원. */
+  /** 이 한 건의 원문 — 진실원. 다건이면 BE 가 자른 조각이다. */
   raw: string;
-  /** BE 포맷팅 결과(객체) — pretty-print 는 화면 소유. */
-  json: unknown;
+  /**
+   * BE 포맷팅 결과(객체) — pretty-print 는 화면 소유. **없을 수 있다**: 다건에서
+   * 몇 건은 변환에 실패할 수 있고, 그때도 원문 카드로 세운다(사라지지 않는다).
+   */
+  json?: unknown;
   /** 한 줄 요약 — LLM 코멘트. 실패하면 없다. */
   comment?: string;
   /** 설비 id — 있으면 그 설비 카드 아래 메시지 줄로 배치, 없으면 미분류. */

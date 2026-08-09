@@ -304,7 +304,7 @@ export function ChatContainer() {
   // 데이터 메시지(BE #64 MVP) — 스냅샷과 정체·저장소가 다른 근거.
   const {
     messages: dataMessages,
-    addFromJudge: addMessageFromJudge,
+    addAllFromJudge: addAllMessagesFromJudge,
     remove: removeDataMessage,
   } = useDataMessages();
 
@@ -840,16 +840,26 @@ export function ChatContainer() {
           {},
           controller.signal,
         );
-        const formatted = done?.formattedMessage;
-        if (!formatted || formatted.json === undefined || formatted.json === null) {
+        // 배열이 정본이다 — 붙여넣기 하나가 여러 건일 수 있고, 자르는 건 BE 다.
+        // 단수 필드는 배열을 안 싣는 옛 BE 를 위한 자리.
+        const all =
+          done?.formattedMessages ??
+          (done?.formattedMessage ? [done.formattedMessage] : []);
+        // 변환된 것이 하나도 없으면 메시지가 아니었다는 뜻 — 표 파싱으로 넘긴다.
+        if (all.length === 0 || all.every((m) => m.json === undefined || m.json === null)) {
           return false;
         }
-        const stored = addMessageFromJudge(text, formatted);
+        // 원문은 건마다 BE 가 자른 조각이다. 없으면(단건 옛 응답) 보낸 것 전체다.
+        const stored = addAllMessagesFromJudge(
+          all.map((formatted) => ({ raw: formatted.raw ?? text, formatted })),
+        );
         // 설비 id 가 뽑혔으면 그 설비 카드부터 세운다(같은 이름은 병합) —
         // 메시지 한 줄은 파생 데코레이션이 이름 매칭으로 단다.
-        const eqpId = stored.eqpId;
-        if (eqpId) {
-          setTree((prev) => upsertEquipment(prev, eqpId, null));
+        const eqpIds = [...new Set(stored.flatMap((m) => (m.eqpId ? [m.eqpId] : [])))];
+        if (eqpIds.length > 0) {
+          setTree((prev) =>
+            eqpIds.reduce((tree, eqpId) => upsertEquipment(tree, eqpId, null), prev),
+          );
         }
         return true;
       } finally {
@@ -857,7 +867,7 @@ export function ChatContainer() {
         setJudging(false);
       }
     },
-    [addMessageFromJudge],
+    [addAllMessagesFromJudge],
   );
 
   /**

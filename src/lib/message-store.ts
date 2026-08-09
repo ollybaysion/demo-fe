@@ -11,8 +11,11 @@
 
 import type { DataMessage } from "./types";
 
-/** BE `pasted` 캡과 같은 값 — 이보다 긴 텍스트는 메시지 판정에 보내지 않는다. */
-export const MESSAGE_RAW_MAX_CHARS = 32_768;
+/**
+ * BE `pasted` 캡과 같은 값 — 이보다 긴 텍스트는 메시지 판정에 보내지 않는다.
+ * 붙여넣기 하나가 여러 건이 되면서 32k 에서 올렸다(로그 100줄이면 수만 자다).
+ */
+export const MESSAGE_RAW_MAX_CHARS = 131_072;
 
 /** 등록 — 같은 원문이 이미 있으면 새로 만들지 않고 그 항목을 돌려준다. */
 export function upsertMessage(
@@ -211,12 +214,8 @@ export function migrateMessages(input: unknown): DataMessage[] {
 function coerceMessage(raw: unknown): DataMessage | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  if (
-    typeof r.id !== "string" ||
-    typeof r.raw !== "string" ||
-    r.json === undefined ||
-    r.json === null
-  ) {
+  // 원문만 있으면 받는다 — 변환 실패 건도 화면에 서야 무엇이 빠졌는지 알 수 있다.
+  if (typeof r.id !== "string" || typeof r.raw !== "string") {
     return null;
   }
   return {
@@ -224,7 +223,7 @@ function coerceMessage(raw: unknown): DataMessage | null {
     label: typeof r.label === "string" && r.label.trim() ? r.label : labelFromRaw(r.raw),
     createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
     raw: r.raw,
-    json: r.json,
+    ...(r.json !== undefined && r.json !== null ? { json: r.json } : {}),
     ...(typeof r.comment === "string" && r.comment ? { comment: r.comment } : {}),
     ...(typeof r.eqpId === "string" && r.eqpId ? { eqpId: r.eqpId } : {}),
     ...(typeof r.className === "string" && r.className
