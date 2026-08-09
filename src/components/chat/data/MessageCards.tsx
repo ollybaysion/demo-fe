@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { groupMessagesByEquipment } from "@/lib/message-store";
 import type { DataMessage } from "@/lib/types";
 
@@ -117,38 +117,62 @@ export function MessageSection({
 
 /**
  * 메시지 상세 — 확장 모드(#136)의 오른쪽 면, `SnapshotDetail` 의 형제.
- * 시안 C: 코멘트 박스 + pretty JSON + 복사 + **원문 접힘**. 값 전부가 LLM
- * 산출물이라(편의성 기능 합의) 원문 접힘이 진실원 안전망이다.
+ *
+ * 확정 시안 = E4-B(브리핑) × B2(웜그레이 히어로) × P5(터라코타 포인트 3종:
+ * 좌측 보더·eqpId 칩·활성 탭). 구성: 히어로(제목·칩·코멘트) → 필 세그먼트
+ * (JSON/원문 전환 + 복사) → 본문. 본문은 항상 pretty JSON 이 기본이고(결정 3),
+ * 원문 탭이 진실원 안전망이다 — 포맷팅은 LLM 산출물이라 틀릴 수 있다.
+ * WARN 행 형광·구절 강조는 고도화(BE #66, warnings 검증과 짝)로 뺐다.
  */
 export function MessageDetail({ message }: { message: DataMessage }) {
+  const [view, setView] = useState<"json" | "raw">("json");
   const [copied, setCopied] = useState(false);
   const pretty = JSON.stringify(message.json, null, 2) ?? "";
 
-  // 메시지가 바뀌면 복사 상태를 처음으로 — 렌더 중 상태 조정 관례.
+  // 메시지가 바뀌면 탭·복사 상태를 처음으로 — 렌더 중 상태 조정 관례.
   const [prevId, setPrevId] = useState(message.id);
   if (message.id !== prevId) {
     setPrevId(message.id);
+    setView("json");
     setCopied(false);
   }
 
-  async function copyJson() {
+  async function copyShown() {
     try {
-      await navigator.clipboard.writeText(pretty);
+      await navigator.clipboard.writeText(view === "json" ? pretty : message.raw);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // 클립보드 권한이 없어도 JSON 은 화면에 그대로 있다.
+      // 클립보드 권한이 없어도 내용은 화면에 그대로 있다.
       setCopied(false);
     }
   }
 
+  const pill = (target: "json" | "raw", label: string) => (
+    <button
+      type="button"
+      onClick={() => setView(target)}
+      aria-pressed={view === target}
+      className={[
+        "h-7 px-sm rounded-full border text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+        view === target
+          ? "bg-brand-primary border-brand-primary text-brand-on-primary font-medium"
+          : "border-brand-hairline text-brand-muted hover:text-brand-ink",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="flex-1 min-w-0 flex flex-col">
-      <div className="shrink-0 px-lg pt-md pb-sm border-b border-brand-hairline-soft">
+      {/* 히어로 — 웜그레이 바탕 + 좌측 터라코타 보더(P5). 코멘트가 본문보다
+          먼저 읽힌다: 이 메시지가 무엇인지는 사람 말이 제일 빠르다. */}
+      <div className="shrink-0 px-lg pt-md pb-sm bg-brand-surface-soft border-b border-brand-hairline-soft border-l-[3px] border-l-brand-primary">
         <div className="flex items-center gap-xs min-w-0">
           <h3
             className="min-w-0 truncate font-sans text-body-md font-medium text-brand-ink"
-            title={message.label}
+            title={message.className ?? message.label}
           >
             {message.label}
           </h3>
@@ -158,42 +182,84 @@ export function MessageDetail({ message }: { message: DataMessage }) {
             </span>
           )}
         </div>
-        <p className="mt-[2px] text-caption text-brand-muted">
-          메시지
-          {message.className && ` · ${message.className}`}
-        </p>
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto px-lg py-sm flex flex-col gap-sm">
-        {/* 코멘트 박스 — LLM 한 줄 요약. 실패했으면 없던 일(빈 박스 금지). */}
+        {/* LLM 한 줄 요약 — 실패했으면 없던 일(빈 줄 금지). */}
         {message.comment && (
-          <p className="rounded-md bg-brand-surface-soft border border-brand-hairline px-sm py-xs text-body-sm text-brand-ink">
+          <p className="mt-xs text-body-sm leading-relaxed text-brand-body">
             {message.comment}
           </p>
         )}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => void copyJson()}
-            className="absolute right-xs top-xs z-10 h-6 px-xs rounded-sm border border-brand-hairline bg-brand-canvas text-caption text-brand-muted hover:text-brand-primary hover:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-          >
-            {copied ? "복사됨" : "복사"}
-          </button>
-          <pre className="rounded-md border border-brand-hairline bg-brand-surface-soft px-sm py-xs overflow-x-auto text-[12px] leading-relaxed text-brand-ink whitespace-pre">
-            {pretty}
+      </div>
+
+      {/* 필 세그먼트 — JSON 이 기본, 원문이 안전망. 복사는 보이는 쪽을 담는다. */}
+      <div className="shrink-0 flex items-center gap-xxs px-lg pt-sm">
+        {pill("json", "JSON")}
+        {pill("raw", "원문")}
+        <button
+          type="button"
+          onClick={() => void copyShown()}
+          className="ml-auto h-7 px-xs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+        >
+          {copied ? "복사됨" : "복사"}
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-lg py-sm">
+        {view === "json" ? (
+          <pre className="font-mono text-[12px] leading-[1.75] whitespace-pre overflow-x-auto text-brand-ink">
+            {highlightJson(pretty)}
           </pre>
-        </div>
-        {/* 원문 접힘 — 진실원. 포맷팅이 틀려도 확인할 곳이 항상 같이 있다. */}
-        <details className="rounded-md border border-brand-hairline">
-          <summary className="px-sm py-xs text-caption text-brand-muted cursor-pointer select-none hover:text-brand-primary">
-            원문
-          </summary>
-          <pre className="px-sm pb-xs overflow-x-auto text-[12px] leading-relaxed text-brand-muted whitespace-pre-wrap break-all">
+        ) : (
+          <pre className="font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-all text-brand-body">
             {message.raw}
           </pre>
-        </details>
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * pretty JSON 구문 색 — 키·문자열·숫자만. 입력이 **우리가 방금 stringify 한
+ * 문자열**이라 정규식 토큰화가 결정론이다(임의 텍스트 파싱이 아니다).
+ * WARN 형광 같은 의미 강조는 여기 없다 — 그건 warnings 근거가 생기는
+ * 고도화(#66)의 일이다.
+ */
+function highlightJson(pretty: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const token =
+    /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = token.exec(pretty)) !== null) {
+    if (m.index > last) out.push(pretty.slice(last, m.index));
+    if (m[1] !== undefined) {
+      if (m[2] !== undefined) {
+        // 키 — 뒤에 콜론이 붙는 문자열.
+        out.push(
+          <span key={key++} className="text-[#7a5c50]">
+            {m[1]}
+          </span>,
+          m[2],
+        );
+      } else {
+        out.push(
+          <span key={key++} className="text-[#4a7a5a]">
+            {m[1]}
+          </span>,
+        );
+      }
+    } else {
+      out.push(
+        <span key={key++} className="text-[#8a5a3a]">
+          {m[3] ?? m[4]}
+        </span>,
+      );
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < pretty.length) out.push(pretty.slice(last));
+  return out;
 }
 
 /**
