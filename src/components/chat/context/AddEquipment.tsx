@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { inputKind } from "@/lib/date-input";
 import { readRecentSkills, recordSkillUse } from "@/lib/skill-usage";
+import { DateTimeField } from "../DateTimeField";
 import {
   fetchSkills,
   skillExtraInputs,
@@ -439,8 +441,9 @@ function AskInputs({
         이 스킬에 더 필요한 값입니다.
       </p>
       <div className="max-h-[240px] overflow-y-auto scrollbar-none flex flex-col gap-xs">
-        {inputs.map((input) => (
-          <label key={input.key} className="flex flex-col gap-xxs">
+        {inputs.map((input) => {
+          const kind = inputKind(input.type);
+          const heading = (
             <span className="text-caption text-brand-muted">
               {input.key.toUpperCase()}
               {input.description && (
@@ -450,17 +453,37 @@ function AskInputs({
                 </span>
               )}
             </span>
-            <input
-              value={values[input.key] ?? ""}
-              onChange={(e) => onChange(input.key, e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onSubmit();
-              }}
-              placeholder={inputPlaceholder(input)}
-              className="h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink placeholder:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
-            />
-          </label>
-        ))}
+          );
+          // 달력 분기는 label 로 감싸지 않는다 — label 이 팝업까지 덮으면 팝업의
+          // 빈 곳 클릭이 트리거 버튼 활성화로 전달돼 달력이 닫힌다.
+          if (kind !== "text") {
+            return (
+              <div key={input.key} className="flex flex-col gap-xxs">
+                {heading}
+                <DateTimeField
+                  kind={kind}
+                  value={values[input.key] ?? ""}
+                  onChange={(v) => onChange(input.key, v)}
+                  label={`${input.key.toUpperCase()} 입력`}
+                />
+              </div>
+            );
+          }
+          return (
+            <label key={input.key} className="flex flex-col gap-xxs">
+              {heading}
+              <input
+                value={values[input.key] ?? ""}
+                onChange={(e) => onChange(input.key, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onSubmit();
+                }}
+                placeholder={inputPlaceholder(input)}
+                className="h-8 rounded-sm border border-brand-hairline bg-brand-canvas px-xs text-caption text-brand-ink placeholder:text-brand-muted-soft focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+              />
+            </label>
+          );
+        })}
       </div>
     </div>
   );
