@@ -211,6 +211,17 @@ export type Message = {
    */
   inputRequests?: InputRequest[];
   /**
+   * 선택 요청 — 어시스턴트 메시지에만. 채팅 스트림에 인라인 카드로 렌더된다
+   * (요청·입력 카드와 달리 데이터 패널이 아니라 이 메시지 바로 아래).
+   */
+  choiceRequests?: ChoiceRequest[];
+  /**
+   * 선택 카드 회신 기록 — 어시스턴트 메시지에만, question 을 키로 한다. 카드
+   * 클릭이 만드는 것은 이 기록 + 뒤따르는 user 메시지 하나뿐이고, 채팅 요청
+   * 본문에는 싣지 않는다(FE 전용 상태 — 동결 판정·재표시에만 쓴다).
+   */
+  choiceReplies?: Record<string, { values: string[] } | { skipped: true }>;
+  /**
    * 에러 상세 — `role: "error"` 메시지에만. 사용자 친화 본문은
    * `content`, 원인 분류 / HTTP 상태 / 원본 메시지 등 기술적 디테일은
    * 여기에. UI 에서 [원인 보기] 토글로 접어 노출.
@@ -366,6 +377,30 @@ export type InputRequest = {
   label: string;
   /** 무슨 값을 넣어야 하는지 짧은 안내(선택). */
   description?: string;
+};
+
+/**
+ * 선택 카드의 선택지 한 칸. `label` 이 카드에 뜨는 문구이자 회신 문장
+ * ("선택 — {label}")에 실리는 값이다. `description` 은 선택.
+ */
+export type ChoiceOption = {
+  label: string;
+  description?: string;
+};
+
+/**
+ * 선택 요청 — 백엔드가 "빠진 값의 후보를 2~10개로 좁혔다"고 알려오는 것.
+ *
+ * {@link InputRequest}와 형제지만 회신 채널이 다르다 — 이쪽은 구조화 회신
+ * 필드가 없고, 카드 클릭이 그대로 `"선택 — {label}"` user 메시지로 대화에
+ * 복귀한다({@link Message.choiceReplies}는 FE 전용 상태로, 채팅 요청 본문에는
+ * 싣지 않는다).
+ */
+export type ChoiceRequest = {
+  question: string;
+  options: ChoiceOption[];
+  /** 여러 개를 고를 수 있으면 true — 헤더에 "전부 선택" 토글이 뜬다. */
+  multiSelect: boolean;
 };
 
 /**
