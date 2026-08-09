@@ -81,11 +81,13 @@ import {
 import { ConversationsSidebar, useConversations } from "./history";
 import {
   DataPanel,
+  useCaptures,
   useDataMessages,
   useDataRequests,
   useDataSnapshots,
   useInputRequests,
 } from "./data";
+import { classifyCapture } from "@/lib/capture-classify";
 import { MESSAGE_RAW_MAX_CHARS } from "@/lib/message-store";
 import {
   deriveArtifacts,
@@ -165,6 +167,16 @@ export function ChatContainer() {
    * 섞이되 어느 답에서 나온 것이 아니므로 `messageId` 가 없다.
    */
   const [userArtifacts, setUserArtifacts] = useState<Artifact[]>([]);
+  /** 붙여넣은 캡처의 화면 분류 상태(#189) — 메모리 전용, 확정 전까지는 데이터가 아니다. */
+  const {
+    captures: captureList,
+    add: addCapture,
+    resolve: resolveCapture,
+    fail: failCapture,
+    retry: retryCapture,
+    confirm: confirmCapture,
+    reclassify: reclassifyCapture,
+  } = useCaptures();
   const [isStreaming, setIsStreaming] = useState(false);
   // 3분할 상주 레이아웃 — 좌 데이터·중앙 채팅은 항상, 우측은 설비/요약 탭.
   const [rightTab, setRightTab] = useState<"context" | "summary">("context");
@@ -427,6 +439,32 @@ export function ChatContainer() {
   const handleRemoveArtifact = useCallback((id: string) => {
     setUserArtifacts((prev) => prev.filter((a) => a.id !== id));
   }, []);
+
+  /**
+   * 캡처 등록(#189) — 목록에 `classifying` 으로 세운 뒤 분류 왕복을 붙인다.
+   * BE 는 항상 200 이므로 `catch` 는 네트워크 실패만 잡는다(카드가 재시도로 내려간다).
+   */
+  const handleAddCapture = useCallback(
+    (dataUrl: string) => {
+      const id = addCapture(dataUrl);
+      classifyCapture(dataUrl)
+        .then((res) => resolveCapture(id, res))
+        .catch(() => failCapture(id));
+    },
+    [addCapture, resolveCapture, failCapture],
+  );
+
+  const handleRetryCapture = useCallback(
+    (id: string) => {
+      const target = captureList.find((c) => c.id === id);
+      if (!target) return;
+      retryCapture(id);
+      classifyCapture(target.dataUrl)
+        .then((res) => resolveCapture(id, res))
+        .catch(() => failCapture(id));
+    },
+    [captureList, retryCapture, resolveCapture, failCapture],
+  );
 
   const handleAddEquipment = useCallback(
     (
@@ -1656,6 +1694,11 @@ export function ChatContainer() {
               artifacts={artifacts}
               onAddArtifact={handleAddArtifact}
               onRemoveArtifact={handleRemoveArtifact}
+              captures={captureList}
+              onAddCapture={handleAddCapture}
+              onConfirmCapture={confirmCapture}
+              onReclassifyCapture={reclassifyCapture}
+              onRetryCapture={handleRetryCapture}
               snapshots={scopedSnapshots}
               // 데이터 등록 → 판정 왕복이 눈에 보이도록 — 헤더 신호등.
               judging={judging}
