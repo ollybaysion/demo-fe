@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { newId as sharedNewId } from "@/lib/id";
+import { takeSeededTree } from "@/lib/dev-seed";
 import { SCENARIOS, type Scenario } from "@/demo/scenarios";
 import {
   type ChatError,
@@ -347,8 +348,14 @@ export function ChatContainer() {
    */
   const [tree, setTree] = useState<WorkbenchTree>(EMPTY_TREE);
   const [treeHydrated, setTreeHydrated] = useState(false);
+  /** dev 시드가 넘긴 트리로 부팅했나 — 첫 대화 로드의 병합을 한 번만 건너뛴다. */
+  const seededBootRef = useRef(false);
   useEffect(() => {
-    const restored = loadWorkbenchTree();
+    // dev 시드가 넘긴 트리가 있으면 그것부터 — 시드는 저장소를 갈아엎는 대신
+    // 여기로 넘긴다(저장 경합으로 시드분이 묻히던 자리).
+    const seeded = takeSeededTree();
+    seededBootRef.current = seeded !== null;
+    const restored = seeded ?? loadWorkbenchTree();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTree(restored);
     setTreeHydrated(true);
@@ -630,6 +637,15 @@ export function ChatContainer() {
    */
   const applyWorkbench = useCallback((next: Workbench) => {
     setTree((prev) => {
+      /*
+        dev 시드로 부팅했으면 대화 저장분을 트리에 얹지 않는다.
+
+        시드는 "이 표본으로 **교체**"라는 뜻인데, 대화에 저장된 옛 분석이 병합되면
+        (#168 승계 규칙) 지운 카드가 되살아나 빈 그룹으로 쌓인다. 얹는 자리가
+        둘이라(대화 로드·pending 복원) 한 번만 막아서는 소용이 없어, 이 페이지가
+        사는 동안 계속 건너뛴다 — 새로고침하면 시드 표시가 이미 소비돼 정상이다.
+      */
+      if (seededBootRef.current) return prev;
       let wb = prev;
       for (const name of next.seedEquipments) {
         wb = upsertEquipment(wb, name, next.equipmentLines[name] ?? null);
@@ -678,7 +694,6 @@ export function ChatContainer() {
     if (activeId) return;
     const pending = loadPendingWorkbench();
     if (isEmptyWorkbench(pending)) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     applyWorkbench(pending);
   }, [activeId, conversationsHydrated, applyWorkbench]);
 

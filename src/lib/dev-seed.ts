@@ -16,8 +16,8 @@ import {
   EMPTY_WORKBENCH,
   fulfillSlot,
   openAnalysis,
-  saveWorkbench,
   slotQueryKey,
+  type Workbench as WorkbenchTree,
 } from "@/lib/workbench-cards";
 
 const KINDS: { name: string; cols: string[]; sql?: string }[] = [
@@ -274,6 +274,50 @@ async function buildCardSeed(count: number): Promise<{
   return { tree, snapshots };
 }
 
+/** 시드가 남긴 트리를 다음 부팅이 집어 가는 자리 — 세션 한 번만 산다. */
+const SEEDED_TREE_KEY = "fdc.dev-seed.tree";
+
+function handOffSeededTree(tree: WorkbenchTree): void {
+  try {
+    sessionStorage.setItem(SEEDED_TREE_KEY, JSON.stringify(tree));
+  } catch {
+    // 넘기기에 실패해도 스냅샷·메시지는 이미 들어갔다 — 화면은 뜬다.
+  }
+}
+
+/**
+ * 시드가 넘긴 트리를 받아 간다 — 화면이 부팅할 때 부른다. 없으면 null(평소 부팅은
+ * 저장된 트리를 그대로 읽는다).
+ *
+ * 저장소에서는 한 번만 꺼내되 **답은 기억한다**. dev 의 effect 는 두 번 실행되는데
+ * (StrictMode), 두 번째 호출이 빈손으로 돌아오면 화면이 옛 트리를 다시 읽어 시드가
+ * 없던 일이 된다 — 실제로 그렇게 묻히고 있었다.
+ */
+let takenTree: WorkbenchTree | null | undefined;
+
+export function takeSeededTree(): WorkbenchTree | null {
+  if (process.env.NODE_ENV === "production") return null;
+  if (typeof window === "undefined") return null;
+  if (takenTree !== undefined) return takenTree;
+  takenTree = null;
+  try {
+    const raw = sessionStorage.getItem(SEEDED_TREE_KEY);
+    if (raw === null) return null;
+    sessionStorage.removeItem(SEEDED_TREE_KEY);
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      Array.isArray((parsed as WorkbenchTree).equipments)
+    ) {
+      takenTree = parsed as WorkbenchTree;
+    }
+  } catch {
+    takenTree = null;
+  }
+  return takenTree;
+}
+
 /**
  * 인자 예시값 — 스킬 설명의 `(예: S-0004)` 가 먼저다(지어내지 않는다).
  *
@@ -285,8 +329,10 @@ function sampleArg(input: SkillInput): string {
   const example = input.description?.match(/예:\s*([^)\s,]+)/)?.[1];
   if (example) return example;
   const key = input.key.toLowerCase();
+  // 날짜 단위로 끊는다 — 초까지 넣으면 시드를 돌릴 때마다 인자가 달라지고,
+  // 인자가 다르면 같은 절차가 아니라 새 분석이 된다(같은 설비에 카드가 쌓인다).
   const day = (back: number) =>
-    new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 19);
+    `${new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10)}T00:00:00`;
   if (/(start|from|begin)/.test(key)) return day(1);
   if (/(end|to|until)/.test(key)) return day(0);
   if (/(index|idx|no|num|count)/.test(key)) return "12";
@@ -350,12 +396,20 @@ async function applyDevSeed(): Promise<void> {
   const cardCount = Math.min(Math.max(Number.parseInt(cards ?? "0", 10) || 0, 0), 5);
   const card = cardCount > 0 ? await buildCardSeed(cardCount) : null;
   if (cards !== null) {
-    // 트리는 localStorage 다 — 카드가 서는 씨앗이고, 스냅샷은 그 슬롯이 가리킨다.
-    saveWorkbench(card ? card.tree : EMPTY_WORKBENCH);
+    /*
+      트리를 저장소에 바로 쓰지 않고 **다음 부팅이 집어 갈 자리**에 둔다.
+
+      트리는 앱이 화면 상태로 들고 있다가 바뀔 때마다 저장한다. 여기서 곧장
+      localStorage 를 갈아엎어도, 리로드 직전에 앱이 들고 있던 옛 트리를 한 번 더
+      저장해 버려 시드분이 묻혔다 — `?cards=0` 이 안 비워지고 재시드가 교체가
+      아니라 누적이 되던 원인이다. 부팅 때 집어 가면 그 경합 자체가 없다.
+    */
+    handOffSeededTree(card ? card.tree : EMPTY_WORKBENCH);
   }
-  if (raw !== null || card) {
+  if (raw !== null || cards !== null) {
     const count = Math.min(Math.max(Number.parseInt(raw ?? "0", 10) || 0, 0), 100);
     // seed=0 → 빈 목록으로 교체 = 전부 비움(localStorage 세대까지 같이 지운다).
+    // cards=0 도 표를 함께 걷는다 — 카드를 지웠는데 그 표가 남으면 미분류로 떠돈다.
     await replaceAllSnapshots([
       ...(count === 0 ? [] : buildSeed(count)),
       ...(card ? card.snapshots : []),
