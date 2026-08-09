@@ -929,17 +929,14 @@ export function DataPanel({
               <PlusIcon />
               데이터 추가
             </button>
-            {ingestError ? (
+            {/* 상시 안내 문구는 걷어냈다(사용자 결정) — 못 받은 이유만 남긴다.
+                조용히 버리면 "붙여넣었는데 아무 일도 안 남"이 되기 때문. */}
+            {ingestError && (
               <p
                 role="alert"
                 className="mt-xs text-center text-caption text-brand-error"
               >
                 {ingestError}
-              </p>
-            ) : (
-              <p className="mt-xs text-center text-caption text-brand-muted-soft">
-                표를 복사해 Ctrl+V 하거나 파일을 끌어놓아도 등록됩니다. 화면
-                캡처·주소를 붙여넣으면 산출물에 섭니다.
               </p>
             )}
           </div>
