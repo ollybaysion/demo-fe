@@ -1,21 +1,26 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { groupMessagesByEquipment } from "@/lib/message-store";
+import { messageStamp, type GroupMode } from "@/lib/message-store";
+import type { MessageView } from "./useMessageView";
 import type { DataMessage } from "@/lib/types";
 
 /**
  * 데이터 메시지 단 — 붙여넣은 설비/카프카 메시지의 목록·상세·명시 입력
  * (BE #64 MVP, 시안 C).
  *
- * 목록은 **제목만**이다 — 분석 카드와 달리 메시지가 건마다 카드로 서면 패널이
- * 스택으로 부푼다(사용자 결정). 설비별로 묶어 제목 줄만 세우고, 내용(코멘트 +
- * pretty JSON + 원문)은 확장 모드(#136)의 오른쪽 상세 면({@link MessageDetail})이
- * 맡는다 — 모달이 아니다. 제목을 누르면 호스트가 패널을 넓혀 그 자리에 띄운다.
+ * 목록은 **제목 줄만**이다 — 분석 카드와 달리 메시지가 건마다 카드로 서면 패널이
+ * 스택으로 부푼다(사용자 결정). 내용(코멘트 + pretty JSON + 원문)은 확장 모드
+ * (#136)의 오른쪽 상세 면({@link MessageDetail})이 맡는다 — 모달이 아니다.
+ *
+ * 여러 건이 한꺼번에 들어오는 라운드에 맞춰 줄에 **시각 거터**가 붙었다: 같은
+ * 초에 여러 건이 오는 데이터라 소수초까지 보여야 서로를 구별하고 순서를 믿을 수
+ * 있다. 초까지가 눈의 기준선이고 소수초는 한 톤 죽인다. 묶는 축(시각·설비·날짜)은
+ * 사용자가 바꾸고, 설비 거르개는 그 축과 직교한다.
  */
 
 type SectionProps = {
-  messages: DataMessage[];
+  view: MessageView;
   onRemove: (id: string) => void;
   /** 제목 클릭 — 확장 모드 상세 면에 이 메시지를 띄운다(닫혀 있으면 넓히면서). */
   onSelectMessage?: (id: string) => void;
@@ -31,8 +36,14 @@ type SectionProps = {
   onSubmitInput: (text: string) => Promise<boolean>;
 };
 
+const MODES: { key: GroupMode; name: string }[] = [
+  { key: "time", name: "시각" },
+  { key: "eqp", name: "설비" },
+  { key: "date", name: "날짜" },
+];
+
 export function MessageSection({
-  messages,
+  view,
   onRemove,
   onSelectMessage,
   selectedId = null,
@@ -40,77 +51,210 @@ export function MessageSection({
   onCloseInput,
   onSubmitInput,
 }: SectionProps) {
-  const groups = groupMessagesByEquipment(messages);
+  // 한 건뿐이면 묶을 것도 거를 것도 없다 — 컨트롤은 쌓였을 때만 나온다.
+  const showControls = view.total > 1;
 
   return (
     <div className="flex flex-col gap-xs">
       {inputOpen && (
         <MessageInputCard onClose={onCloseInput} onSubmit={onSubmitInput} />
       )}
-      {messages.length === 0 && !inputOpen ? (
-        <p className="text-caption text-brand-muted-soft">
-          설비 메시지를 붙여넣거나 [데이터 추가]의 [메시지]로 직접 등록하면
-          여기에 쌓입니다.
-        </p>
+      {view.total === 0 ? (
+        !inputOpen && (
+          <p className="text-caption text-brand-muted-soft">
+            설비 메시지를 붙여넣거나 [데이터 추가]의 [메시지]로 직접 등록하면
+            여기에 쌓입니다.
+          </p>
+        )
       ) : (
-        groups.map((g) => (
-          <div
-            key={g.equipment || "미분류"}
-            className="rounded-lg border border-brand-hairline bg-brand-surface-soft px-xs py-xxs"
-          >
-            <div className="px-xxs py-[4px] flex items-center gap-xs">
-              <span className="flex-1 min-w-0 truncate text-caption font-medium text-brand-muted">
-                {g.equipment || "미분류"}
-              </span>
-              <span className="shrink-0 text-caption text-brand-muted-soft tabular-nums">
-                {g.messages.length}건
-              </span>
-            </div>
-            {/* 제목 줄만 — 세부는 확장 모드 오른쪽 면으로. */}
-            {g.messages.map((m) => (
-              <div
-                key={m.id}
-                className={[
-                  "group rounded-md mb-[3px] last:mb-0 flex items-center border transition-colors",
-                  m.id === selectedId
-                    ? "bg-brand-primary/5 border-brand-primary/45"
-                    : "bg-brand-canvas border-transparent",
-                ].join(" ")}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelectMessage?.(m.id)}
-                  title={m.comment ?? m.label}
-                  className="flex-1 min-w-0 px-xs py-[6px] text-left text-body-sm text-brand-ink truncate hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-md"
-                >
-                  {m.label}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRemove(m.id)}
-                  aria-label={`${m.label} 삭제`}
-                  title="삭제"
-                  className="shrink-0 mr-xxs inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-brand-error hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-opacity"
-                >
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    aria-hidden
+        <>
+          {showControls && (
+            <div className="flex flex-wrap items-center gap-xs">
+              <div className="inline-flex rounded-md border border-brand-hairline overflow-hidden">
+                {MODES.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => view.setMode(m.key)}
+                    aria-pressed={view.mode === m.key}
+                    className={[
+                      "h-6 px-xs text-caption transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+                      view.mode === m.key
+                        ? "bg-brand-primary text-brand-on-primary font-medium"
+                        : "text-brand-muted hover:text-brand-ink",
+                    ].join(" ")}
                   >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                    {m.name}
+                  </button>
+                ))}
               </div>
-            ))}
+              {view.equipments.length > 1 &&
+                view.equipments.map((eqp) => {
+                  const on = view.pickedEquipments.includes(eqp);
+                  return (
+                    <button
+                      key={eqp}
+                      type="button"
+                      onClick={() => view.toggleEquipment(eqp)}
+                      aria-pressed={on}
+                      className={[
+                        "h-6 px-xs rounded-full border font-mono text-[11px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15",
+                        on
+                          ? "border-brand-primary/45 bg-brand-primary/10 text-brand-primary font-medium"
+                          : "border-brand-hairline text-brand-muted hover:text-brand-ink",
+                      ].join(" ")}
+                    >
+                      {eqp}
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+          <div className="rounded-lg border border-brand-hairline bg-brand-surface-soft px-xs py-xxs">
+            {view.visible.length === 0 ? (
+              <p className="px-xxs py-xs text-caption text-brand-muted-soft">
+                고른 설비의 메시지가 없습니다.
+              </p>
+            ) : (
+              view.rows.map((row, i) => {
+                if (row.kind === "header") {
+                  return (
+                    <div
+                      key={`h-${i}`}
+                      className="px-xxs pt-xs pb-[4px] flex items-center gap-xs first:pt-[2px]"
+                    >
+                      <span className="flex-1 min-w-0 truncate text-caption font-medium text-brand-muted">
+                        {row.label}
+                      </span>
+                      <span className="shrink-0 text-caption text-brand-muted-soft tabular-nums">
+                        {row.count}건
+                      </span>
+                    </div>
+                  );
+                }
+                if (row.kind === "daybreak") {
+                  return (
+                    <div
+                      key={`d-${i}`}
+                      className="my-xxs flex items-center gap-xs px-xxs"
+                    >
+                      <span className="h-px flex-1 bg-brand-hairline" />
+                      <span className="shrink-0 text-caption text-brand-muted">
+                        {row.label}
+                      </span>
+                      <span className="h-px flex-1 bg-brand-hairline" />
+                    </div>
+                  );
+                }
+                if (row.kind === "gap") {
+                  return (
+                    <p
+                      key={`g-${i}`}
+                      className="py-[3px] text-center text-caption text-brand-muted-soft"
+                    >
+                      · {row.label} ·
+                    </p>
+                  );
+                }
+                return (
+                  <MessageRowLine
+                    key={row.message.id}
+                    message={row.message}
+                    showEquipment={view.mode !== "eqp"}
+                    selected={row.message.id === selectedId}
+                    onSelect={() => onSelectMessage?.(row.message.id)}
+                    onRemove={() => onRemove(row.message.id)}
+                  />
+                );
+              })
+            )}
           </div>
-        ))
+        </>
       )}
+    </div>
+  );
+}
+
+/**
+ * 목록 한 줄 — 시각 거터 · 설비 칩 · 제목.
+ *
+ * 거터는 2단이다: 초까지가 위, 소수초가 아래. 발생 시각이 없는 건은 `—` 를 그린다
+ * — 등록 시각을 그 자리에 올리면 메시지가 언제 난 것인지 안다고 속이게 된다
+ * (정렬에는 등록 시각을 쓰되, 화면에는 없다고 말한다).
+ */
+function MessageRowLine({
+  message,
+  showEquipment,
+  selected,
+  onSelect,
+  onRemove,
+}: {
+  message: DataMessage;
+  showEquipment: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+}) {
+  const stamp = messageStamp(message);
+  return (
+    <div
+      className={[
+        "group rounded-md mb-[3px] last:mb-0 flex items-center border transition-colors",
+        selected
+          ? "bg-brand-primary/5 border-brand-primary/45"
+          : "bg-brand-canvas border-transparent",
+      ].join(" ")}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        title={message.comment ?? message.label}
+        className="flex-1 min-w-0 px-xs py-[5px] flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-md"
+      >
+        <span className="shrink-0 w-[62px] font-mono text-[11px] leading-[1.25] tabular-nums text-brand-muted">
+          {stamp?.exact ? (
+            <>
+              {stamp.time}
+              <span className="block text-[10px] text-brand-muted-soft">
+                .{stamp.frac || "0"}
+              </span>
+            </>
+          ) : (
+            <span className="text-brand-muted-soft" title="메시지에 시각이 없습니다">
+              —
+            </span>
+          )}
+        </span>
+        {showEquipment && message.eqpId && (
+          <span className="shrink-0 inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[5px] py-[2px] font-mono text-[10px] leading-none font-medium text-brand-primary">
+            {message.eqpId}
+          </span>
+        )}
+        <span className="flex-1 min-w-0 truncate text-body-sm text-brand-ink group-hover:text-brand-primary">
+          {message.label}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`${message.label} 삭제`}
+        title="삭제"
+        className="shrink-0 mr-xxs inline-flex items-center justify-center w-6 h-6 rounded-full text-brand-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-brand-error hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-opacity"
+      >
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -119,15 +263,35 @@ export function MessageSection({
  * 메시지 상세 — 확장 모드(#136)의 오른쪽 면, `SnapshotDetail` 의 형제.
  *
  * 확정 시안 = E4-B(브리핑) × B2(웜그레이 히어로) × P5(터라코타 포인트 3종:
- * 좌측 보더·eqpId 칩·활성 탭). 구성: 히어로(제목·칩·코멘트) → 필 세그먼트
- * (JSON/원문 전환 + 복사) → 본문. 본문은 항상 pretty JSON 이 기본이고(결정 3),
- * 원문 탭이 진실원 안전망이다 — 포맷팅은 LLM 산출물이라 틀릴 수 있다.
+ * 좌측 보더·eqpId 칩·활성 탭). 구성: 히어로(제목·칩·순회·시각·코멘트) → 필
+ * 세그먼트(JSON/원문 전환 + 복사) → 본문. 본문은 항상 pretty JSON 이 기본이고
+ * (결정 3), 원문 탭이 진실원 안전망이다 — 포맷팅은 LLM 산출물이라 틀릴 수 있다.
  * WARN 행 형광·구절 강조는 고도화(BE #66, warnings 검증과 짝)로 뺐다.
+ *
+ * `‹ n / N ›` 순회는 **왼쪽 목록에 지금 보이는 순서**를 돈다 — 묶기 축을 바꾸면
+ * 순회 순서도 같이 바뀐다. 화면과 다른 순서로 넘어가면 사용자가 자기 위치를 잃는다.
  */
-export function MessageDetail({ message }: { message: DataMessage }) {
+export function MessageDetail({
+  message,
+  order = [],
+  onSelect,
+}: {
+  message: DataMessage;
+  /** 보이는 순서대로의 메시지 — 순회의 고리. */
+  order?: DataMessage[];
+  onSelect?: (id: string) => void;
+}) {
   const [view, setView] = useState<"json" | "raw">("json");
   const [copied, setCopied] = useState(false);
   const pretty = JSON.stringify(message.json, null, 2) ?? "";
+  const stamp = messageStamp(message);
+  const index = order.findIndex((m) => m.id === message.id);
+
+  // 끝에서 한 바퀴 — 목록이 짧아 되돌아오는 편이 막다른 끝보다 낫다.
+  const step = (delta: number) => {
+    const next = order[(index + delta + order.length) % order.length];
+    if (next) onSelect?.(next.id);
+  };
 
   // 메시지가 바뀌면 탭·복사 상태를 처음으로 — 렌더 중 상태 조정 관례.
   const [prevId, setPrevId] = useState(message.id);
@@ -181,7 +345,45 @@ export function MessageDetail({ message }: { message: DataMessage }) {
               {message.eqpId}
             </span>
           )}
+          {index >= 0 && order.length > 1 && (
+            <div className="ml-auto shrink-0 flex items-center gap-xxs">
+              <button
+                type="button"
+                onClick={() => step(-1)}
+                aria-label="이전 메시지"
+                className="w-6 h-6 rounded-full text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+              >
+                ‹
+              </button>
+              <span className="text-caption text-brand-muted-soft tabular-nums">
+                {index + 1} / {order.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => step(1)}
+                aria-label="다음 메시지"
+                className="w-6 h-6 rounded-full text-brand-muted hover:text-brand-primary hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+              >
+                ›
+              </button>
+            </div>
+          )}
         </div>
+        {/* 발생 시각 — 소수초까지가 이 한 건의 신원이다(같은 초에 형제가 있다). */}
+        {stamp && (
+          <p className="mt-xxs font-mono text-[11px] tabular-nums text-brand-muted">
+            {stamp.exact ? (
+              <>
+                {stamp.date} {stamp.time}
+                <span className="text-brand-muted-soft">.{stamp.frac || "0"}</span>
+              </>
+            ) : (
+              <span className="text-brand-muted-soft">
+                메시지에 시각 없음 · 등록 {stamp.date} {stamp.time}
+              </span>
+            )}
+          </p>
+        )}
         {/* LLM 한 줄 요약 — 실패했으면 없던 일(빈 줄 금지). */}
         {message.comment && (
           <p className="mt-xs text-body-sm leading-relaxed text-brand-body">

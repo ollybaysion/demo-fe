@@ -20,6 +20,7 @@ import { RequestCard } from "./RequestCard";
 import { SnapshotCard } from "./SnapshotCard";
 import { SnapshotDetail } from "./SnapshotDetail";
 import type { AddSnapshotResult } from "./useDataSnapshots";
+import { useMessageView } from "./useMessageView";
 
 /**
  * 데이터 패널 — 3분할 레이아웃의 좌측 상주 컬럼.
@@ -307,6 +308,8 @@ export function DataPanel({
     expanded && picked?.kind === "message"
       ? (dataMessages.find((m) => m.id === picked.id) ?? null)
       : null;
+  // 목록의 묶기·거르개는 여기 산다 — 상세의 순회가 그 결과 순서를 따라야 한다.
+  const messageView = useMessageView(dataMessages);
   const detailTarget =
     expanded && !pickedImage && !pickedMessage
       ? (snapshots.find((s) => picked?.kind === "snapshot" && s.id === picked.id) ??
@@ -799,7 +802,7 @@ export function DataPanel({
                 onToggle={() => setMessagesOpen((v) => !v)}
               >
                 <MessageSection
-                  messages={dataMessages}
+                  view={messageView}
                   onRemove={(id) => onRemoveMessage?.(id)}
                   onSelectMessage={selectMessage}
                   selectedId={pickedMessage?.id ?? null}
@@ -948,7 +951,11 @@ export function DataPanel({
           (pickedImage ? (
             <ArtifactDetail artifact={pickedImage} />
           ) : pickedMessage ? (
-            <MessageDetail message={pickedMessage} />
+            <MessageDetail
+              message={pickedMessage}
+              order={messageView.visible}
+              onSelect={selectMessage}
+            />
           ) : detailTarget ? (
             <SnapshotDetail snapshot={detailTarget} />
           ) : (
