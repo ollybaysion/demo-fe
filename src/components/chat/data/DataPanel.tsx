@@ -157,6 +157,11 @@ type Props = {
   onDismissAsMessageUndo?: () => void;
   onRemoveMessage?: (id: string) => void;
   /**
+   * 메시지를 표로 되돌린다 — 스냅샷 카드의 [메시지로] 와 짝. 표로 못 읽히면
+   * 사유를 돌려주고 메시지는 그대로 둔다.
+   */
+  onMessageAsSnapshot?: (id: string) => { ok: true } | { ok: false; message: string };
+  /**
    * 붙여넣기 텍스트의 메시지 판정 왕복 — true 면 메시지 카드가 섰다(표 등록
    * 생략), false 면 비메시지·실패(로컬 표 파싱으로 폴백). 안 넘기면 붙여넣기는
    * 지금처럼 바로 표 파싱이다.
@@ -260,6 +265,7 @@ export function DataPanel({
   onUndoAsMessage,
   onDismissAsMessageUndo,
   onRemoveMessage,
+  onMessageAsSnapshot,
   onTryMessagePaste,
   onSubmitMessage,
   onSnapshotAsMessage,
@@ -1127,6 +1133,16 @@ export function DataPanel({
               message={pickedMessage}
               order={messageView.visible}
               onSelect={selectMessage}
+              {...(onMessageAsSnapshot
+                ? {
+                    onAsSnapshot: () => {
+                      const result = onMessageAsSnapshot(pickedMessage.id);
+                      // 표가 됐으면 이 상세의 주인이 사라진다 — 그 표를 열어 준다.
+                      if (result.ok) setPicked(null);
+                      return result;
+                    },
+                  }
+                : {})}
             />
           ) : detailTarget ? (
             <SnapshotDetail snapshot={detailTarget} />

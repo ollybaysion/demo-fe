@@ -310,11 +310,17 @@ export function MessageDetail({
   message,
   order = [],
   onSelect,
+  onAsSnapshot,
 }: {
   message: DataMessage;
   /** 보이는 순서대로의 메시지 — 순회의 고리. */
   order?: DataMessage[];
   onSelect?: (id: string) => void;
+  /**
+   * 표로 되돌리기 — 스냅샷 카드의 [메시지로] 와 짝. 원문이 표로 안 읽히면
+   * 사유가 돌아오고 메시지는 그대로 남는다.
+   */
+  onAsSnapshot?: () => { ok: true } | { ok: false; message: string };
 }) {
   // 변환에 실패한 건은 JSON 이 없다 — 원문만 보여 준다(빈 탭을 남기지 않는다).
   const converted = message.json !== undefined && message.json !== null;
@@ -324,6 +330,8 @@ export function MessageDetail({
   const shown = converted ? view : "raw";
   const stamp = messageStamp(message);
   const index = order.findIndex((m) => m.id === message.id);
+  // 표로 못 읽힌 사유 — 진짜 메시지였다는 뜻이라 그대로 보여 준다.
+  const [asSnapshotError, setAsSnapshotError] = useState<string | null>(null);
 
   // 끝에서 한 바퀴 — 목록이 짧아 되돌아오는 편이 막다른 끝보다 낫다.
   const step = (delta: number) => {
@@ -337,6 +345,7 @@ export function MessageDetail({
     setPrevId(message.id);
     setView("json");
     setCopied(false);
+    setAsSnapshotError(null);
   }
 
   async function copyShown() {
@@ -441,14 +450,39 @@ export function MessageDetail({
           </span>
         )}
         {converted && pill("raw", "원문")}
+        {/* 표로 되돌리기 — 스냅샷 카드의 [메시지로] 와 짝. 오판은 양쪽으로 난다. */}
+        {onAsSnapshot && (
+          <button
+            type="button"
+            onClick={() => {
+              const result = onAsSnapshot();
+              setAsSnapshotError(result.ok ? null : result.message);
+            }}
+            title="이 원문을 표로 다시 읽어 데이터 카드로 등록합니다"
+            className="ml-auto h-7 px-xs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          >
+            표로
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void copyShown()}
-          className="ml-auto h-7 px-xs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+          className={[
+            "h-7 px-xs text-caption text-brand-muted hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors",
+            onAsSnapshot ? "" : "ml-auto",
+          ].join(" ")}
         >
           {copied ? "복사됨" : "복사"}
         </button>
       </div>
+      {asSnapshotError && (
+        <p
+          role="alert"
+          className="shrink-0 px-lg pt-xs text-caption text-brand-error"
+        >
+          표로 읽지 못했습니다 — {asSnapshotError}
+        </p>
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto px-lg py-sm">
         {shown === "json" ? (
