@@ -19,6 +19,11 @@ export type SkillInput = {
   key: string;
   required: boolean;
   description?: string;
+  /**
+   * spec 이 선언한 입력 위젯 신호(akg json-spec v0.9.0) — datetime 이면 날짜+시각
+   * 달력, date 면 날짜 달력, 없으면 자유 텍스트. 값은 어느 쪽이든 문자열이다.
+   */
+  type?: string;
 };
 
 /** bind 하나의 배선 — 인자에서 오거나, 다른 조회 결과의 컬럼에서 온다. */

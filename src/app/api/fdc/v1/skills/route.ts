@@ -40,8 +40,18 @@ export const MOCK_SKILLS: Skill[] = [
         required: true,
         description: "센서를 특정하는 파라미터 인덱스 — 센서 이름이 아니다",
       },
-      { key: "start", required: true, description: "수집 구간 시작 시각" },
-      { key: "end", required: true, description: "수집 구간 끝 시각" },
+      {
+        key: "start",
+        required: true,
+        description: "수집 구간 시작 시각",
+        type: "datetime",
+      },
+      {
+        key: "end",
+        required: true,
+        description: "수집 구간 끝 시각",
+        type: "datetime",
+      },
     ],
     needs: [
       {

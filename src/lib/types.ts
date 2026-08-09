@@ -413,6 +413,11 @@ export type InputRequest = {
   label: string;
   /** 무슨 값을 넣어야 하는지 짧은 안내(선택). */
   description?: string;
+  /**
+   * spec 이 선언한 입력 위젯 신호(선택) — BE 가 (skill, key) 로 spec 에서 찾아
+   * 싣는다. datetime | date 면 입력 카드가 캘린더로 받는다.
+   */
+  type?: string;
 };
 
 /**

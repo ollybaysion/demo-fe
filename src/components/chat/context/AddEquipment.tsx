@@ -442,7 +442,7 @@ function AskInputs({
       </p>
       <div className="max-h-[240px] overflow-y-auto scrollbar-none flex flex-col gap-xs">
         {inputs.map((input) => {
-          const kind = inputKind(input.key, input.description);
+          const kind = inputKind(input.type);
           const heading = (
             <span className="text-caption text-brand-muted">
               {input.key.toUpperCase()}

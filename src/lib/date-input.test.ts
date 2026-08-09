@@ -10,37 +10,19 @@ import {
 } from "./date-input";
 
 describe("inputKind", () => {
-  it("트레이스 스킬의 실제 설명 — '수집 구간 시작 시각'은 datetime", () => {
-    expect(inputKind("start", "수집 구간 시작 시각")).toBe("datetime");
-    expect(inputKind("end", "수집 구간 끝 시각")).toBe("datetime");
+  it("spec 이 선언한 type 을 그대로 읽는다", () => {
+    expect(inputKind("datetime")).toBe("datetime");
+    expect(inputKind("date")).toBe("date");
   });
 
-  it("설명의 '일시'도 datetime, '날짜'·'일자'는 date", () => {
-    expect(inputKind("occurred", "이벤트 발생 일시")).toBe("datetime");
-    expect(inputKind("base", "기준 날짜 (예: 2026-08-01)")).toBe("date");
-    expect(inputKind("close", "마감 일자")).toBe("date");
+  it("신호가 없으면 자유 텍스트", () => {
+    expect(inputKind(undefined)).toBe("text");
   });
 
-  it("'시간'만으로는 판별하지 않는다 — 길이(duration)로도 읽힌다", () => {
-    expect(inputKind("window", "조회 시간 범위(분)")).toBe("text");
-  });
-
-  it("설명이 침묵하면 key 꼬리로 — _dt/_time은 datetime, _date/_day는 date", () => {
-    expect(inputKind("read_dt")).toBe("datetime");
-    expect(inputKind("capture_time")).toBe("datetime");
-    expect(inputKind("base_date")).toBe("date");
-    expect(inputKind("target_day")).toBe("date");
-  });
-
-  it("설명이 key 를 이긴다", () => {
-    expect(inputKind("base_date", "기준 시각")).toBe("datetime");
-  });
-
-  it("신호가 없으면 text — 오탐이 자유 입력을 막는 게 더 나쁘다", () => {
-    expect(inputKind("param_index", "센서를 특정하는 파라미터 인덱스")).toBe("text");
-    expect(inputKind("equipment", "측정을 낸 설비 ID (예: CVD-01)")).toBe("text");
-    expect(inputKind("start")).toBe("text");
-    expect(inputKind("update")).toBe("text");
+  it("닫힌 enum 밖의 값은 text 로 물러난다 — 모르는 신호로 달력을 띄우지 않는다", () => {
+    expect(inputKind("time")).toBe("text");
+    expect(inputKind("DATETIME")).toBe("text");
+    expect(inputKind("")).toBe("text");
   });
 });
 

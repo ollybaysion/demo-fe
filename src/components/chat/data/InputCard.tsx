@@ -21,11 +21,8 @@ type Props = {
 
 export function InputCard({ request, onSubmit }: Props) {
   const [value, setValue] = useState("");
-  // 날짜 인자면 타이핑 대신 달력으로 — 판별 재료는 key 와 사람이 읽는 문구 전부.
-  const kind = inputKind(
-    request.key,
-    [request.label, request.description].filter(Boolean).join(" "),
-  );
+  // 날짜 인자면 타이핑 대신 달력으로 — spec 이 선언한 type 이 BE 를 거쳐 온다.
+  const kind = inputKind(request.type);
 
   function submit(e: FormEvent) {
     e.preventDefault();
