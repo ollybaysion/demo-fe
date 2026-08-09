@@ -11,8 +11,11 @@
 
 import type { DataMessage } from "./types";
 
-/** BE `pasted` 캡과 같은 값 — 이보다 긴 텍스트는 메시지 판정에 보내지 않는다. */
-export const MESSAGE_RAW_MAX_CHARS = 32_768;
+/**
+ * BE `pasted` 캡과 같은 값 — 이보다 긴 텍스트는 메시지 판정에 보내지 않는다.
+ * 붙여넣기 하나가 여러 건이 되면서 32k 에서 올렸다(로그 100줄이면 수만 자다).
+ */
+export const MESSAGE_RAW_MAX_CHARS = 131_072;
 
 /** 등록 — 같은 원문이 이미 있으면 새로 만들지 않고 그 항목을 돌려준다. */
 export function upsertMessage(
@@ -36,29 +39,161 @@ export function removeMessage(list: DataMessage[], id: string): DataMessage[] {
   return list.filter((m) => m.id !== id);
 }
 
+/** 목록을 어떤 축으로 묶어 볼 것인가 — 정렬(최신 순)은 어느 축에서든 같다. */
+export type GroupMode = "time" | "eqp" | "date";
+
 /**
- * 설비별 묶음 — 설비 카드의 "메시지 한 줄"과 왼쪽 목록이 같은 규칙을 쓴다.
- * `eqpId` 가 없으면 미분류(`""` 키) 한 묶음이다. 등장 순서 보존.
+ * 그려질 줄 — 메시지 줄 사이에 날짜 구분선·묶음 머리가 섞인다.
+ * 화면은 이 배열을 순서대로 그리기만 한다(묶기 규칙은 전부 여기 있다).
  */
-export function groupMessagesByEquipment(
-  list: DataMessage[],
-): { equipment: string; messages: DataMessage[] }[] {
-  const order: string[] = [];
-  const byEq = new Map<string, DataMessage[]>();
-  for (const m of list) {
-    const key = m.eqpId?.trim() ?? "";
-    let bucket = byEq.get(key);
-    if (!bucket) {
-      bucket = [];
-      byEq.set(key, bucket);
-      order.push(key);
-    }
-    bucket.push(m);
-  }
-  return order.map((key) => ({ equipment: key, messages: byEq.get(key)! }));
+export type MessageRow =
+  | { kind: "message"; message: DataMessage }
+  | { kind: "daybreak"; label: string }
+  | { kind: "header"; label: string; count: number };
+
+/** `yyyy-MM-dd`(T| )`HH:mm[:ss[.f…]]` — 뒤의 오프셋·Z 는 보지 않는다. */
+const STAMP =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,9}))?/;
+
+/**
+ * 비교용 시각 키 — 자릿수를 고정해 사전순 비교가 곧 시간순이 되게 한다.
+ *
+ * 시각을 LLM 이 뽑기 때문에 표기가 흔들린다(`T` 와 공백, 소수초 3자리와 6자리,
+ * 초 생략). 그대로 문자열 비교하면 `11:58:03.412` 가 `11:58:03.412765` 보다
+ * 앞서는 식으로 어긋나므로, 파싱해 `YYYYMMDDHHmmss` + 소수초 9자리로 편다.
+ *
+ * 오프셋은 무시한다 — 한 설비군의 메시지는 같은 시간대에서 오고, 섞였을 때의
+ * 정책(무엇을 기준시로 볼 것인가)은 아직 정해진 바 없다.
+ */
+export function timeKey(value: string | null | undefined): string | null {
+  const m = typeof value === "string" ? STAMP.exec(value.trim()) : null;
+  if (!m) return null;
+  const [, y, mo, d, h, mi, s, frac] = m;
+  return `${y}${mo}${d}${h}${mi}${s ?? "00"}${(frac ?? "").padEnd(9, "0")}`;
 }
 
-/** 원문에서 제목을 만든다 — className 이 없을 때의 폴백(첫 줄 머리 40자). */
+/** 정렬·묶기의 기준 시각 — 발생 시각이 없으면 등록 시각으로 줄 선다. */
+function keyOf(m: DataMessage): string {
+  return timeKey(m.occurredAt) ?? timeKey(m.createdAt) ?? "";
+}
+
+/**
+ * 목록에 보일 시각 — `exact` 가 false 면 발생 시각이 아니라 등록 시각이다
+ * (화면은 그 자리에 시각 대신 `—` 를 그린다: 없는 정보를 있는 척하지 않는다).
+ */
+export function messageStamp(
+  m: DataMessage,
+): { date: string; time: string; frac: string; exact: boolean } | null {
+  const occurred = typeof m.occurredAt === "string" ? STAMP.exec(m.occurredAt.trim()) : null;
+  const key = keyOf(m);
+  if (!key) return null;
+  return {
+    date: `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`,
+    time: `${key.slice(8, 10)}:${key.slice(10, 12)}:${key.slice(12, 14)}`,
+    // 원문에 없던 자릿수는 채우지 않는다 — 붙여 그리면 정밀도를 속이게 된다.
+    frac: occurred?.[7] ?? "",
+    exact: occurred !== null,
+  };
+}
+
+/** 최신 순 — 어느 묶기 축에서도 이 순서다. */
+export function sortMessages(list: DataMessage[]): DataMessage[] {
+  return [...list].sort((a, b) => {
+    const ka = keyOf(a);
+    const kb = keyOf(b);
+    return ka === kb ? 0 : ka < kb ? 1 : -1;
+  });
+}
+
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** `8월 7일 (금)` — 목록 안에서만 쓰는 짧은 날짜(연도는 구분선이 아니라 상세에). */
+export function dateLabel(date: string): string {
+  const [y, mo, d] = date.split("-").map(Number);
+  if (!y || !mo || !d) return date;
+  const weekday = WEEKDAYS[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()];
+  return `${mo}월 ${d}일 (${weekday})`;
+}
+
+/**
+ * 목록 한 벌 — 정렬 + 묶기 + 사이 표식까지 마친 줄들.
+ *
+ * `time` 축은 한 줄기로 흐르되 날짜가 바뀌면 구분선을 끼운다. `eqp`·`date` 축은
+ * 머리를 세워 묶는다 — 설비는 이름순(사람이 찾는 축이라 순서가 고정이어야 한다),
+ * 날짜는 최신순이다.
+ */
+export function buildMessageRows(
+  list: DataMessage[],
+  mode: GroupMode,
+): MessageRow[] {
+  const sorted = sortMessages(list);
+  if (mode === "time") {
+    const rows: MessageRow[] = [];
+    let prev: DataMessage | null = null;
+    for (const message of sorted) {
+      const stamp = messageStamp(message);
+      const prevStamp = prev ? messageStamp(prev) : null;
+      if (stamp && prevStamp && stamp.date !== prevStamp.date) {
+        rows.push({ kind: "daybreak", label: dateLabel(stamp.date) });
+      }
+      rows.push({ kind: "message", message });
+      prev = message;
+    }
+    return rows;
+  }
+
+  const groups: { key: string; label: string; items: DataMessage[] }[] = [];
+  for (const message of sorted) {
+    const key =
+      mode === "eqp"
+        ? (message.eqpId?.trim() ?? "")
+        : (messageStamp(message)?.date ?? "");
+    let group = groups.find((g) => g.key === key);
+    if (!group) {
+      const label =
+        mode === "eqp" ? key || "미분류" : key ? dateLabel(key) : "시각 없음";
+      group = { key, label, items: [] };
+      groups.push(group);
+    }
+    group.items.push(message);
+  }
+  if (mode === "eqp") {
+    // 미분류는 이름이 없으니 맨 뒤 — 설비 이름들 사이에 끼면 찾기 어렵다.
+    groups.sort((a, b) =>
+      a.key === b.key ? 0 : !a.key ? 1 : !b.key ? -1 : a.key < b.key ? -1 : 1,
+    );
+  }
+  return groups.flatMap((g): MessageRow[] => [
+    { kind: "header", label: g.label, count: g.items.length },
+    ...g.items.map((message): MessageRow => ({ kind: "message", message })),
+  ]);
+}
+
+/** 지금 화면에 보이는 순서 — 상세의 `‹ n / N ›` 가 이 순서를 따른다. */
+export function visibleMessages(rows: MessageRow[]): DataMessage[] {
+  return rows.flatMap((r) => (r.kind === "message" ? [r.message] : []));
+}
+
+/** 목록에 있는 설비들 — 거르개 칩의 재료. 이름순, 미분류는 빼고. */
+export function equipmentsOf(list: DataMessage[]): string[] {
+  const seen = new Set<string>();
+  for (const m of list) {
+    const eqp = m.eqpId?.trim();
+    if (eqp) seen.add(eqp);
+  }
+  return [...seen].sort();
+}
+
+/** 거르개 — 고른 설비가 없으면 전체다(고르는 순간 그 설비들만). */
+export function filterByEquipment(
+  list: DataMessage[],
+  picked: string[],
+): DataMessage[] {
+  if (picked.length === 0) return list;
+  return list.filter((m) => picked.includes(m.eqpId?.trim() ?? ""));
+}
+
+/** 원문에서 제목을 만든다 — title·className 이 없을 때의 폴백(첫 줄 머리 40자). */
 export function labelFromRaw(raw: string): string {
   const head = raw.trim().split(/\r?\n/, 1)[0] ?? "";
   const cut = head.slice(0, 40).trim();
@@ -79,12 +214,8 @@ export function migrateMessages(input: unknown): DataMessage[] {
 function coerceMessage(raw: unknown): DataMessage | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  if (
-    typeof r.id !== "string" ||
-    typeof r.raw !== "string" ||
-    r.json === undefined ||
-    r.json === null
-  ) {
+  // 원문만 있으면 받는다 — 변환 실패 건도 화면에 서야 무엇이 빠졌는지 알 수 있다.
+  if (typeof r.id !== "string" || typeof r.raw !== "string") {
     return null;
   }
   return {
@@ -92,11 +223,14 @@ function coerceMessage(raw: unknown): DataMessage | null {
     label: typeof r.label === "string" && r.label.trim() ? r.label : labelFromRaw(r.raw),
     createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
     raw: r.raw,
-    json: r.json,
+    ...(r.json !== undefined && r.json !== null ? { json: r.json } : {}),
     ...(typeof r.comment === "string" && r.comment ? { comment: r.comment } : {}),
     ...(typeof r.eqpId === "string" && r.eqpId ? { eqpId: r.eqpId } : {}),
     ...(typeof r.className === "string" && r.className
       ? { className: r.className }
+      : {}),
+    ...(typeof r.occurredAt === "string" && timeKey(r.occurredAt)
+      ? { occurredAt: r.occurredAt }
       : {}),
     ...(typeof r.docId === "string" && r.docId ? { docId: r.docId } : {}),
   };
