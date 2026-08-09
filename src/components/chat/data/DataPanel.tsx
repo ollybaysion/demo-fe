@@ -185,6 +185,15 @@ function JudgeLight({ judging }: { judging: boolean }) {
   return null;
 }
 
+/** 패널의 분류 — 근거(표)·원문(메시지)·결과(산출물). */
+type PanelTab = "data" | "messages" | "artifacts";
+
+const TABS: { key: PanelTab; name: string }[] = [
+  { key: "data", name: "데이터" },
+  { key: "messages", name: "메시지" },
+  { key: "artifacts", name: "산출물" },
+];
+
 export function DataPanel({
   snapshots,
   inputRequests,
@@ -237,11 +246,15 @@ export function DataPanel({
   const [dataOpen, setDataOpen] = useState(true);
   // 휴지통은 **닫힌 채로** 시작한다 — 버린 것은 찾을 때만 보이면 된다.
   const [trashOpen, setTrashOpen] = useState(false);
-  // 산출물 단은 펼친 채로 — 방금 나온 답의 표·차트가 여기 서므로 접혀 있으면
-  // 답이 나와도 화면이 안 움직인 것처럼 보인다.
-  const [artifactsOpen, setArtifactsOpen] = useState(true);
-  // 메시지 단 — 산출물과 같은 이유로 펼친 채 시작.
-  const [messagesOpen, setMessagesOpen] = useState(true);
+  /**
+   * 어느 탭을 보고 있나 — 데이터·메시지·산출물.
+   *
+   * 셋을 한 컬럼에 세로로 쌓았더니 메시지가 수십 건 들어오는 순간 아래 단이
+   * 스크롤 저편으로 밀렸다. 성격도 다르다: 사람이 올린 근거(표) · 설비가 보낸
+   * 원문(메시지) · 모델이 만든 결과(산출물). 기억하지 않는다 — 패널을 다시 열면
+   * 데이터부터다.
+   */
+  const [tab, setTab] = useState<PanelTab>("data");
   // 명시 입력 카드(분류에서 [메시지] 선택) 열림.
   const [messageInputOpen, setMessageInputOpen] = useState(false);
   // [데이터 추가] 분류 메뉴 — 버튼 하나가 표/메시지 두 통로로 갈라지는 자리.
@@ -324,6 +337,9 @@ export function DataPanel({
    */
   function selectMessage(id: string) {
     setPicked({ kind: "message", id });
+    // 상세가 열리면 목록도 그 탭이어야 한다 — 순회(‹ n / N ›)가 도는 순서가
+    // 왼쪽에 보이는 순서다.
+    setTab("messages");
     if (!expanded) onToggleExpanded();
   }
 
@@ -396,8 +412,8 @@ export function DataPanel({
             label: imageLabel(file),
             dataUrl: await readAsDataUrl(file),
           });
-          // 접어 둔 단에 넣으면 등록이 없던 일처럼 보인다 — 펴서 보여 준다.
-          setArtifactsOpen(true);
+          // 다른 탭에 넣으면 등록이 없던 일처럼 보인다 — 선 자리로 데려간다.
+          setTab("artifacts");
         } catch {
           rejected = "그림을 읽지 못했습니다.";
         }
@@ -425,7 +441,7 @@ export function DataPanel({
         if (plan.kind === "link") {
           // 이름은 비워 보낸다 — 호스트에서 짓는 규칙이 이미 한 곳에 있다.
           onAddArtifact({ kind: "link", label: "", url: plan.url });
-          setArtifactsOpen(true);
+          setTab("artifacts");
           setIngestError(null);
           return;
         }
@@ -434,7 +450,7 @@ export function DataPanel({
         if (onTryMessagePaste) {
           void onTryMessagePaste(plan.text).then((becameMessage) => {
             if (becameMessage) {
-              setMessagesOpen(true);
+              setTab("messages");
               setIngestError(null);
             } else {
               registerText(plan.text);
@@ -627,7 +643,52 @@ export function DataPanel({
               : "flex-1 min-w-0",
           ].join(" ")}
         >
+          {/* 탭 줄 — 스크롤 밖에 둔다. 목록을 내려도 어디에 있는지, 다른 쪽에
+              몇 건이 있는지가 계속 보여야 한다. */}
+          <div
+            role="tablist"
+            aria-label="데이터 패널 분류"
+            className="shrink-0 flex items-stretch gap-md px-lg border-b border-brand-hairline-soft"
+          >
+            {TABS.map((t) => {
+              const count =
+                t.key === "data"
+                  ? dataCount
+                  : t.key === "messages"
+                    ? dataMessages.length
+                    : artifacts.length;
+              const on = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setTab(t.key)}
+                  className={[
+                    "py-sm flex items-center gap-xxs border-b-2 -mb-px text-body-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-t-sm",
+                    on
+                      ? "border-brand-primary text-brand-ink font-medium"
+                      : "border-transparent text-brand-muted hover:text-brand-ink",
+                  ].join(" ")}
+                >
+                  {t.name}
+                  <span
+                    className={[
+                      "text-caption tabular-nums",
+                      on ? "text-brand-primary" : "text-brand-muted-soft",
+                    ].join(" ")}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex-1 overflow-y-auto scrollbar-none">
+            {tab === "data" && (
+            <>
             {/* 상단 요청 섹션 — 스칼라 입력 요청만. 데이터 요청 카드는 각 설비·
                 분석 그룹 안에 산다. */}
             {inputRequests.length > 0 && (
@@ -743,7 +804,15 @@ export function DataPanel({
                               }
                               selected={expanded && s.id === detailTarget?.id}
                               {...(onSnapshotAsMessage
-                                ? { onAsMessage: () => onSnapshotAsMessage(s.id) }
+                                ? {
+                                    onAsMessage: () => {
+                                      onSnapshotAsMessage(s.id);
+                                      // 오판 교정의 결과는 메시지 탭에 선다 —
+                                      // 고쳤는데 화면이 그대로면 안 고쳐진 것으로
+                                      // 읽힌다.
+                                      setTab("messages");
+                                    },
+                                  }
                                 : {})}
                             />
                           </div>
@@ -782,25 +851,30 @@ export function DataPanel({
                       }
                       selected={expanded && s.id === detailTarget?.id}
                       {...(onSnapshotAsMessage
-                        ? { onAsMessage: () => onSnapshotAsMessage(s.id) }
+                        ? {
+                            onAsMessage: () => {
+                              onSnapshotAsMessage(s.id);
+                              // 오판 교정의 결과는 메시지 탭에 선다 — 고쳤는데
+                              // 화면이 그대로면 안 고쳐진 것으로 읽힌다.
+                              setTab("messages");
+                            },
+                          }
                         : {})}
                     />
                   ))}
                 </div>
               )}
             </CollapsibleSection>
+            </>
+            )}
 
             {/*
-              메시지 단(BE #64 MVP) — 표(스냅샷)와 정체가 다른 근거라 단을
-              나눈다. 목록은 설비별 제목 줄만, 내용은 상세 모달로(메시지가
-              건마다 카드로 서면 패널이 스택으로 부푼다 — 사용자 결정).
+              메시지 탭(BE #64) — 표(스냅샷)와 정체가 다른 근거라 자리를
+              나눈다. 목록은 시각·설비·제목 한 줄씩, 내용은 확장 모드의 오른쪽
+              상세 면으로(메시지가 건마다 카드로 서면 패널이 스택으로 부푼다).
             */}
-            {(dataMessages.length > 0 || messageInputOpen) && (
-              <CollapsibleSection
-                title={`메시지 (${dataMessages.length})`}
-                open={messagesOpen}
-                onToggle={() => setMessagesOpen((v) => !v)}
-              >
+            {tab === "messages" && (
+              <div className="px-lg py-md">
                 <MessageSection
                   view={messageView}
                   onRemove={(id) => onRemoveMessage?.(id)}
@@ -810,7 +884,7 @@ export function DataPanel({
                   onCloseInput={() => setMessageInputOpen(false)}
                   onSubmitInput={onSubmitMessage ?? (() => Promise.resolve(false))}
                 />
-              </CollapsibleSection>
+              </div>
             )}
 
             {/*
@@ -818,11 +892,8 @@ export function DataPanel({
               스냅샷과 **섞지 않는다**: 스냅샷은 사람이 올린 근거고 이쪽은 모델이
               만든 결과라, 한 목록이 되면 "이 답의 근거가 뭐였지"를 못 되짚는다.
             */}
-            <CollapsibleSection
-              title={`답변 산출물 (${artifacts.length})`}
-              open={artifactsOpen}
-              onToggle={() => setArtifactsOpen((v) => !v)}
-            >
+            {tab === "artifacts" && (
+            <div className="px-lg py-md">
               {artifacts.length === 0 ? (
                 <p className="text-caption text-brand-muted-soft">
                   아직 없습니다. 답이 표·차트·그림을 내놓으면 여기에 쌓이고,
@@ -856,7 +927,8 @@ export function DataPanel({
                   ))}
                 </div>
               )}
-            </CollapsibleSection>
+            </div>
+            )}
 
           </div>
 
@@ -901,7 +973,9 @@ export function DataPanel({
                     onClick={() => {
                       setAddMenuOpen(false);
                       setMessageInputOpen(true);
-                      setMessagesOpen(true);
+                      // 입력 카드는 메시지 탭 안에 열린다 — 다른 탭에 서 있으면
+                      // 버튼을 눌러도 아무 일도 안 일어난 것처럼 보인다.
+                      setTab("messages");
                     }}
                     className="w-full px-sm py-xs text-left border-t border-brand-hairline-soft hover:bg-brand-ink-translucent-04 focus:outline-none focus:bg-brand-ink-translucent-04"
                   >
