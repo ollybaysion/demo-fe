@@ -241,8 +241,10 @@ export function DataPanel({
   const [artifactsOpen, setArtifactsOpen] = useState(true);
   // 메시지 단 — 산출물과 같은 이유로 펼친 채 시작.
   const [messagesOpen, setMessagesOpen] = useState(true);
-  // 명시 입력 카드([+ 메시지]) 열림.
+  // 명시 입력 카드(분류에서 [메시지] 선택) 열림.
   const [messageInputOpen, setMessageInputOpen] = useState(false);
+  // [데이터 추가] 분류 메뉴 — 버튼 하나가 표/메시지 두 통로로 갈라지는 자리.
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   // 요청 카드 접힘 — null = 전부 펼침. 단 제목 줄의 아이콘이 여기를 쥔다.
   const [openRequestKeys, setOpenRequestKeys] = useState<string[] | null>(null);
   /**
@@ -453,6 +455,16 @@ export function DataPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [trashOpen]);
+
+  // 분류 메뉴도 같은 관례 — Esc 로 닫힌다.
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setAddMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addMenuOpen]);
 
   async function handleDroppedFiles(files: FileList) {
     const { images, others } = splitDroppedFiles(Array.from(files));
@@ -829,36 +841,78 @@ export function DataPanel({
 
           </div>
 
-          {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
-          <div className="shrink-0 px-lg py-md border-t border-brand-hairline">
-            <div className="flex gap-xs">
-              <button
-                type="button"
-                onClick={() => {
+          {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다.
+              등록 통로가 둘(표/메시지)이 되면서 버튼을 늘리는 대신 분기를 안으로
+              접었다: 누르면 분류가 버튼 위에 뜨고, 골라야 입력이 열린다. 메시지
+              경로가 배선되지 않은 화면은 분류 없이 예전처럼 바로 모달이다. */}
+          <div className="relative shrink-0 px-lg py-md border-t border-brand-hairline">
+            {addMenuOpen && onSubmitMessage && (
+              <>
+                {/* 바깥 클릭 닫기 — 선택지 두 개짜리 메뉴라 모달급 덮개는 과하다. */}
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setAddMenuOpen(false)}
+                  aria-hidden
+                />
+                <div
+                  role="menu"
+                  aria-label="데이터 추가 분류"
+                  className="absolute bottom-full left-lg right-lg z-30 mb-xs rounded-lg border border-brand-hairline bg-brand-canvas shadow-lg overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      setSeed(null);
+                      setAddOpen(true);
+                    }}
+                    className="w-full px-sm py-xs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:bg-brand-ink-translucent-04"
+                  >
+                    <span className="block text-body-sm text-brand-ink">
+                      표 데이터
+                    </span>
+                    <span className="block text-caption text-brand-muted-soft">
+                      직접 실행한 조회 결과를 붙여넣어 등록합니다
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      setMessageInputOpen(true);
+                      setMessagesOpen(true);
+                    }}
+                    className="w-full px-sm py-xs text-left border-t border-brand-hairline-soft hover:bg-brand-ink-translucent-04 focus:outline-none focus:bg-brand-ink-translucent-04"
+                  >
+                    <span className="block text-body-sm text-brand-ink">
+                      메시지
+                    </span>
+                    <span className="block text-caption text-brand-muted-soft">
+                      설비/카프카 메시지 — 판별 없이 메시지로 변환합니다
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (!onSubmitMessage) {
                   setSeed(null);
                   setAddOpen(true);
-                }}
-                className="flex-1 inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-              >
-                <PlusIcon />
-                데이터 추가
-              </button>
-              {/* 명시 메시지 등록 — 판별을 안 거치고 반드시 메시지로 들어간다. */}
-              {onSubmitMessage && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMessageInputOpen(true);
-                    setMessagesOpen(true);
-                  }}
-                  title="메시지 직접 등록 — 판별 없이 메시지로 변환합니다"
-                  className="shrink-0 inline-flex items-center justify-center gap-xs h-10 px-sm rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-                >
-                  <PlusIcon />
-                  메시지
-                </button>
-              )}
-            </div>
+                  return;
+                }
+                setAddMenuOpen((v) => !v);
+              }}
+              aria-expanded={onSubmitMessage ? addMenuOpen : undefined}
+              aria-haspopup={onSubmitMessage ? "menu" : undefined}
+              className="w-full inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+            >
+              <PlusIcon />
+              데이터 추가
+            </button>
             {ingestError ? (
               <p
                 role="alert"
