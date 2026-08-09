@@ -20,6 +20,13 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * 서술 스트림이 실릴 수 있어, 전역 30초가 완결 서술을 문장 중간에 자르면 안 된다.
  */
 const JUDGE_TIMEOUT_MS = 60_000;
+
+/**
+ * 축소 레이아웃(데이터 패널 확장·설비 상세)에서의 채팅 배율(#185) — 채팅이
+ * ~30% 폭으로 접힐 때 같은 배율로 들어가면 화면을 과하게 차지한다. 80% 로
+ * 줄이면 같은 폭에 더 많은 맥락이 보인다.
+ */
+const CHAT_COMPRESSED_ZOOM = 0.8;
 import { parseSseStream } from "@/lib/sse";
 import { toChatInputs } from "@/lib/input-store";
 import type {
@@ -1608,10 +1615,18 @@ export function ChatContainer() {
           </div>
         </div>
 
-        {/* 중앙 — 채팅 카드. 확장 패널이 열리면 남은 폭을 3:7 로 나눈다. */}
+        {/* 중앙 — 채팅 카드. 확장 패널이 열리면 남은 폭을 3:7 로 나눈다.
+            축소 레이아웃에서는 내용 배율을 80% 로 줄인다(#185) — zoom 은
+            transform scale 과 달리 레이아웃까지 줄어 실제로 더 많이 보인다. */}
         <div
           className="flex min-w-0 flex-col rounded-xl border border-brand-hairline bg-brand-canvas overflow-hidden transition-[flex-grow] duration-200 ease-out"
-          style={{ flexGrow: detailCard ? 3 : 1, flexBasis: 0 }}
+          style={{
+            flexGrow: detailCard ? 3 : 1,
+            flexBasis: 0,
+            ...(detailCard || dataExpanded
+              ? { zoom: CHAT_COMPRESSED_ZOOM }
+              : {}),
+          }}
         >
 
         <main className="flex-1 overflow-y-auto scrollbar-none">
