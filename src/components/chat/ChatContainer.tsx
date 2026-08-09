@@ -1510,6 +1510,39 @@ export function ChatContainer() {
   );
 
   /**
+   * 오판 교정의 반대 방향 — 메시지를 표로 되돌린다.
+   *
+   * 표 카드의 [메시지로] 와 짝이다. 그쪽만 있으면 한 번 메시지가 된 것은 되돌릴
+   * 길이 없다: 붙여넣기가 곧장 메시지로 판정된 경우엔 휴지통에 버린 표조차 없다.
+   * 원문을 그대로 표 등록 경로에 태우고, 서면 그 메시지를 지운다. 표로 못 읽히면
+   * (진짜 메시지였다면) 사유만 돌려주고 메시지는 그대로 둔다 — 불가침.
+   */
+  const handleMessageAsSnapshot = useCallback(
+    (id: string): { ok: true } | { ok: false; message: string } => {
+      const message = dataMessages.find((m) => m.id === id);
+      if (!message) return { ok: false, message: "메시지를 찾지 못했습니다." };
+      const result = addSnapshot(message.raw, "");
+      if (!result.ok) {
+        return { ok: false, message: result.message };
+      }
+      rememberSessionSnapshot(result.snapshot.id);
+      removeDataMessage(id);
+      requestJudge({
+        type: "snapshot-added",
+        queryKey: result.snapshot.queryKey,
+      });
+      return { ok: true };
+    },
+    [
+      dataMessages,
+      addSnapshot,
+      rememberSessionSnapshot,
+      removeDataMessage,
+      requestJudge,
+    ],
+  );
+
+  /**
    * 분석 카드 삭제(선언 철회) — 요청 카드는 함께 사라지고 표 본문(IDB)은 남아
    * 미분류로 흘러간다. 스코프에 담겨 있던 항목은 prune 이 자연 정리한다.
    * 선언(runs[])이 줄었으니 판정을 다시 받는다.
@@ -1776,6 +1809,7 @@ export function ChatContainer() {
               onTryMessagePaste={(text) => tryMessageJudge(text, false)}
               onSubmitMessage={(text) => tryMessageJudge(text, true)}
               onSnapshotAsMessage={handleSnapshotAsMessage}
+              onMessageAsSnapshot={handleMessageAsSnapshot}
             />
           </div>
         </div>
