@@ -52,6 +52,20 @@ export type RunProgress = {
   holds?: { queryId: string; reason: string }[];
 };
 
+/**
+ * 메시지 판정 왕복의 응답(BE #64 MVP) — `pasted` 를 실어 보낸 왕복에만 온다.
+ * 값 전부가 LLM 산출물이라 오차 허용(편의성 기능) — 원문이 진실원이다.
+ */
+export type FormattedMessage = {
+  /** 원문을 구조화한 객체 — 문자열이 아니다(pretty-print 는 화면 소유). */
+  json: unknown;
+  /** 한 줄 요약. */
+  comment?: string;
+  eqpId?: string;
+  className?: string;
+  docId?: string;
+};
+
 /** `done` 페이로드 — `dataRequests` 는 그 절차의 조회 **전량**(상태 포함)이다. */
 export type ChatDataDone = {
   messageId: string;
@@ -62,6 +76,8 @@ export type ChatDataDone = {
   runsProgress?: RunProgress[];
   terminalRuns?: string[];
   narratedRun?: string;
+  /** 메시지 판정 왕복에만 — 없으면 비메시지(불가침), 로컬 표 파싱으로 폴백. */
+  formattedMessage?: FormattedMessage;
 };
 
 // 절차 선언은 작업판 트리에서 나온다 — `workbench-cards.toRunDecls`(분석 카드
@@ -76,6 +92,13 @@ export type JudgeBody = {
   runs?: RunDecl[];
   scope?: unknown;
   inputs?: ChatInputs;
+  /**
+   * 붙여넣기 원문(BE #64) — 실리면 이 왕복은 패널 판정이 아니라 **메시지 판정
+   * 전용**이고, 응답은 `formattedMessage` 로만 온다(원장 없음 — replace 금지).
+   */
+  pasted?: string;
+  /** 사용자가 "이건 메시지다"라고 명시 — BE 가 스니프를 건너뛴다. */
+  pastedForce?: boolean;
 };
 
 export type JudgeHooks = {

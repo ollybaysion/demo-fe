@@ -46,6 +46,12 @@ export type EquipmentCardModel = {
   /** 가동 상태 — 유일하게 색(중립 점)을 받는 값. 모르면 null. */
   status: string | null;
   lines: EquipmentLine[];
+  /**
+   * 이 설비에 붙은 데이터 메시지 수(BE #64 MVP) — 분석 카드와 달리 몇 건이든
+   * **한 줄**로만 그린다(카드가 메시지 스택으로 부풀지 않게). 목록·상세는
+   * 왼쪽 데이터 패널의 메시지 단이 맡는다.
+   */
+  messageCount?: number;
 };
 
 export const MOCK_EQUIPMENT_CARDS: EquipmentCardModel[] = [
