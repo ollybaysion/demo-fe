@@ -24,6 +24,7 @@ import { parseSseStream } from "@/lib/sse";
 import { toChatInputs } from "@/lib/input-store";
 import type {
   ChatInputs,
+  ChoiceRequest,
   DataRequest,
   InputRequest,
   Message,
@@ -139,6 +140,11 @@ type DonePayload = {
    * 데이터 패널의 입력 카드로 렌더되고, 전부 채우면 자동으로 재분석된다.
    */
   inputRequests?: InputRequest[];
+  /**
+   * 빠진 값의 후보를 2~10개로 좁혀 낸 선택 요청. 채팅 스트림에 인라인 카드로
+   * 렌더되고, 회신은 구조화 필드 없이 카드 클릭이 만든 user 메시지로 온다.
+   */
+  choiceRequests?: ChoiceRequest[];
 };
 type StreamPayload = TokenPayload | ErrorPayload | DonePayload;
 
@@ -968,6 +974,8 @@ export function ChatContainer() {
               !!payload.dataRequests && payload.dataRequests.length > 0;
             const hasInputRequests =
               !!payload.inputRequests && payload.inputRequests.length > 0;
+            const hasChoiceRequests =
+              !!payload.choiceRequests && payload.choiceRequests.length > 0;
             // 그림·링크 — 어디서 읽어왔는지는 백엔드가 진다(MCP 등). 여기는
             // 받은 것을 답에 달아 둘 뿐이고, 그리는 것은 데이터 패널이 한다.
             const hasImages = !!payload.images && payload.images.length > 0;
@@ -980,6 +988,7 @@ export function ChatContainer() {
                 hasRecommend ||
                 hasDataRequests ||
                 hasInputRequests ||
+                hasChoiceRequests ||
                 hasImages ||
                 hasLinks)
             ) {
@@ -995,6 +1004,7 @@ export function ChatContainer() {
                   }
                   if (hasDataRequests) next.dataRequests = payload.dataRequests;
                   if (hasInputRequests) next.inputRequests = payload.inputRequests;
+                  if (hasChoiceRequests) next.choiceRequests = payload.choiceRequests;
                   if (hasImages) next.images = payload.images;
                   if (hasLinks) next.links = payload.links;
                   return next;
@@ -1110,6 +1120,61 @@ export function ChatContainer() {
       messages,
       sendToApi,
     ],
+  );
+
+  /**
+   * 선택 카드 확정 — 클릭이 유일한 회신 채널이다(번호 타이핑 해석 없음). 카드를
+   * 낸 메시지에 회신을 기록하고, 그 값을 담은 user 메시지를 이어 붙여 게이트
+   * 없이 바로 재발사한다. `handleSubmitInput`(입력 카드)과 달리 "전부 채워야"
+   * 조건이 없다 — 선택은 그 자리에서 완결되는 답이다.
+   */
+  const handleChoiceSubmit = useCallback(
+    (messageId: string, question: string, values: string[]) => {
+      const withReply = messages.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              choiceReplies: { ...(m.choiceReplies ?? {}), [question]: { values } },
+            }
+          : m,
+      );
+      const userMessage: Message = {
+        id: newId(),
+        role: "user",
+        content: `선택 — ${values.join(" / ")}`,
+        createdAt: Date.now(),
+      };
+      const nextHistory = [...withReply, userMessage];
+      setMessages(nextHistory);
+      setIsStreaming(true);
+      void sendToApi(nextHistory);
+    },
+    [messages, sendToApi],
+  );
+
+  /** 선택 카드 "답변 없이 넘어가기" — 스킵도 회신의 일종이라 같은 방식으로 기록·재발사한다. */
+  const handleChoiceSkip = useCallback(
+    (messageId: string, question: string) => {
+      const withReply = messages.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              choiceReplies: { ...(m.choiceReplies ?? {}), [question]: { skipped: true as const } },
+            }
+          : m,
+      );
+      const userMessage: Message = {
+        id: newId(),
+        role: "user",
+        content: "선택 없이 진행해 주세요",
+        createdAt: Date.now(),
+      };
+      const nextHistory = [...withReply, userMessage];
+      setMessages(nextHistory);
+      setIsStreaming(true);
+      void sendToApi(nextHistory);
+    },
+    [messages, sendToApi],
   );
 
   // 지금은 부르는 곳이 없다 — 빈 화면의 시나리오 목록을 걷어냈기 때문이다.
@@ -1514,6 +1579,15 @@ export function ChatContainer() {
     return null;
   }, [tree, slotSummary, openRequests]);
 
+  // 마지막 메시지가 미회신 선택 카드를 낸 assistant 메시지면 입력창을 잠근다 —
+  // 회신 채널은 카드 클릭뿐이라 텍스트 입력은 답이 될 수 없다.
+  const lastMessage = messages[messages.length - 1];
+  const hasPendingChoice =
+    !!lastMessage &&
+    lastMessage.role === "assistant" &&
+    !!lastMessage.choiceRequests?.length &&
+    lastMessage.choiceRequests.some((r) => !lastMessage.choiceReplies?.[r.question]);
+
   let lockedValue: string | undefined;
   let inputPlaceholder: string | undefined;
   if (demoState) {
@@ -1524,6 +1598,9 @@ export function ChatContainer() {
       const scenario = SCENARIOS.find((s) => s.id === demoState.scenarioId);
       lockedValue = scenario?.turns[demoState.turnIndex]?.user;
     }
+  }
+  if (hasPendingChoice) {
+    inputPlaceholder = "위 선택 카드에 먼저 답해 주세요";
   }
 
   return (
@@ -1641,6 +1718,8 @@ export function ChatContainer() {
                 isStreaming={isStreaming}
                 judging={judging}
                 onRegenerate={demoState ? undefined : handleRegenerate}
+                onChoiceSubmit={handleChoiceSubmit}
+                onChoiceSkip={handleChoiceSkip}
               />
             )}
           </div>
@@ -1731,7 +1810,7 @@ export function ChatContainer() {
               )}
             <ChatInput
               onSubmit={handleSubmit}
-              disabled={isStreaming}
+              disabled={isStreaming || hasPendingChoice}
               lockedValue={lockedValue}
               placeholder={inputPlaceholder}
             />

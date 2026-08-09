@@ -5,6 +5,7 @@ import type { ChatScope } from "@/lib/query-scope";
 import type {
   ChatDataSnapshot,
   ChatInputs,
+  ChoiceRequest,
   DataRequest,
   InputRequest,
   Message,
@@ -189,6 +190,7 @@ export async function POST(request: Request): Promise<Response> {
   let responseRecommend: string[] | undefined;
   let responseDataRequests: DataRequest[] | undefined;
   let responseInputRequests: InputRequest[] | undefined;
+  let responseChoiceRequests: ChoiceRequest[] | undefined;
   let responseImages: MessageImage[] | undefined;
   let responseLinks: MessageLink[] | undefined;
   if (body.demo) {
@@ -211,6 +213,9 @@ export async function POST(request: Request): Promise<Response> {
     // 재생하는 것이라, 중간에 사용자 조달을 요구하면 흐름이 끊긴다.
     // 스킬 인자(스칼라)가 없으면 입력 요청을 먼저 — 조달 SQL 보다 선행이다.
     const missingInputs = missingInputRequests(lastUser.content, body.inputs);
+    // 입력 요청(스칼라 값)이 먼저다 — 값이 아예 없으면 후보를 좁힐 수도 없다.
+    const missingChoices =
+      missingInputs.length === 0 ? missingChoiceRequests(lastUser.content) : [];
     const missing = missingDataRequests(
       lastUser.content,
       body.dataSnapshots,
@@ -219,6 +224,9 @@ export async function POST(request: Request): Promise<Response> {
     if (missingInputs.length > 0) {
       responseInputRequests = missingInputs;
       responseText = buildInputRequestResponse(missingInputs);
+    } else if (missingChoices.length > 0) {
+      responseChoiceRequests = missingChoices;
+      responseText = buildChoiceRequestResponse(missingChoices);
     } else if (missing.length > 0) {
       responseDataRequests = missing;
       responseText = buildDataRequestResponse(missing);
@@ -229,7 +237,7 @@ export async function POST(request: Request): Promise<Response> {
     responseRecommend = recommendNext(lastUser.content);
     // 조달을 청하는 답에는 붙이지 않는다 — 없는 데이터를 말하면서 그림을
     // 내미는 건 앞뒤가 안 맞는다.
-    if (!responseDataRequests && !responseInputRequests) {
+    if (!responseDataRequests && !responseInputRequests && !responseChoiceRequests) {
       const images = mockImages(lastUser.content);
       const links = mockLinks(lastUser.content);
       if (images.length > 0) responseImages = images;
@@ -270,6 +278,9 @@ export async function POST(request: Request): Promise<Response> {
               : {}),
             ...(responseInputRequests && responseInputRequests.length > 0
               ? { inputRequests: responseInputRequests }
+              : {}),
+            ...(responseChoiceRequests && responseChoiceRequests.length > 0
+              ? { choiceRequests: responseChoiceRequests }
               : {}),
             ...(responseImages && responseImages.length > 0
               ? { images: responseImages }
@@ -508,6 +519,38 @@ function buildInputRequestResponse(missing: InputRequest[]): string {
     `이 질문에 답하려면 ${names} 값이 필요합니다.\n\n` +
     "데이터 패널의 입력 카드에 값을 넣어 주세요. 값을 채우면 그 값으로 이어서 분석하겠습니다. " +
     "없는 값을 추정해서 답하지 않겠습니다."
+  );
+}
+
+// 센서 ID 패턴(예: S-0004) — 백엔드 `MockLlm` 의 SENSOR_RE 와 같은 규칙.
+const SENSOR_RE = /\bS-\d{3,}\b/g;
+
+/**
+ * mock 이 선택 카드를 낼 수 있는 경우 — 질문에 서로 다른 센서 ID 가 둘 이상
+ * 있으면 "어느 것을 볼지" 후보로 묻는다. 백엔드 `MockLlm` 의 다중 센서 선택
+ * 시나리오(#53)와 같은 규칙이라, choice_request 왕복을 화면에서 실제로
+ * 걸어볼 수 있다.
+ */
+function missingChoiceRequests(question: string): ChoiceRequest[] {
+  // 카드 회신("선택 — S-0004 / S-0005")도 센서 ID 를 그대로 담고 있으므로 회신
+  // 자체는 트리거에서 뺀다 — 안 그러면 답할 때마다 같은 카드가 되돌아온다.
+  if (question.startsWith("선택 —")) return [];
+  const ids = Array.from(new Set(question.match(SENSOR_RE) ?? []));
+  if (ids.length < 2) return [];
+  return [
+    {
+      question: "어느 센서를 분석할까요?",
+      options: ids.map((id) => ({ label: id })),
+      multiSelect: true,
+    },
+  ];
+}
+
+function buildChoiceRequestResponse(requests: ChoiceRequest[]): string {
+  const names = requests.map((r) => `**${r.question}**`).join(", ");
+  return (
+    `${names}\n\n` +
+    "아래 선택 카드에서 골라 주세요. 선택하시면 그 값으로 이어서 분석하겠습니다."
   );
 }
 
