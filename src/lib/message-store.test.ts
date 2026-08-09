@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  groupMessagesByEquipment,
+  buildMessageRows,
+  equipmentsOf,
+  filterByEquipment,
   labelFromRaw,
+  messageStamp,
   migrateMessages,
   removeMessage,
+  sortMessages,
+  timeKey,
   upsertMessage,
+  visibleMessages,
 } from "./message-store";
 import type { DataMessage } from "./types";
 
@@ -39,16 +45,156 @@ describe("upsertMessage", () => {
   });
 });
 
-describe("groupMessagesByEquipment", () => {
-  it("eqpId 로 묶고 없는 것은 미분류(빈 키) 한 묶음이다", () => {
-    const groups = groupMessagesByEquipment([
-      msg({ id: "a", eqpId: "CVD-01" }),
-      msg({ id: "b", raw: "r2" }),
-      msg({ id: "c", eqpId: "CVD-01", raw: "r3" }),
-      msg({ id: "d", eqpId: "ETCH-02", raw: "r4" }),
+describe("timeKey", () => {
+  it("표기가 흔들려도 같은 자릿수로 편다 — 사전순 비교가 곧 시간순", () => {
+    expect(timeKey("2026-08-08T11:58:03.412765")).toBe("20260808115803412765000");
+    // 공백 구분·오프셋·초 생략 — LLM 이 뽑는 값이라 이 정도는 흔들린다.
+    expect(timeKey("2026-08-08 11:58:03.412765")).toBe(timeKey("2026-08-08T11:58:03.412765"));
+    expect(timeKey("2026-08-08T11:58:03.412765+09:00")).toBe(
+      timeKey("2026-08-08T11:58:03.412765"),
+    );
+    expect(timeKey("2026-08-08T11:58")).toBe("20260808115800000000000");
+    // 3자리와 6자리가 섞여도 순서가 맞는다 — 문자열 비교면 .412 가 앞섰을 자리.
+    expect(timeKey("2026-08-08T11:58:03.412")! < timeKey("2026-08-08T11:58:03.412765")!).toBe(
+      true,
+    );
+    expect(timeKey("오전 11시쯤")).toBeNull();
+    expect(timeKey("11:58:03")).toBeNull();
+    expect(timeKey(undefined)).toBeNull();
+  });
+});
+
+describe("sortMessages", () => {
+  it("발생 시각 최신 순 — 같은 초는 소수초가 가른다", () => {
+    const out = sortMessages([
+      msg({ id: "a", raw: "1", occurredAt: "2026-08-08T11:58:03.412108" }),
+      msg({ id: "b", raw: "2", occurredAt: "2026-08-08T12:03:41.284137" }),
+      msg({ id: "c", raw: "3", occurredAt: "2026-08-08T11:58:03.412765" }),
     ]);
-    expect(groups.map((g) => g.equipment)).toEqual(["CVD-01", "", "ETCH-02"]);
-    expect(groups[0].messages.map((m) => m.id)).toEqual(["a", "c"]);
+    expect(out.map((m) => m.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("발생 시각이 없으면 등록 시각으로 줄 선다", () => {
+    const out = sortMessages([
+      msg({ id: "a", raw: "1", createdAt: "2026-08-09T00:00:00.000Z" }),
+      msg({ id: "b", raw: "2", occurredAt: "2026-08-09T09:00:00" }),
+      msg({ id: "c", raw: "3", createdAt: "2026-08-09T10:00:00.000Z" }),
+    ]);
+    expect(out.map((m) => m.id)).toEqual(["c", "b", "a"]);
+  });
+});
+
+describe("messageStamp", () => {
+  it("소수초는 원문 자릿수 그대로 — 없던 0 을 채우지 않는다", () => {
+    const stamp = messageStamp(msg({ occurredAt: "2026-08-08T11:58:03.412" }))!;
+    expect(stamp).toMatchObject({ date: "2026-08-08", time: "11:58:03", frac: "412" });
+    expect(stamp.exact).toBe(true);
+  });
+
+  it("발생 시각이 없으면 등록 시각을 쓰되 exact 가 아니다", () => {
+    expect(messageStamp(msg({ createdAt: "2026-08-09T00:00:00.000Z" }))!.exact).toBe(false);
+    expect(messageStamp(msg({ createdAt: "" }))).toBeNull();
+  });
+});
+
+describe("buildMessageRows", () => {
+  const at = (id: string, occurredAt: string, eqpId = "CVD-01") =>
+    msg({ id, raw: id, occurredAt, eqpId });
+
+  it("시각 축 — 날짜가 바뀌면 구분선, 오래 끊기면 공백 마커", () => {
+    const rows = buildMessageRows(
+      [
+        at("a", "2026-08-08T12:00:00.100000"),
+        at("b", "2026-08-08T11:00:00.100000"),
+        at("c", "2026-08-08T10:50:00.100000"),
+        at("d", "2026-08-07T23:00:00.100000"),
+      ],
+      "time",
+    );
+    expect(rows.map((r) => r.kind)).toEqual([
+      "message", // a
+      "gap", // 60분
+      "message", // b
+      "message", // c — 10분이라 마커 없음
+      "daybreak",
+      "message", // d
+    ]);
+    expect(rows[1]).toMatchObject({ label: "1시간 공백" });
+    expect(rows[4]).toMatchObject({ label: "8월 7일 (금)" });
+  });
+
+  it("공백 마커는 임계 45분 이상에서만", () => {
+    const kinds = (earlier: string) =>
+      buildMessageRows(
+        [at("a", "2026-08-08T12:00:00.000000"), at("b", earlier)],
+        "time",
+      ).map((r) => r.kind);
+    expect(kinds("2026-08-08T11:16:00.000000")).toEqual(["message", "message"]);
+    expect(kinds("2026-08-08T11:15:00.000000")).toEqual(["message", "gap", "message"]);
+  });
+
+  it("시각 없는 건 사이에는 공백 마커를 놓지 않는다 — 등록 시각의 간격은 유입 간격이 아니다", () => {
+    const rows = buildMessageRows(
+      [
+        at("a", "2026-08-09T12:00:00.000000"),
+        msg({ id: "b", raw: "b", createdAt: "2026-08-09T00:00:00.000Z" }),
+      ],
+      "time",
+    );
+    expect(rows.map((r) => r.kind)).toEqual(["message", "message"]);
+  });
+
+  it("설비 축 — 이름순, 미분류는 맨 뒤", () => {
+    const rows = buildMessageRows(
+      [
+        at("a", "2026-08-08T12:00:00.000000", "ETCH-02"),
+        msg({ id: "b", raw: "b", occurredAt: "2026-08-08T11:00:00.000000" }),
+        at("c", "2026-08-08T10:00:00.000000", "CVD-01"),
+      ],
+      "eqp",
+    );
+    expect(rows.filter((r) => r.kind === "header").map((r) => r.label)).toEqual([
+      "CVD-01",
+      "ETCH-02",
+      "미분류",
+    ]);
+    expect(visibleMessages(rows).map((m) => m.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("날짜 축 — 최신 날짜부터, 머리에 건수", () => {
+    const rows = buildMessageRows(
+      [
+        at("a", "2026-08-07T12:00:00.000000"),
+        at("b", "2026-08-08T09:00:00.000000"),
+        at("c", "2026-08-08T08:00:00.000000"),
+      ],
+      "date",
+    );
+    expect(rows[0]).toMatchObject({ kind: "header", label: "8월 8일 (토)", count: 2 });
+    expect(visibleMessages(rows).map((m) => m.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("보이는 순서가 곧 상세 순회 순서다", () => {
+    const list = [
+      at("a", "2026-08-08T12:00:00.000000", "ETCH-02"),
+      at("b", "2026-08-08T11:00:00.000000", "CVD-01"),
+    ];
+    expect(visibleMessages(buildMessageRows(list, "time")).map((m) => m.id)).toEqual(["a", "b"]);
+    // 같은 목록이라도 설비 축에서는 CVD-01 이 먼저 — 순회도 그 순서를 따른다.
+    expect(visibleMessages(buildMessageRows(list, "eqp")).map((m) => m.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("equipmentsOf · filterByEquipment", () => {
+  it("고른 설비가 없으면 전체다", () => {
+    const list = [
+      msg({ id: "a", raw: "a", eqpId: "ETCH-02" }),
+      msg({ id: "b", raw: "b", eqpId: "CVD-01" }),
+      msg({ id: "c", raw: "c" }),
+    ];
+    expect(equipmentsOf(list)).toEqual(["CVD-01", "ETCH-02"]);
+    expect(filterByEquipment(list, [])).toHaveLength(3);
+    expect(filterByEquipment(list, ["CVD-01"]).map((m) => m.id)).toEqual(["b"]);
   });
 });
 
@@ -71,6 +217,15 @@ describe("migrateMessages", () => {
     const out = migrateMessages([ok, { id: "x" }, null, "junk"]);
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe("dmsg-1");
+  });
+
+  it("모양이 어긋난 발생 시각은 떼고 받는다 — 정렬 키로 쓸 수 없다", () => {
+    const out = migrateMessages([
+      msg({ occurredAt: "2026-08-08T11:58:03.412765" }),
+      msg({ id: "dmsg-2", raw: "r2", occurredAt: "오전 11시쯤" }),
+    ]);
+    expect(out[0].occurredAt).toBe("2026-08-08T11:58:03.412765");
+    expect(out[1].occurredAt).toBeUndefined();
   });
 
   it("label 이 없으면 원문에서 만든다", () => {

@@ -63,6 +63,10 @@ export type FormattedMessage = {
   comment?: string;
   eqpId?: string;
   className?: string;
+  /** 목록에서 이 한 건을 알아볼 짧은 이름 — 없으면 className·원문 머리로 물러난다. */
+  title?: string;
+  /** 메시지 안에 찍힌 발생 시각 — 등록 시각이 아니다(소수초 원문 정밀도). */
+  occurredAt?: string;
   docId?: string;
 };
 

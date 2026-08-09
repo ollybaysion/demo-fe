@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { maybeApplyDevSeed } from "@/lib/dev-seed";
 import { newId } from "@/lib/id";
 import { labelFromRaw, removeMessage, upsertMessage } from "@/lib/message-store";
 import { loadMessages, persistMessages } from "@/lib/snapshot-idb";
@@ -21,6 +22,8 @@ export function useDataMessages() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      // dev 전용: ?msgs=days 로 열면 스토리지를 표본으로 채운 뒤 읽는다.
+      await maybeApplyDevSeed();
       const stored = await loadMessages();
       if (cancelled) return;
       persistedRef.current = stored;
@@ -48,13 +51,19 @@ export function useDataMessages() {
     (raw: string, formatted: FormattedMessage): DataMessage => {
       const message: DataMessage = {
         id: newId("dmsg-"),
-        label: formatted.className?.trim() || labelFromRaw(raw),
+        // 제목은 BE 가 붙인 이름이 먼저다 — 다건 목록에서 className 만 반복되면
+        // 같은 클래스 메시지들이 전부 같은 글자로 서서 고를 수가 없다.
+        label:
+          formatted.title?.trim() ||
+          formatted.className?.trim() ||
+          labelFromRaw(raw),
         createdAt: new Date().toISOString(),
         raw,
         json: formatted.json,
         ...(formatted.comment ? { comment: formatted.comment } : {}),
         ...(formatted.eqpId ? { eqpId: formatted.eqpId } : {}),
         ...(formatted.className ? { className: formatted.className } : {}),
+        ...(formatted.occurredAt ? { occurredAt: formatted.occurredAt } : {}),
         ...(formatted.docId ? { docId: formatted.docId } : {}),
       };
       let stored = message;
