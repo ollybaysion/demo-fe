@@ -138,6 +138,10 @@ type Props = {
    * 그 줄이 서고, 없으면 판정 중이 아니다.
    */
   messageProgress?: MessageProgress | null;
+  /** 방금 [메시지로] 로 바꾼 표가 있다 — 되돌리기 한 줄이 선다. */
+  asMessageUndo?: boolean;
+  onUndoAsMessage?: () => void;
+  onDismissAsMessageUndo?: () => void;
   onRemoveMessage?: (id: string) => void;
   /**
    * 붙여넣기 텍스트의 메시지 판정 왕복 — true 면 메시지 카드가 섰다(표 등록
@@ -234,6 +238,9 @@ export function DataPanel({
   judging = false,
   dataMessages = [],
   messageProgress = null,
+  asMessageUndo = false,
+  onUndoAsMessage,
+  onDismissAsMessageUndo,
   onRemoveMessage,
   onTryMessagePaste,
   onSubmitMessage,
@@ -339,10 +346,25 @@ export function DataPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTab("messages");
   }, [judgingMessages]);
+  /**
+   * 상세가 열 수 있는 표 — **목록에 보이는 것 전부**다.
+   *
+   * `snapshots` 는 세션 스코프를 탄 목록이라, 그룹(작업판 트리)에 붙어 화면에는 서
+   * 있는데 여기엔 없는 카드가 생긴다(다른 세션이 등록했거나 스코프가 좁혀졌을 때).
+   * 그때 상세가 그 카드를 못 찾으면 <b>보이는 카드를 눌렀는데 아무것도 안 뜬다</b> —
+   * 목록이 그룹으로 그리는 것과 같은 규율(트리는 스코프와 무관하게 본문을 찾는다)을
+   * 상세도 따라야 한다.
+   */
+  const openableSnapshots = [
+    ...snapshots,
+    ...shownGroups.flatMap((g) => g.snapshots),
+  ].filter((s, at, all) => all.findIndex((x) => x.id === s.id) === at);
   const detailTarget =
     expanded && !pickedImage && !pickedMessage
-      ? (snapshots.find((s) => picked?.kind === "snapshot" && s.id === picked.id) ??
-        snapshots[0] ??
+      ? (openableSnapshots.find(
+          (s) => picked?.kind === "snapshot" && s.id === picked.id,
+        ) ??
+        openableSnapshots[0] ??
         null)
       : null;
 
@@ -701,6 +723,34 @@ export function DataPanel({
               );
             })}
           </div>
+
+          {/*
+            [메시지로] 되돌리기 — 탭 줄 바로 아래, 스크롤 밖이다. 표는 휴지통에
+            들어가 있지만 그 서랍은 넓게 보기에서 잠기고, 새로 선 메시지는 따로
+            지워야 한다. 잘못 눌렀을 때 되물릴 길이 **누른 자리 근처에** 있어야 한다.
+          */}
+          {asMessageUndo && (
+            <div className="shrink-0 flex items-center gap-xs px-lg py-xs border-b border-brand-hairline-soft bg-brand-primary/5">
+              <span className="flex-1 min-w-0 truncate text-caption text-brand-body">
+                표를 메시지로 바꿨습니다 — 표는 휴지통에 있습니다.
+              </span>
+              <button
+                type="button"
+                onClick={onUndoAsMessage}
+                className="shrink-0 text-caption font-medium text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+              >
+                되돌리기
+              </button>
+              <button
+                type="button"
+                onClick={onDismissAsMessageUndo}
+                aria-label="되돌리기 안내 닫기"
+                className="shrink-0 text-caption text-brand-muted-soft hover:text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-sm px-xxs"
+              >
+                닫기
+              </button>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto scrollbar-none">
             {tab === "data" && (
