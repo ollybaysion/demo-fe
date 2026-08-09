@@ -9,8 +9,9 @@ import {
 } from "@/lib/clipboard-ingest";
 import type { PendingInput } from "@/lib/input-store";
 import type { DerivedGroup } from "../context/derive-cards";
-import type { DataSnapshot } from "@/lib/types";
+import type { DataMessage, DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
+import { MessageSection } from "./MessageCards";
 import { ArtifactCard } from "./ArtifactCard";
 import { ArtifactDetail } from "./ArtifactDetail";
 import type { Artifact } from "./artifacts";
@@ -128,6 +129,19 @@ type Props = {
   onSetAllGroups?: (open: boolean) => void;
   /** 등록한 데이터가 판정 왕복 중 — 헤더 신호등이 돌고, 끝나면 초록으로 한 번 켜진다. */
   judging?: boolean;
+  /** 데이터 메시지 목록(BE #64 MVP) — 설비별 제목 줄 + 상세 모달로 그린다. */
+  dataMessages?: DataMessage[];
+  onRemoveMessage?: (id: string) => void;
+  /**
+   * 붙여넣기 텍스트의 메시지 판정 왕복 — true 면 메시지 카드가 섰다(표 등록
+   * 생략), false 면 비메시지·실패(로컬 표 파싱으로 폴백). 안 넘기면 붙여넣기는
+   * 지금처럼 바로 표 파싱이다.
+   */
+  onTryMessagePaste?: (text: string) => Promise<boolean>;
+  /** 명시 등록([+ 메시지] 입력 카드) — 판별 없이 무조건 메시지로. */
+  onSubmitMessage?: (text: string) => Promise<boolean>;
+  /** 스냅샷 오판 교정 — [메시지로] 버튼. 성공하면 호스트가 카드를 교체한다. */
+  onSnapshotAsMessage?: (id: string) => void;
 };
 
 /**
@@ -202,6 +216,11 @@ export function DataPanel({
   onToggleGroup,
   onSetAllGroups,
   judging = false,
+  dataMessages = [],
+  onRemoveMessage,
+  onTryMessagePaste,
+  onSubmitMessage,
+  onSnapshotAsMessage,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [seed, setSeed] = useState<{
@@ -220,6 +239,10 @@ export function DataPanel({
   // 산출물 단은 펼친 채로 — 방금 나온 답의 표·차트가 여기 서므로 접혀 있으면
   // 답이 나와도 화면이 안 움직인 것처럼 보인다.
   const [artifactsOpen, setArtifactsOpen] = useState(true);
+  // 메시지 단 — 산출물과 같은 이유로 펼친 채 시작.
+  const [messagesOpen, setMessagesOpen] = useState(true);
+  // 명시 입력 카드([+ 메시지]) 열림.
+  const [messageInputOpen, setMessageInputOpen] = useState(false);
   // 요청 카드 접힘 — null = 전부 펼침. 단 제목 줄의 아이콘이 여기를 쥔다.
   const [openRequestKeys, setOpenRequestKeys] = useState<string[] | null>(null);
   /**
@@ -387,6 +410,19 @@ export function DataPanel({
           setIngestError(null);
           return;
         }
+        // 메시지 판정 왕복 먼저(BE #64) — 메시지로 서면 표 등록은 없던 일이고,
+        // 비메시지·실패면 지금까지의 로컬 표 파싱으로 폴백한다(fail-open).
+        if (onTryMessagePaste) {
+          void onTryMessagePaste(plan.text).then((becameMessage) => {
+            if (becameMessage) {
+              setMessagesOpen(true);
+              setIngestError(null);
+            } else {
+              registerText(plan.text);
+            }
+          });
+          return;
+        }
         registerText(plan.text);
         return;
       }
@@ -398,7 +434,7 @@ export function DataPanel({
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [registerText, registerImages, onAddArtifact, addOpen]);
+  }, [registerText, registerImages, onAddArtifact, addOpen, onTryMessagePaste]);
 
   // 넓게 보기로 들어가면 서랍은 닫는다 — 열어 둔 채 넓히면 읽으려던 상세 면이
   // 덮인 채로 시작한다. 닫아 두면 돌아왔을 때도 놀랄 것이 없다.
@@ -677,6 +713,9 @@ export function DataPanel({
                                   : undefined
                               }
                               selected={expanded && s.id === detailTarget?.id}
+                              {...(onSnapshotAsMessage
+                                ? { onAsMessage: () => onSnapshotAsMessage(s.id) }
+                                : {})}
                             />
                           </div>
                         ))}
@@ -713,11 +752,35 @@ export function DataPanel({
                           : undefined
                       }
                       selected={expanded && s.id === detailTarget?.id}
+                      {...(onSnapshotAsMessage
+                        ? { onAsMessage: () => onSnapshotAsMessage(s.id) }
+                        : {})}
                     />
                   ))}
                 </div>
               )}
             </CollapsibleSection>
+
+            {/*
+              메시지 단(BE #64 MVP) — 표(스냅샷)와 정체가 다른 근거라 단을
+              나눈다. 목록은 설비별 제목 줄만, 내용은 상세 모달로(메시지가
+              건마다 카드로 서면 패널이 스택으로 부푼다 — 사용자 결정).
+            */}
+            {(dataMessages.length > 0 || messageInputOpen) && (
+              <CollapsibleSection
+                title={`메시지 (${dataMessages.length})`}
+                open={messagesOpen}
+                onToggle={() => setMessagesOpen((v) => !v)}
+              >
+                <MessageSection
+                  messages={dataMessages}
+                  onRemove={(id) => onRemoveMessage?.(id)}
+                  inputOpen={messageInputOpen}
+                  onCloseInput={() => setMessageInputOpen(false)}
+                  onSubmitInput={onSubmitMessage ?? (() => Promise.resolve(false))}
+                />
+              </CollapsibleSection>
+            )}
 
             {/*
               답변 산출물 — 원래 대화 옆 페어 패널에 붙던 것들이 여기로 왔다.
@@ -768,17 +831,34 @@ export function DataPanel({
 
           {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
           <div className="shrink-0 px-lg py-md border-t border-brand-hairline">
-            <button
-              type="button"
-              onClick={() => {
-                setSeed(null);
-                setAddOpen(true);
-              }}
-              className="w-full inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-            >
-              <PlusIcon />
-              데이터 추가
-            </button>
+            <div className="flex gap-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setSeed(null);
+                  setAddOpen(true);
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+              >
+                <PlusIcon />
+                데이터 추가
+              </button>
+              {/* 명시 메시지 등록 — 판별을 안 거치고 반드시 메시지로 들어간다. */}
+              {onSubmitMessage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessageInputOpen(true);
+                    setMessagesOpen(true);
+                  }}
+                  title="메시지 직접 등록 — 판별 없이 메시지로 변환합니다"
+                  className="shrink-0 inline-flex items-center justify-center gap-xs h-10 px-sm rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
+                >
+                  <PlusIcon />
+                  메시지
+                </button>
+              )}
+            </div>
             {ingestError ? (
               <p
                 role="alert"

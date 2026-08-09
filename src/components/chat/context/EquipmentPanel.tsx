@@ -397,6 +397,18 @@ function EquipmentCard({
                 : {})}
             />
           ))}
+          {/* 메시지는 몇 건이든 **한 줄** — 분석 카드처럼 건마다 줄을 세우면
+              설비 카드가 메시지 스택으로 부푼다. 목록·상세는 왼쪽 메시지 단. */}
+          {(card.messageCount ?? 0) > 0 && (
+            <div className="rounded-md border border-brand-hairline bg-brand-canvas px-xs py-[6px] flex items-center gap-xs">
+              <span className="flex-1 min-w-0 truncate text-caption text-brand-muted">
+                메시지
+              </span>
+              <span className="shrink-0 text-caption text-brand-muted-soft tabular-nums">
+                {card.messageCount}건
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

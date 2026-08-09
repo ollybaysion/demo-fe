@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { newId as sharedNewId } from "@/lib/id";
 import { maybeApplyDevSeed } from "@/lib/dev-seed";
+import { MESSAGE_RAW_MAX_CHARS } from "@/lib/message-store";
 import { loadSnapshots, persistSnapshots } from "@/lib/snapshot-idb";
 import { parseSnapshot, toQueryKey } from "@/lib/snapshot-parse";
 import type { SnapshotParseError } from "@/lib/snapshot-parse";
@@ -171,6 +172,9 @@ export function useDataSnapshots() {
         included: true,
         warnings: parsed.warnings,
         ...(opts?.sourceSql?.trim() ? { sourceSql: opts.sourceSql.trim() } : {}),
+        // 원문 보존 — [메시지로](오판 교정)가 되보낼 값. 메시지일 수 없는
+        // 크기(BE pasted 캡 초과)는 담지 않는다.
+        ...(input.length <= MESSAGE_RAW_MAX_CHARS ? { rawText: input } : {}),
       };
 
       return commit(snapshot, opts?.include ?? false);

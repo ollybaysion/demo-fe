@@ -309,6 +309,11 @@ function coerceSnapshot(raw: unknown): DataSnapshot | null {
     ...(typeof r.sourceSql === "string" && r.sourceSql.trim().length > 0
       ? { sourceSql: r.sourceSql }
       : {}),
+    // 붙여넣기 원문 — [메시지로](오판 교정)가 판정에 되보내는 값이라 접어 두면
+    // 교정 경로가 저장소를 건널 때 끊긴다.
+    ...(typeof r.rawText === "string" && r.rawText.length > 0
+      ? { rawText: r.rawText }
+      : {}),
     // 휴지통 상태는 저장소를 건너오는 값이다 — 안 접으면 새로고침 한 번에
     // 버린 것이 전부 목록으로 돌아온다.
     ...(typeof r.deletedAt === "string" && r.deletedAt.length > 0
