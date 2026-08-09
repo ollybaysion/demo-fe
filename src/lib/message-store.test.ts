@@ -101,7 +101,7 @@ describe("buildMessageRows", () => {
   const at = (id: string, occurredAt: string, eqpId = "CVD-01") =>
     msg({ id, raw: id, occurredAt, eqpId });
 
-  it("시각 축 — 날짜가 바뀌면 구분선, 오래 끊기면 공백 마커", () => {
+  it("시각 축 — 날짜가 바뀔 때만 구분선이 선다", () => {
     const rows = buildMessageRows(
       [
         at("a", "2026-08-08T12:00:00.100000"),
@@ -111,37 +111,15 @@ describe("buildMessageRows", () => {
       ],
       "time",
     );
+    // 한 시간이 비어도 줄은 이어진다 — 유입 간격은 목록이 말할 일이 아니다.
     expect(rows.map((r) => r.kind)).toEqual([
       "message", // a
-      "gap", // 60분
       "message", // b
-      "message", // c — 10분이라 마커 없음
+      "message", // c
       "daybreak",
       "message", // d
     ]);
-    expect(rows[1]).toMatchObject({ label: "1시간 공백" });
-    expect(rows[4]).toMatchObject({ label: "8월 7일 (금)" });
-  });
-
-  it("공백 마커는 임계 45분 이상에서만", () => {
-    const kinds = (earlier: string) =>
-      buildMessageRows(
-        [at("a", "2026-08-08T12:00:00.000000"), at("b", earlier)],
-        "time",
-      ).map((r) => r.kind);
-    expect(kinds("2026-08-08T11:16:00.000000")).toEqual(["message", "message"]);
-    expect(kinds("2026-08-08T11:15:00.000000")).toEqual(["message", "gap", "message"]);
-  });
-
-  it("시각 없는 건 사이에는 공백 마커를 놓지 않는다 — 등록 시각의 간격은 유입 간격이 아니다", () => {
-    const rows = buildMessageRows(
-      [
-        at("a", "2026-08-09T12:00:00.000000"),
-        msg({ id: "b", raw: "b", createdAt: "2026-08-09T00:00:00.000Z" }),
-      ],
-      "time",
-    );
-    expect(rows.map((r) => r.kind)).toEqual(["message", "message"]);
+    expect(rows[3]).toMatchObject({ label: "8월 7일 (금)" });
   });
 
   it("설비 축 — 이름순, 미분류는 맨 뒤", () => {

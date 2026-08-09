@@ -240,7 +240,11 @@ async function buildCardSeed(): Promise<{
   // 첫 조달 수단은 도착한 것으로 — 한 카드 안에서 "온 것"과 "아직 안 온 것"이
   // 어떻게 보이는지 같이 봐야 한다(도착 = 스냅샷 카드, 미도착 = 요청 카드).
   const slot = analysis.dataList[0];
-  const columns = ["EQPID", "SNSR_ID", "SNSR_NM", "USE_YN", "UPDATED_AT"];
+  const query = skill.queries[0];
+  // 컬럼도 SQL 도 그 조회에서 온다 — 표와 출처가 어긋난 예시는 볼 값어치가 없다.
+  const sql = boundSql(query.sql, query.argBinds, values);
+  const parsed = selectedColumns(query.sql);
+  const columns = parsed.length > 0 ? parsed : ["EQP_ID", "VALUE", "UPDATED_AT"];
   const snapshot: DataSnapshot = {
     id: "snap-card-seed",
     queryKey: slotQueryKey(analysis, slot.queryId),
@@ -248,17 +252,12 @@ async function buildCardSeed(): Promise<{
     capturedAt: new Date().toISOString(),
     columns,
     rows: Array.from({ length: 12 }, (_, r) =>
-      columns.map((c) =>
-        c === "EQPID"
-          ? "CVD-01"
-          : c === "USE_YN"
-            ? (r % 4 === 3 ? "N" : "Y")
-            : `${c}_${r + 1}`,
-      ),
+      columns.map((c) => cellValue(c, r, values)),
     ),
     contentHash: "cd".repeat(32),
     included: true,
     warnings: ["INTEGRITY_ABSENT"],
+    sourceSql: sql,
   };
   return {
     tree: fulfillSlot(wb, snapshot.queryKey, snapshot.id),
@@ -269,6 +268,36 @@ async function buildCardSeed(): Promise<{
 /** 인자 예시값 — 스킬 설명의 `(예: S-0004)` 를 그대로 쓴다(지어내지 않는다). */
 function sampleArg(input: SkillInput): string {
   return input.description?.match(/예:\s*([^)\s,]+)/)?.[1] ?? "1";
+}
+
+/** `:bind` 를 인자값으로 — BE 원장이 요청 카드에 싣는 문장과 같은 모양으로. */
+function boundSql(
+  sql: string,
+  argBinds: Record<string, string>,
+  values: Record<string, string>,
+): string {
+  let out = sql;
+  for (const [bind, argKey] of Object.entries(argBinds)) {
+    const value = values[argKey];
+    if (value === undefined) continue;
+    out = out.replace(new RegExp(`:${bind}\\b`, "g"), `'${value}'`);
+  }
+  return out;
+}
+
+/** SELECT 목록 → 컬럼명(대문자). 못 읽으면 빈 배열 — 지어내지 않는다. */
+function selectedColumns(sql: string): string[] {
+  const list = sql.match(/select\s+([\s\S]+?)\s+from\s/i)?.[1];
+  if (!list || list.includes("*")) return [];
+  return list.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean);
+}
+
+/** 예시 셀 — 인자로 특정된 열은 그 값, 플래그는 Y/N, 나머지는 열 이름 + 행 번호. */
+function cellValue(column: string, row: number, values: Record<string, string>): string {
+  const arg = values[column.toLowerCase()];
+  if (arg) return arg;
+  if (column.endsWith("_YN")) return row % 4 === 3 ? "N" : "Y";
+  return `${column}_${row + 1}`;
 }
 
 /**

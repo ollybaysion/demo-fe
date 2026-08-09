@@ -39,17 +39,13 @@ export function removeMessage(list: DataMessage[], id: string): DataMessage[] {
 /** 목록을 어떤 축으로 묶어 볼 것인가 — 정렬(최신 순)은 어느 축에서든 같다. */
 export type GroupMode = "time" | "eqp" | "date";
 
-/** 이 분 이상 비면 목록에 공백 마커를 놓는다 — 유입이 끊긴 자리를 눈으로 알게. */
-export const GAP_THRESHOLD_MINUTES = 45;
-
 /**
- * 그려질 줄 — 메시지 줄 사이에 날짜 구분선·공백 마커·묶음 머리가 섞인다.
+ * 그려질 줄 — 메시지 줄 사이에 날짜 구분선·묶음 머리가 섞인다.
  * 화면은 이 배열을 순서대로 그리기만 한다(묶기 규칙은 전부 여기 있다).
  */
 export type MessageRow =
   | { kind: "message"; message: DataMessage }
   | { kind: "daybreak"; label: string }
-  | { kind: "gap"; label: string }
   | { kind: "header"; label: string; count: number };
 
 /** `yyyy-MM-dd`(T| )`HH:mm[:ss[.f…]]` — 뒤의 오프셋·Z 는 보지 않는다. */
@@ -116,26 +112,12 @@ export function dateLabel(date: string): string {
   return `${mo}월 ${d}일 (${weekday})`;
 }
 
-function gapLabel(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  return h > 0 ? `${h}시간 ${m ? `${m}분 ` : ""}공백` : `${m}분 공백`;
-}
-
-function minutesOfKey(key: string): number {
-  return (
-    Number(key.slice(8, 10)) * 60 +
-    Number(key.slice(10, 12)) +
-    Number(key.slice(12, 14)) / 60
-  );
-}
-
 /**
  * 목록 한 벌 — 정렬 + 묶기 + 사이 표식까지 마친 줄들.
  *
- * `time` 축은 한 줄기로 흐르되 날짜가 바뀌면 구분선을, 유입이 오래 끊기면 공백
- * 마커를 끼운다. `eqp`·`date` 축은 머리를 세워 묶는다 — 설비는 이름순(사람이
- * 찾는 축이라 순서가 고정이어야 한다), 날짜는 최신순이다.
+ * `time` 축은 한 줄기로 흐르되 날짜가 바뀌면 구분선을 끼운다. `eqp`·`date` 축은
+ * 머리를 세워 묶는다 — 설비는 이름순(사람이 찾는 축이라 순서가 고정이어야 한다),
+ * 날짜는 최신순이다.
  */
 export function buildMessageRows(
   list: DataMessage[],
@@ -150,11 +132,6 @@ export function buildMessageRows(
       const prevStamp = prev ? messageStamp(prev) : null;
       if (stamp && prevStamp && stamp.date !== prevStamp.date) {
         rows.push({ kind: "daybreak", label: dateLabel(stamp.date) });
-      } else if (stamp?.exact && prevStamp?.exact) {
-        const minutes = minutesOfKey(keyOf(prev!)) - minutesOfKey(keyOf(message));
-        if (minutes >= GAP_THRESHOLD_MINUTES) {
-          rows.push({ kind: "gap", label: gapLabel(minutes) });
-        }
       }
       rows.push({ kind: "message", message });
       prev = message;

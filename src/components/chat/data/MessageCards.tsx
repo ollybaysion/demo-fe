@@ -146,16 +146,6 @@ export function MessageSection({
                     </div>
                   );
                 }
-                if (row.kind === "gap") {
-                  return (
-                    <p
-                      key={`g-${i}`}
-                      className="py-[3px] text-center text-caption text-brand-muted-soft"
-                    >
-                      · {row.label} ·
-                    </p>
-                  );
-                }
                 return (
                   <MessageRowLine
                     key={row.message.id}
@@ -199,7 +189,7 @@ function MessageRowLine({
   return (
     <div
       className={[
-        "group rounded-md mb-[3px] last:mb-0 flex items-center border transition-colors",
+        "group rounded-md mb-[2px] last:mb-0 flex items-center border transition-colors",
         selected
           ? "bg-brand-primary/5 border-brand-primary/45"
           : "bg-brand-canvas border-transparent",
@@ -209,13 +199,13 @@ function MessageRowLine({
         type="button"
         onClick={onSelect}
         title={message.comment ?? message.label}
-        className="flex-1 min-w-0 px-xs py-[5px] flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-md"
+        className="flex-1 min-w-0 px-xs py-[2px] flex items-center gap-xs text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-md"
       >
-        <span className="shrink-0 w-[62px] font-mono text-[11px] leading-[1.25] tabular-nums text-brand-muted">
+        <span className="shrink-0 w-[62px] font-mono text-[11px] leading-[1.1] tabular-nums text-brand-muted">
           {stamp?.exact ? (
             <>
               {stamp.time}
-              <span className="block text-[10px] text-brand-muted-soft">
+              <span className="block text-[10px] leading-[1.1] text-brand-muted-soft">
                 .{stamp.frac || "0"}
               </span>
             </>

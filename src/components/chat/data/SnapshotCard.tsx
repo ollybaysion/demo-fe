@@ -188,12 +188,15 @@ export function SnapshotCard({
           </div>
         ) : (
           <div className="flex-1 min-w-0">
+            {/* 이름은 자르지 않는다 — 줄을 넘겨서라도 전부 보인다(사용자 결정).
+                긴 이름일수록 뒤쪽에 구별되는 말이 붙는데(설비·구간·회차), 한 줄로
+                자르면 목록의 카드들이 전부 같은 앞머리만 보이게 된다. 카드 높이가
+                늘어나는 값은 치른다. */}
             <span
               className={[
-                "block min-w-0 truncate text-body-sm",
+                "block min-w-0 break-words text-body-sm",
                 snapshot.included ? "text-brand-ink" : "text-brand-muted",
               ].join(" ")}
-              title={snapshot.label}
             >
               {snapshot.label}
             </span>
