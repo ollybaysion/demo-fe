@@ -80,10 +80,12 @@ import {
 import { ConversationsSidebar, useConversations } from "./history";
 import {
   DataPanel,
+  useDataMessages,
   useDataRequests,
   useDataSnapshots,
   useInputRequests,
 } from "./data";
+import { MESSAGE_RAW_MAX_CHARS } from "@/lib/message-store";
 import {
   deriveArtifacts,
   linkLabel,
@@ -299,6 +301,12 @@ export function ChatContainer() {
     fill: fillInput,
     clear: clearInputs,
   } = useInputRequests();
+  // 데이터 메시지(BE #64 MVP) — 스냅샷과 정체·저장소가 다른 근거.
+  const {
+    messages: dataMessages,
+    addFromJudge: addMessageFromJudge,
+    remove: removeDataMessage,
+  } = useDataMessages();
 
   // ── panel-judge 트리거 — 패널 변경 직후 적어 두면 다음 커밋에서 판정이 나간다.
   // (판정 본체는 아래 effect — mutator 직후 클로저는 낡은 상태를 보므로, 상태가
@@ -472,6 +480,20 @@ export function ChatContainer() {
   );
   const detailCard =
     equipmentCards.find((c) => c.id === detailCardId) ?? null;
+
+  // 설비 카드의 메시지 한 줄 — 몇 건이든 수 하나로 접는다(분석 카드처럼 건마다
+  // 줄을 세우면 카드가 부푼다). 소속은 eqpId → 카드 id 결정 규칙 매칭.
+  const messageCountByCardId = new Map<string, number>();
+  for (const m of dataMessages) {
+    const eq = m.eqpId?.trim();
+    if (!eq) continue;
+    const cardId = equipmentCardId(eq);
+    messageCountByCardId.set(cardId, (messageCountByCardId.get(cardId) ?? 0) + 1);
+  }
+  const decoratedEquipmentCards = equipmentCards.map((c) => {
+    const n = messageCountByCardId.get(c.id);
+    return n ? { ...c, messageCount: n } : c;
+  });
 
   // 답변 산출물 — 대화에서 파생된 것이 위(새 답이 먼저), 직접 올린 것이 아래.
   const artifacts = [...deriveArtifacts(messages), ...userArtifacts];
@@ -788,6 +810,78 @@ export function ChatContainer() {
 
   // 언마운트 시 진행 중 판정 정리.
   useEffect(() => () => judgeAbortRef.current?.abort(), []);
+
+  /**
+   * 메시지 판정 왕복(BE #64 MVP) — 붙여넣기·명시 등록·오판 교정이 전부 이 길로
+   * 온다. FE 판단 0: 원문을 그대로 `pasted` 로 보내고, BE 가 스니프(+LLM 1회)로
+   * 답한다. 성공이면 메시지 카드 등록 + 설비 카드 upsert, 실패면 false —
+   * 호출부가 폴백(로컬 표 파싱)을 잇는다.
+   *
+   * 패널 판정(`pendingJudgeRef` effect)과 별개의 왕복이다 — 응답에 원장이
+   * 없으므로 `setLedger` 를 건드리지 않는다.
+   */
+  const tryMessageJudge = useCallback(
+    async (text: string, force: boolean): Promise<boolean> => {
+      if (text.trim().length === 0 || text.length > MESSAGE_RAW_MAX_CHARS) {
+        return false;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS);
+      setJudging(true);
+      try {
+        const done = await judgeChatData(
+          {
+            eventId: newId(),
+            revision: 0,
+            event: { type: "pasted" },
+            pasted: text,
+            ...(force ? { pastedForce: true } : {}),
+          },
+          {},
+          controller.signal,
+        );
+        const formatted = done?.formattedMessage;
+        if (!formatted || formatted.json === undefined || formatted.json === null) {
+          return false;
+        }
+        const stored = addMessageFromJudge(text, formatted);
+        // 설비 id 가 뽑혔으면 그 설비 카드부터 세운다(같은 이름은 병합) —
+        // 메시지 한 줄은 파생 데코레이션이 이름 매칭으로 단다.
+        const eqpId = stored.eqpId;
+        if (eqpId) {
+          setTree((prev) => upsertEquipment(prev, eqpId, null));
+        }
+        return true;
+      } finally {
+        clearTimeout(timeoutId);
+        setJudging(false);
+      }
+    },
+    [addMessageFromJudge],
+  );
+
+  /**
+   * 오판 교정 — 표로 잘못 판별된 스냅샷을 원문 그대로 메시지 판정에 강제
+   * 재왕복시키고, 성공하면 표 카드를 휴지통으로 보낸다(교체). 원문이 없는
+   * 구세대 저장분은 표를 TSV 로 되접어 보낸다 — 원문과 완전히 같지는 않지만
+   * 강제 경로라 판별에 쓰이지 않고, 내용은 보존된다.
+   */
+  const handleSnapshotAsMessage = useCallback(
+    (id: string) => {
+      const snap = snapshots.find((s) => s.id === id);
+      if (!snap) return;
+      const raw =
+        snap.rawText ??
+        [
+          snap.columns.join("\t"),
+          ...snap.rows.map((r) => r.map((c) => c ?? "").join("\t")),
+        ].join("\n");
+      void tryMessageJudge(raw, true).then((ok) => {
+        if (ok) removeSnapshot(id);
+      });
+    },
+    [snapshots, tryMessageJudge, removeSnapshot],
+  );
 
   const sendToApi = useCallback(
     async (
@@ -1582,6 +1676,11 @@ export function ChatContainer() {
               expanded={dataExpandedInner}
               detailVisible={dataDetailVisible}
               onToggleExpanded={toggleDataExpanded}
+              dataMessages={dataMessages}
+              onRemoveMessage={removeDataMessage}
+              onTryMessagePaste={(text) => tryMessageJudge(text, false)}
+              onSubmitMessage={(text) => tryMessageJudge(text, true)}
+              onSnapshotAsMessage={handleSnapshotAsMessage}
             />
           </div>
         </div>
@@ -1609,7 +1708,10 @@ export function ChatContainer() {
                 채팅 없이 결과부터 등록한 사용자에게 생각 중 표시도, 곧 도착할
                 종결 서술의 자리도 시작 화면에 가려 보이지 않는다. */}
             {messages.length === 0 && !judging ? (
-              <ChatEmptyState onQuickStart={handleQuickStart} />
+              <ChatEmptyState
+                onQuickStart={handleQuickStart}
+                compressed={detailCard !== null || dataExpanded}
+              />
             ) : (
               <MessageList
                 messages={messages}
@@ -1778,7 +1880,7 @@ export function ChatContainer() {
           {/* 오른쪽 패널 = 설비 카드. 카드·줄은 현재 세션 요청+스냅샷에서 파생. */}
           <EquipmentPanel
             open={rightTab === "context"}
-            cards={equipmentCards}
+            cards={decoratedEquipmentCards}
             onFocusLine={(lineKey) => {
               // lineKey 는 곧 그룹 키다(설비·구간·category). 그 그룹만 왼쪽에서
               // 펼치고 깜빡여 안내한다 — 대기 줄이면 그 안에 요청 카드가, 채워진

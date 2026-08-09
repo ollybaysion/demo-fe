@@ -17,6 +17,12 @@ type Props = {
    * 요청 카드를 만들지 않으므로, 왕복을 걸어 보는 길은 이쪽뿐이다.
    */
   onQuickStart?: (question: string) => void;
+  /**
+   * 축소 레이아웃(#185 — 데이터 패널 확장·설비 상세로 채팅이 좁아진 상태).
+   * 팁과 제목("무엇을 도와드릴까요?")만 80% 로 줄인다 — 42px 제목이 좁은
+   * 칸에서 화면을 과하게 차지해서다. 나머지(부제·왕복 줄)는 그대로 둔다.
+   */
+  compressed?: boolean;
 };
 
 const ROUNDTRIPS = [
@@ -41,24 +47,29 @@ const ROUNDTRIPS = [
  * <p>글꼴은 `--font-hero-*`(설정 > 시작 화면 글꼴)를 따른다. 기본은
  * Pretendard 이고, 명조·고딕 세트를 고를 수 있다.
  */
-export function ChatEmptyState({ onQuickStart }: Props) {
+export function ChatEmptyState({ onQuickStart, compressed = false }: Props) {
   return (
     <div className="pt-xl pb-section">
-      <RotatingTip />
+      {/* 축소 대상은 팁 + 제목뿐(#185) — 괘선·부제·왕복 줄은 원 배율 유지. */}
+      <div style={compressed ? { zoom: 0.8 } : undefined}>
+        <RotatingTip />
 
-      <div className="mt-xxl text-center">
-        <h2
-          className="text-brand-ink"
-          style={{
-            fontFamily: "var(--font-hero-head)",
-            fontWeight: "var(--font-hero-head-weight)" as unknown as number,
-            fontSize: 42,
-            lineHeight: 1.15,
-          }}
-        >
-          무엇을 도와드릴까요?
-        </h2>
+        <div className="mt-xxl text-center">
+          <h2
+            className="text-brand-ink"
+            style={{
+              fontFamily: "var(--font-hero-head)",
+              fontWeight: "var(--font-hero-head-weight)" as unknown as number,
+              fontSize: 42,
+              lineHeight: 1.15,
+            }}
+          >
+            무엇을 도와드릴까요?
+          </h2>
+        </div>
+      </div>
 
+      <div className="text-center">
         {/* 짧은 괘선 — 제목과 부제 사이의 숨. 지면의 문법을 한 획만 빌린다. */}
         <div className="mx-auto mt-lg h-px w-12 bg-brand-primary/40" />
 

@@ -21,14 +21,21 @@
  */
 
 import { readJson, removeKey, writeJson } from "@/lib/storage";
+import { migrateMessages } from "@/lib/message-store";
 import { SNAPSHOTS_STORAGE_KEY, migrateSnapshots } from "@/lib/snapshot-store";
-import type { DataSnapshot } from "@/lib/types";
+import type { DataMessage, DataSnapshot } from "@/lib/types";
 
 const DB_NAME = "fdc-agent";
-const DB_VERSION = 1;
+// v2: `messages` 스토어 추가(데이터 메시지, BE #64 MVP).
+const DB_VERSION = 2;
 const STORE_SNAPSHOTS = "snapshots";
+const STORE_MESSAGES = "messages";
 const STORE_META = "meta";
 const META_ORDER_KEY = "snapshot-order";
+const META_MESSAGE_ORDER_KEY = "message-order";
+
+/** IndexedDB 가 없을 때의 localStorage 후퇴 키 — 메시지는 작아 통짜로 견딘다. */
+const MESSAGES_STORAGE_KEY = "fdc.messages.v1";
 
 function hasIdb(): boolean {
   return typeof indexedDB !== "undefined";
@@ -45,6 +52,9 @@ function openDb(): Promise<IDBDatabase> {
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE_SNAPSHOTS)) {
           db.createObjectStore(STORE_SNAPSHOTS, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(STORE_MESSAGES)) {
+          db.createObjectStore(STORE_MESSAGES, { keyPath: "id" });
         }
         if (!db.objectStoreNames.contains(STORE_META)) {
           db.createObjectStore(STORE_META);
@@ -174,6 +184,81 @@ export async function replaceAllSnapshots(list: DataSnapshot[]): Promise<void> {
     if (list.length === 0) removeKey(SNAPSHOTS_STORAGE_KEY);
     else writeJson(SNAPSHOTS_STORAGE_KEY, list);
   }
+}
+
+/**
+ * 저장된 데이터 메시지 전부 — 목록 순서대로. 스냅샷과 같은 규율(코드보다 오래
+ * 사는 레코드는 {@link migrateMessages} 로 접어 수용)이되, 세대 이관은 없다 —
+ * 이 스토어가 첫 세대다.
+ */
+export async function loadMessages(): Promise<DataMessage[]> {
+  if (typeof window === "undefined") return [];
+  if (!hasIdb()) {
+    return migrateMessages(readJson<unknown>(MESSAGES_STORAGE_KEY, null));
+  }
+  try {
+    const db = await openDb();
+    const tx = db.transaction([STORE_MESSAGES, STORE_META], "readonly");
+    const all = await reqResult<unknown[]>(
+      tx.objectStore(STORE_MESSAGES).getAll(),
+    );
+    const order = await reqResult<unknown>(
+      tx.objectStore(STORE_META).get(META_MESSAGE_ORDER_KEY),
+    );
+    return applyMessageOrder(migrateMessages(all), order);
+  } catch {
+    return migrateMessages(readJson<unknown>(MESSAGES_STORAGE_KEY, null));
+  }
+}
+
+/** 메시지 상태 전이 하나를 저장소에 반영한다 — 스냅샷과 같은 diff 쓰기. */
+export async function persistMessages(
+  prev: DataMessage[],
+  next: DataMessage[],
+): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (!hasIdb()) {
+    writeJson(MESSAGES_STORAGE_KEY, next);
+    return;
+  }
+  const prevById = new Map(prev.map((m) => [m.id, m]));
+  const nextIds = new Set(next.map((m) => m.id));
+  const puts = next.filter((m) => prevById.get(m.id) !== m);
+  const deletes = prev.filter((m) => !nextIds.has(m.id)).map((m) => m.id);
+  const orderChanged =
+    prev.length !== next.length || next.some((m, i) => prev[i]?.id !== m.id);
+  if (puts.length === 0 && deletes.length === 0 && !orderChanged) return;
+  try {
+    const db = await openDb();
+    const tx = db.transaction([STORE_MESSAGES, STORE_META], "readwrite");
+    const store = tx.objectStore(STORE_MESSAGES);
+    for (const id of deletes) store.delete(id);
+    for (const m of puts) store.put(m);
+    tx.objectStore(STORE_META).put(
+      next.map((m) => m.id),
+      META_MESSAGE_ORDER_KEY,
+    );
+    await txDone(tx);
+  } catch {
+    writeJson(MESSAGES_STORAGE_KEY, next);
+  }
+}
+
+/** {@link applyOrder} 의 메시지 판 — 같은 규칙, 다른 타입. */
+function applyMessageOrder(list: DataMessage[], order: unknown): DataMessage[] {
+  if (!Array.isArray(order)) return list;
+  const byId = new Map(list.map((m) => [m.id, m]));
+  const out: DataMessage[] = [];
+  for (const id of order) {
+    if (typeof id !== "string") continue;
+    const m = byId.get(id);
+    if (m) {
+      out.push(m);
+      byId.delete(id);
+    }
+  }
+  for (const m of byId.values()) out.push(m);
+  return out;
 }
 
 /** 상태 전이 하나가 저장소에 요구하는 쓰기 — 순수 함수(테스트 대상). */

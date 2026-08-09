@@ -299,6 +299,42 @@ export type DataSnapshot = {
    * 채우지 않는다. FE 전용 필드라 채팅 페이로드에는 싣지 않는다.
    */
   sourceSql?: string;
+  /**
+   * 붙여넣기 원문 — 표 파싱 **이전**의 텍스트다. 스냅샷 카드의 [메시지로]
+   * (오판 교정)가 이 원문을 그대로 메시지 판정에 다시 보낸다: 파싱된 표에서
+   * 역조립하면 구분자·공백이 원문과 달라져 판정이 어긋난다. 큰 표는 담지
+   * 않는다(BE `pasted` 캡과 같은 32k) — 그 크기는 메시지가 아니다.
+   * FE 전용 필드라 채팅 페이로드에는 싣지 않는다.
+   */
+  rawText?: string;
+};
+
+/**
+ * 데이터 메시지 — 붙여넣은 설비/카프카 메시지를 BE 가 LLM 1회로 포맷팅한 것
+ * (BE #64 MVP). 스냅샷(표)과 정체가 달라 타입도 저장소(IDB `messages`)도
+ * 분리한다 — {@link DataSnapshot} 에 욱여넣으면 `coerceSnapshot` 이 로드 시
+ * 버린다.
+ *
+ * `json`/`comment`/`eqpId` 는 전부 LLM 산출물이라 오차를 허용한다(편의성 기능
+ * 합의) — `raw` 가 진실원이고 카드의 원문 접힘이 그 안전망이다.
+ */
+export type DataMessage = {
+  id: string;
+  /** 카드 목록에 보이는 제목 — className 이 있으면 그것, 없으면 원문 머리. */
+  label: string;
+  /** 등록 시각(ISO). */
+  createdAt: string;
+  /** 붙여넣은 원문 — 진실원. */
+  raw: string;
+  /** BE 포맷팅 결과(객체) — pretty-print 는 화면 소유. */
+  json: unknown;
+  /** 한 줄 요약 — LLM 코멘트. 실패하면 없다. */
+  comment?: string;
+  /** 설비 id — 있으면 그 설비 카드 아래 메시지 줄로 배치, 없으면 미분류. */
+  eqpId?: string;
+  className?: string;
+  /** 근거가 된 msg-format 문서 id — 문서 연동은 고도화(BE #66)라 지금은 없다. */
+  docId?: string;
 };
 
 /**

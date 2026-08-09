@@ -9,8 +9,9 @@ import {
 } from "@/lib/clipboard-ingest";
 import type { PendingInput } from "@/lib/input-store";
 import type { DerivedGroup } from "../context/derive-cards";
-import type { DataSnapshot } from "@/lib/types";
+import type { DataMessage, DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
+import { MessageDetail, MessageSection } from "./MessageCards";
 import { ArtifactCard } from "./ArtifactCard";
 import { ArtifactDetail } from "./ArtifactDetail";
 import type { Artifact } from "./artifacts";
@@ -128,6 +129,19 @@ type Props = {
   onSetAllGroups?: (open: boolean) => void;
   /** 등록한 데이터가 판정 왕복 중 — 헤더 신호등이 돌고, 끝나면 초록으로 한 번 켜진다. */
   judging?: boolean;
+  /** 데이터 메시지 목록(BE #64 MVP) — 설비별 제목 줄 + 상세 모달로 그린다. */
+  dataMessages?: DataMessage[];
+  onRemoveMessage?: (id: string) => void;
+  /**
+   * 붙여넣기 텍스트의 메시지 판정 왕복 — true 면 메시지 카드가 섰다(표 등록
+   * 생략), false 면 비메시지·실패(로컬 표 파싱으로 폴백). 안 넘기면 붙여넣기는
+   * 지금처럼 바로 표 파싱이다.
+   */
+  onTryMessagePaste?: (text: string) => Promise<boolean>;
+  /** 명시 등록([+ 메시지] 입력 카드) — 판별 없이 무조건 메시지로. */
+  onSubmitMessage?: (text: string) => Promise<boolean>;
+  /** 스냅샷 오판 교정 — [메시지로] 버튼. 성공하면 호스트가 카드를 교체한다. */
+  onSnapshotAsMessage?: (id: string) => void;
 };
 
 /**
@@ -202,6 +216,11 @@ export function DataPanel({
   onToggleGroup,
   onSetAllGroups,
   judging = false,
+  dataMessages = [],
+  onRemoveMessage,
+  onTryMessagePaste,
+  onSubmitMessage,
+  onSnapshotAsMessage,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [seed, setSeed] = useState<{
@@ -220,6 +239,12 @@ export function DataPanel({
   // 산출물 단은 펼친 채로 — 방금 나온 답의 표·차트가 여기 서므로 접혀 있으면
   // 답이 나와도 화면이 안 움직인 것처럼 보인다.
   const [artifactsOpen, setArtifactsOpen] = useState(true);
+  // 메시지 단 — 산출물과 같은 이유로 펼친 채 시작.
+  const [messagesOpen, setMessagesOpen] = useState(true);
+  // 명시 입력 카드(분류에서 [메시지] 선택) 열림.
+  const [messageInputOpen, setMessageInputOpen] = useState(false);
+  // [데이터 추가] 분류 메뉴 — 버튼 하나가 표/메시지 두 통로로 갈라지는 자리.
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   // 요청 카드 접힘 — null = 전부 펼침. 단 제목 줄의 아이콘이 여기를 쥔다.
   const [openRequestKeys, setOpenRequestKeys] = useState<string[] | null>(null);
   /**
@@ -268,7 +293,7 @@ export function DataPanel({
    * 채워야 할 이유가 없다.
    */
   const [picked, setPicked] = useState<{
-    kind: "snapshot" | "artifact";
+    kind: "snapshot" | "artifact" | "message";
     id: string;
   } | null>(null);
   const pickedImage =
@@ -278,12 +303,26 @@ export function DataPanel({
             a.id === picked.id && a.kind === "image",
         ) ?? null)
       : null;
+  const pickedMessage =
+    expanded && picked?.kind === "message"
+      ? (dataMessages.find((m) => m.id === picked.id) ?? null)
+      : null;
   const detailTarget =
-    expanded && !pickedImage
+    expanded && !pickedImage && !pickedMessage
       ? (snapshots.find((s) => picked?.kind === "snapshot" && s.id === picked.id) ??
         snapshots[0] ??
         null)
       : null;
+
+  /**
+   * 메시지 제목 클릭 — 상세는 모달이 아니라 확장 모드(#136)의 오른쪽 면이다.
+   * 접혀 있으면 넓히면서 연다: 슬라이드가 곧 "자세히 보기"라는 기존 문법 그대로.
+   * (React Compiler 가 메모하므로 수동 useCallback 을 두지 않는다.)
+   */
+  function selectMessage(id: string) {
+    setPicked({ kind: "message", id });
+    if (!expanded) onToggleExpanded();
+  }
 
   const handleAdd = useCallback(
     (input: string) => {
@@ -387,6 +426,19 @@ export function DataPanel({
           setIngestError(null);
           return;
         }
+        // 메시지 판정 왕복 먼저(BE #64) — 메시지로 서면 표 등록은 없던 일이고,
+        // 비메시지·실패면 지금까지의 로컬 표 파싱으로 폴백한다(fail-open).
+        if (onTryMessagePaste) {
+          void onTryMessagePaste(plan.text).then((becameMessage) => {
+            if (becameMessage) {
+              setMessagesOpen(true);
+              setIngestError(null);
+            } else {
+              registerText(plan.text);
+            }
+          });
+          return;
+        }
         registerText(plan.text);
         return;
       }
@@ -398,7 +450,7 @@ export function DataPanel({
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [registerText, registerImages, onAddArtifact, addOpen]);
+  }, [registerText, registerImages, onAddArtifact, addOpen, onTryMessagePaste]);
 
   // 넓게 보기로 들어가면 서랍은 닫는다 — 열어 둔 채 넓히면 읽으려던 상세 면이
   // 덮인 채로 시작한다. 닫아 두면 돌아왔을 때도 놀랄 것이 없다.
@@ -417,6 +469,16 @@ export function DataPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [trashOpen]);
+
+  // 분류 메뉴도 같은 관례 — Esc 로 닫힌다.
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setAddMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addMenuOpen]);
 
   async function handleDroppedFiles(files: FileList) {
     const { images, others } = splitDroppedFiles(Array.from(files));
@@ -677,6 +739,9 @@ export function DataPanel({
                                   : undefined
                               }
                               selected={expanded && s.id === detailTarget?.id}
+                              {...(onSnapshotAsMessage
+                                ? { onAsMessage: () => onSnapshotAsMessage(s.id) }
+                                : {})}
                             />
                           </div>
                         ))}
@@ -713,11 +778,37 @@ export function DataPanel({
                           : undefined
                       }
                       selected={expanded && s.id === detailTarget?.id}
+                      {...(onSnapshotAsMessage
+                        ? { onAsMessage: () => onSnapshotAsMessage(s.id) }
+                        : {})}
                     />
                   ))}
                 </div>
               )}
             </CollapsibleSection>
+
+            {/*
+              메시지 단(BE #64 MVP) — 표(스냅샷)와 정체가 다른 근거라 단을
+              나눈다. 목록은 설비별 제목 줄만, 내용은 상세 모달로(메시지가
+              건마다 카드로 서면 패널이 스택으로 부푼다 — 사용자 결정).
+            */}
+            {(dataMessages.length > 0 || messageInputOpen) && (
+              <CollapsibleSection
+                title={`메시지 (${dataMessages.length})`}
+                open={messagesOpen}
+                onToggle={() => setMessagesOpen((v) => !v)}
+              >
+                <MessageSection
+                  messages={dataMessages}
+                  onRemove={(id) => onRemoveMessage?.(id)}
+                  onSelectMessage={selectMessage}
+                  selectedId={pickedMessage?.id ?? null}
+                  inputOpen={messageInputOpen}
+                  onCloseInput={() => setMessageInputOpen(false)}
+                  onSubmitInput={onSubmitMessage ?? (() => Promise.resolve(false))}
+                />
+              </CollapsibleSection>
+            )}
 
             {/*
               답변 산출물 — 원래 대화 옆 페어 패널에 붙던 것들이 여기로 왔다.
@@ -766,40 +857,98 @@ export function DataPanel({
 
           </div>
 
-          {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다. */}
-          <div className="shrink-0 px-lg py-md border-t border-brand-hairline">
+          {/* 하단 넓은 추가 버튼 — 목록이 얼마나 길든 같은 자리에 있다.
+              등록 통로가 둘(표/메시지)이 되면서 버튼을 늘리는 대신 분기를 안으로
+              접었다: 누르면 분류가 버튼 위에 뜨고, 골라야 입력이 열린다. 메시지
+              경로가 배선되지 않은 화면은 분류 없이 예전처럼 바로 모달이다. */}
+          <div className="relative shrink-0 px-lg py-md border-t border-brand-hairline">
+            {addMenuOpen && onSubmitMessage && (
+              <>
+                {/* 바깥 클릭 닫기 — 선택지 두 개짜리 메뉴라 모달급 덮개는 과하다. */}
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setAddMenuOpen(false)}
+                  aria-hidden
+                />
+                <div
+                  role="menu"
+                  aria-label="데이터 추가 분류"
+                  className="absolute bottom-full left-lg right-lg z-30 mb-xs rounded-lg border border-brand-hairline bg-brand-canvas shadow-lg overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      setSeed(null);
+                      setAddOpen(true);
+                    }}
+                    className="w-full px-sm py-xs text-left hover:bg-brand-ink-translucent-04 focus:outline-none focus:bg-brand-ink-translucent-04"
+                  >
+                    <span className="block text-body-sm text-brand-ink">
+                      표 데이터
+                    </span>
+                    <span className="block text-caption text-brand-muted-soft">
+                      직접 실행한 조회 결과를 붙여넣어 등록합니다
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      setMessageInputOpen(true);
+                      setMessagesOpen(true);
+                    }}
+                    className="w-full px-sm py-xs text-left border-t border-brand-hairline-soft hover:bg-brand-ink-translucent-04 focus:outline-none focus:bg-brand-ink-translucent-04"
+                  >
+                    <span className="block text-body-sm text-brand-ink">
+                      메시지
+                    </span>
+                    <span className="block text-caption text-brand-muted-soft">
+                      설비/카프카 메시지 — 판별 없이 메시지로 변환합니다
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
             <button
               type="button"
               onClick={() => {
-                setSeed(null);
-                setAddOpen(true);
+                if (!onSubmitMessage) {
+                  setSeed(null);
+                  setAddOpen(true);
+                  return;
+                }
+                setAddMenuOpen((v) => !v);
               }}
+              aria-expanded={onSubmitMessage ? addMenuOpen : undefined}
+              aria-haspopup={onSubmitMessage ? "menu" : undefined}
               className="w-full inline-flex items-center justify-center gap-xs h-10 rounded-md border border-brand-hairline text-brand-ink text-body-sm hover:border-brand-primary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
             >
               <PlusIcon />
               데이터 추가
             </button>
-            {ingestError ? (
+            {/* 상시 안내 문구는 걷어냈다(사용자 결정) — 못 받은 이유만 남긴다.
+                조용히 버리면 "붙여넣었는데 아무 일도 안 남"이 되기 때문. */}
+            {ingestError && (
               <p
                 role="alert"
                 className="mt-xs text-center text-caption text-brand-error"
               >
                 {ingestError}
               </p>
-            ) : (
-              <p className="mt-xs text-center text-caption text-brand-muted-soft">
-                표를 복사해 Ctrl+V 하거나 파일을 끌어놓아도 등록됩니다. 화면
-                캡처·주소를 붙여넣으면 산출물에 섭니다.
-              </p>
             )}
           </div>
         </div>
 
         {/* 상세 면 — 확장 모드의 오른쪽. 카드에서 걷어낸 "읽기"가 여기 산다.
-            그림을 고르면 표 대신 그림이 이 자리를 쓴다. */}
+            그림·메시지를 고르면 표 대신 그것이 이 자리를 쓴다. */}
         {showDetail &&
           (pickedImage ? (
             <ArtifactDetail artifact={pickedImage} />
+          ) : pickedMessage ? (
+            <MessageDetail message={pickedMessage} />
           ) : detailTarget ? (
             <SnapshotDetail snapshot={detailTarget} />
           ) : (

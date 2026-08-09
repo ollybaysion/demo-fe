@@ -1,5 +1,6 @@
 import { forwardOrMock } from "@/lib/backend";
 import { logger } from "@/lib/logger";
+import { mockFormatMessage } from "@/lib/message-mock";
 import type { ChatDataSnapshot, DataRequest, RequestState } from "@/lib/types";
 import type { RunDecl } from "@/lib/chat-data";
 import type { Skill, SkillQuery } from "@/lib/skills";
@@ -32,6 +33,8 @@ type JudgeBody = {
   event?: { type?: string; queryKey?: string };
   snapshots?: ChatDataSnapshot[];
   runs?: RunDecl[];
+  pasted?: string;
+  pastedForce?: boolean;
 };
 
 /** 도착한 표 하나 — 판정이 값을 읽는 창구. */
@@ -47,6 +50,26 @@ async function mockJudge(request: Request): Promise<Response> {
     body = (await request.json()) as JudgeBody;
   } catch {
     return Response.json({ error: "body_required" }, { status: 400 });
+  }
+
+  // 메시지 판정 왕복(BE #64) — pasted 가 실리면 패널 판정이 아니다. BE 와 같은
+  // 계약: 성공이면 formattedMessage, 비메시지·실패면 필드 없는 done(불가침).
+  if (body.pasted && body.pasted.trim().length > 0) {
+    const formatted = mockFormatMessage(body.pasted, body.pastedForce === true);
+    const done = {
+      messageId: `msg_${Date.now().toString(36)}`,
+      ...(body.eventId ? { eventId: body.eventId } : {}),
+      ...(body.revision !== undefined ? { revision: body.revision } : {}),
+      ...(formatted ? { formattedMessage: formatted } : {}),
+    };
+    log.info({ message: !!formatted }, "chat/data mock message judge");
+    return new Response(sseEvent("done", done), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+      },
+    });
   }
 
   const arrived = new Map<string, Arrival>();
