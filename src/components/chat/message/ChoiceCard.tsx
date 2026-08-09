@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ChoiceRequest } from "@/lib/types";
+import { OptionRow } from "../OptionRow";
 
 type Reply = { values: string[] } | { skipped: true };
 
@@ -101,44 +102,17 @@ export function ChoiceCard({ request, reply, frozen, onSubmit, onSkip }: Props) 
       )}
 
       <div className="flex flex-col">
-        {options.map((opt, i) => {
-          const on = selected.includes(opt.label);
-          return (
-            <button
-              key={opt.label}
-              type="button"
-              data-opt
-              aria-pressed={on}
-              disabled={frozen}
-              onClick={() => toggle(opt.label)}
-              className={
-                "flex items-start gap-xs w-full min-w-0 rounded-sm px-xs py-[5px] min-h-8 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 " +
-                (on ? "bg-brand-primary/10" : "hover:bg-brand-ink-translucent-04") +
-                (frozen ? " cursor-not-allowed" : "")
-              }
-            >
-              <span
-                className={
-                  "shrink-0 mt-[1px] inline-flex items-center justify-center w-5 h-5 rounded-full border font-mono text-[11px] leading-none transition-colors " +
-                  (on
-                    ? "border-brand-primary bg-brand-primary text-brand-on-primary"
-                    : "border-brand-hairline text-brand-muted")
-                }
-              >
-                {i + 1}
-              </span>
-              <span className="flex-1 min-w-0 flex flex-col">
-                <span className={"text-body-sm " + (on ? "text-brand-ink" : "text-brand-body")}>
-                  {opt.label}
-                </span>
-                {opt.description && (
-                  <span className="text-caption text-brand-muted">{opt.description}</span>
-                )}
-              </span>
-              {on && <Tick className="shrink-0 mt-[5px] text-brand-primary" />}
-            </button>
-          );
-        })}
+        {options.map((opt, i) => (
+          <OptionRow
+            key={opt.label}
+            index={i + 1}
+            label={opt.label}
+            caption={opt.description}
+            selected={selected.includes(opt.label)}
+            frozen={frozen}
+            onClick={() => toggle(opt.label)}
+          />
+        ))}
       </div>
 
       {repliedValues || skipped ? (
@@ -173,24 +147,5 @@ export function ChoiceCard({ request, reply, frozen, onSubmit, onSkip }: Props) 
         </div>
       )}
     </div>
-  );
-}
-
-function Tick({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
   );
 }

@@ -440,6 +440,31 @@ export type ChoiceRequest = {
 };
 
 /**
+ * 화면 하나 — 캡처 분류 카드(#189, BE fdc-agent-be-spring#63)의 후보·목록 항목.
+ * `value` 는 screen-map id(닫힌 목록), `label` 은 화면 이름, `caption` 은 BE
+ * menuLabel(프로그램 › 화면 경로)을 그대로 옮긴 것.
+ */
+export type ScreenOption = {
+  value: string;
+  label: string;
+  caption: string;
+};
+
+/** `POST /chat/image` 의 `browse[]` — 프로그램(program)으로 group-by 된 화면 카탈로그 전체. */
+export type BrowseGroup = {
+  group: string;
+  options: ScreenOption[];
+};
+
+/** `POST /api/fdc/v1/chat/image` 응답 — 캡처 한 장의 분류 결과. 항상 200. */
+export type ClassifyImageResponse = {
+  /** 0~3개, 순서 = LLM 순위. */
+  candidates: ScreenOption[];
+  /** 카탈로그 전체 — 후보가 비어도 항상 채워진다. */
+  browse: BrowseGroup[];
+};
+
+/**
  * 채팅 요청에 실리는 채운 입력값 — `POST /api/fdc/v1/chat` 의 `inputs`.
  * 스킬로 네임스페이스된다({@code {skill: {key: value}}}). 한 번 채운 값은 대화
  * 내내 sticky 로 매 요청에 실려 나간다(폼 컨텍스트처럼).

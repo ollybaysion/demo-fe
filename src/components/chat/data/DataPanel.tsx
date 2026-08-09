@@ -15,11 +15,13 @@ import { MessageDetail, MessageSection } from "./MessageCards";
 import { ArtifactCard } from "./ArtifactCard";
 import { ArtifactDetail } from "./ArtifactDetail";
 import type { Artifact } from "./artifacts";
+import { CaptureClassifyCard } from "./CaptureClassifyCard";
 import { InputCard } from "./InputCard";
 import { RequestCard } from "./RequestCard";
 import { SnapshotCard } from "./SnapshotCard";
 import { SnapshotDetail } from "./SnapshotDetail";
 import type { AddSnapshotResult } from "./useDataSnapshots";
+import type { CaptureItem, CaptureScreen } from "./useCaptures";
 
 /**
  * 데이터 패널 — 3분할 레이아웃의 좌측 상주 컬럼.
@@ -43,9 +45,9 @@ import type { AddSnapshotResult } from "./useDataSnapshots";
  *     원인을 보여 주기 위해.
  *
  * 2·3 은 들어온 것을 보고 갈라진다({@link planClipboardIngest}): 표·텍스트는
- * 스냅샷(`onAdd`)으로, 그림과 주소 한 줄은 답변 산출물(`onAddArtifact`)로.
- * 붙여넣는 사람이 무엇을 붙이는지 이미 알고 있으므로, 어느 통로로 넣을지는
- * 묻지 않는다.
+ * 스냅샷(`onAdd`)으로, 주소 한 줄은 답변 산출물(`onAddArtifact`)로, 그림은
+ * 캡처 분류(`onAddCapture`, #189)로. 붙여넣는 사람이 무엇을 붙이는지 이미
+ * 알고 있으므로, 어느 통로로 넣을지는 묻지 않는다.
  */
 type Props = {
   snapshots: DataSnapshot[];
@@ -85,6 +87,17 @@ type Props = {
    * 않는다 — 답이 있는 한 다시 계산되어 되살아나므로 버튼이 거짓말이 된다.
    */
   onRemoveArtifact: (id: string) => void;
+  /**
+   * 붙여넣은 캡처(#189) — 화면 분류를 기다리거나 확정된 것들. 목록 최상단(입력
+   * 요청 섹션 위)에 뜬다. 산출물과 별도 단인 이유는 같다: 확정 전까지는 "데이터"가
+   * 아니라 "분류를 기다리는 것"이라 다른 섹션들과 성격이 다르다.
+   */
+  captures: CaptureItem[];
+  /** 캡처 등록 — data URL 하나. 분류 왕복(add→classify)은 호스트가 진행한다. */
+  onAddCapture: (dataUrl: string) => void;
+  onConfirmCapture: (id: string, screen: CaptureScreen | null) => void;
+  onReclassifyCapture: (id: string) => void;
+  onRetryCapture: (id: string) => void;
   /** 휴지통에 든 것들 — 최근에 버린 것이 위. */
   trashed: DataSnapshot[];
   /** 휴지통에서 꺼내기. */
@@ -198,6 +211,11 @@ export function DataPanel({
   artifacts,
   onAddArtifact,
   onRemoveArtifact,
+  captures,
+  onAddCapture,
+  onConfirmCapture,
+  onReclassifyCapture,
+  onRetryCapture,
   trashed,
   onRestoreOne,
   onPurge,
@@ -374,8 +392,8 @@ export function DataPanel({
     [handleAdd],
   );
 
-  /** 그림 몇 장을 산출물로 올린다 — 못 받은 것은 이유를 남긴다. */
-  const registerImages = useCallback(
+  /** 그림 몇 장을 캡처로 등록한다(#189) — 못 받은 것은 이유를 남긴다. */
+  const registerCaptures = useCallback(
     async (files: File[]) => {
       let rejected: string | null =
         files.length > MAX_IMAGES_PER_INGEST
@@ -388,20 +406,14 @@ export function DataPanel({
           continue;
         }
         try {
-          onAddArtifact({
-            kind: "image",
-            label: imageLabel(file),
-            dataUrl: await readAsDataUrl(file),
-          });
-          // 접어 둔 단에 넣으면 등록이 없던 일처럼 보인다 — 펴서 보여 준다.
-          setArtifactsOpen(true);
+          onAddCapture(await readAsDataUrl(file));
         } catch {
           rejected = "그림을 읽지 못했습니다.";
         }
       }
       setIngestError(rejected);
     },
-    [onAddArtifact],
+    [onAddCapture],
   );
 
   // Ctrl+V 즉시 등록 — 클립보드에 실린 것을 보고 표·주소·그림을 가른다.
@@ -446,11 +458,11 @@ export function DataPanel({
       // 모달 뒤에 가려서, 붙여넣은 사람에게는 아무 일도 안 일어난 화면이 된다.
       if (addOpen) return;
       e.preventDefault();
-      void registerImages(plan.files);
+      void registerCaptures(plan.files);
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [registerText, registerImages, onAddArtifact, addOpen, onTryMessagePaste]);
+  }, [registerText, registerCaptures, onAddArtifact, addOpen, onTryMessagePaste]);
 
   // 넓게 보기로 들어가면 서랍은 닫는다 — 열어 둔 채 넓히면 읽으려던 상세 면이
   // 덮인 채로 시작한다. 닫아 두면 돌아왔을 때도 놀랄 것이 없다.
@@ -482,7 +494,7 @@ export function DataPanel({
 
   async function handleDroppedFiles(files: FileList) {
     const { images, others } = splitDroppedFiles(Array.from(files));
-    if (images.length > 0) await registerImages(images);
+    if (images.length > 0) await registerCaptures(images);
     for (const file of others) {
       const text = await file.text();
       registerText(text);
@@ -625,6 +637,22 @@ export function DataPanel({
           ].join(" ")}
         >
           <div className="flex-1 overflow-y-auto scrollbar-none">
+            {/* 캡처 분류 카드(#189) — 최상단, 입력 요청 섹션보다도 위. 붙여넣은
+                직후 "무엇으로 등록됐는지"가 눈에 안 띄면 없던 일처럼 보인다. */}
+            {captures.length > 0 && (
+              <div className="flex flex-col gap-xs px-lg pt-md">
+                {captures.map((c) => (
+                  <CaptureClassifyCard
+                    key={c.id}
+                    capture={c}
+                    onConfirm={onConfirmCapture}
+                    onReclassify={onReclassifyCapture}
+                    onRetry={onRetryCapture}
+                  />
+                ))}
+              </div>
+            )}
+
             {/* 상단 요청 섹션 — 스칼라 입력 요청만. 데이터 요청 카드는 각 설비·
                 분석 그룹 안에 산다. */}
             {inputRequests.length > 0 && (
@@ -1268,17 +1296,6 @@ function readAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-}
-
-/**
- * 목록에 설 이름. 붙여넣은 그림은 브라우저가 죄다 `image.png` 로 주기 때문에
- * 두 장만 올려도 어느 것이 어느 것인지 알 수 없다 — 그럴 때만 시각을 쓴다.
- */
-function imageLabel(file: File): string {
-  const name = file.name?.trim();
-  if (name && name.toLowerCase() !== "image.png") return name;
-  const at = new Date().toLocaleTimeString("ko-KR", { hour12: false });
-  return `붙여넣은 그림 ${at}`;
 }
 
 /** 접을 수 있는 섹션 — 제목 줄 전체가 토글이다. */
