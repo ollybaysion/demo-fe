@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { groupMessagesByEquipment } from "@/lib/message-store";
 import type { DataMessage } from "@/lib/types";
 
@@ -10,16 +10,18 @@ import type { DataMessage } from "@/lib/types";
  *
  * 목록은 **제목만**이다 — 분석 카드와 달리 메시지가 건마다 카드로 서면 패널이
  * 스택으로 부푼다(사용자 결정). 설비별로 묶어 제목 줄만 세우고, 내용(코멘트 +
- * pretty JSON + 원문)은 클릭이 여는 상세 모달이 맡는다.
- *
- * 상세는 시안 C: 코멘트 박스 + pretty JSON + 복사 + **원문 접힘**. 값 전부가
- * LLM 산출물이라(편의성 기능 합의) 원문 접힘이 진실원 안전망이다.
+ * pretty JSON + 원문)은 확장 모드(#136)의 오른쪽 상세 면({@link MessageDetail})이
+ * 맡는다 — 모달이 아니다. 제목을 누르면 호스트가 패널을 넓혀 그 자리에 띄운다.
  */
 
 type SectionProps = {
   messages: DataMessage[];
   onRemove: (id: string) => void;
-  /** 명시 입력 카드 열림 — 하단 [+ 메시지] 버튼이 연다. */
+  /** 제목 클릭 — 확장 모드 상세 면에 이 메시지를 띄운다(닫혀 있으면 넓히면서). */
+  onSelectMessage?: (id: string) => void;
+  /** 확장 모드 상세 면이 지금 보여주는 메시지 — 그 줄이 선택으로 보인다. */
+  selectedId?: string | null;
+  /** 명시 입력 카드 열림 — [데이터 추가] 분류의 [메시지]가 연다. */
   inputOpen: boolean;
   onCloseInput: () => void;
   /**
@@ -32,12 +34,12 @@ type SectionProps = {
 export function MessageSection({
   messages,
   onRemove,
+  onSelectMessage,
+  selectedId = null,
   inputOpen,
   onCloseInput,
   onSubmitInput,
 }: SectionProps) {
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const detail = messages.find((m) => m.id === detailId) ?? null;
   const groups = groupMessagesByEquipment(messages);
 
   return (
@@ -47,7 +49,8 @@ export function MessageSection({
       )}
       {messages.length === 0 && !inputOpen ? (
         <p className="text-caption text-brand-muted-soft">
-          설비 메시지를 붙여넣거나 [+ 메시지]로 직접 등록하면 여기에 쌓입니다.
+          설비 메시지를 붙여넣거나 [데이터 추가]의 [메시지]로 직접 등록하면
+          여기에 쌓입니다.
         </p>
       ) : (
         groups.map((g) => (
@@ -63,15 +66,20 @@ export function MessageSection({
                 {g.messages.length}건
               </span>
             </div>
-            {/* 제목 줄만 — 세부는 모달로. */}
+            {/* 제목 줄만 — 세부는 확장 모드 오른쪽 면으로. */}
             {g.messages.map((m) => (
               <div
                 key={m.id}
-                className="group rounded-md bg-brand-canvas mb-[3px] last:mb-0 flex items-center"
+                className={[
+                  "group rounded-md mb-[3px] last:mb-0 flex items-center border transition-colors",
+                  m.id === selectedId
+                    ? "bg-brand-primary/5 border-brand-primary/45"
+                    : "bg-brand-canvas border-transparent",
+                ].join(" ")}
               >
                 <button
                   type="button"
-                  onClick={() => setDetailId(m.id)}
+                  onClick={() => onSelectMessage?.(m.id)}
                   title={m.comment ?? m.label}
                   className="flex-1 min-w-0 px-xs py-[6px] text-left text-body-sm text-brand-ink truncate hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 rounded-md"
                 >
@@ -103,112 +111,86 @@ export function MessageSection({
           </div>
         ))
       )}
-      {detail && (
-        <MessageDetailModal message={detail} onClose={() => setDetailId(null)} />
-      )}
     </div>
   );
 }
 
-/** 상세 모달 — 시안 C: 코멘트 박스 + pretty JSON + 복사 + 원문 접힘. */
-function MessageDetailModal({
-  message,
-  onClose,
-}: {
-  message: DataMessage;
-  onClose: () => void;
-}) {
+/**
+ * 메시지 상세 — 확장 모드(#136)의 오른쪽 면, `SnapshotDetail` 의 형제.
+ * 시안 C: 코멘트 박스 + pretty JSON + 복사 + **원문 접힘**. 값 전부가 LLM
+ * 산출물이라(편의성 기능 합의) 원문 접힘이 진실원 안전망이다.
+ */
+export function MessageDetail({ message }: { message: DataMessage }) {
   const [copied, setCopied] = useState(false);
   const pretty = JSON.stringify(message.json, null, 2) ?? "";
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // 메시지가 바뀌면 복사 상태를 처음으로 — 렌더 중 상태 조정 관례.
+  const [prevId, setPrevId] = useState(message.id);
+  if (message.id !== prevId) {
+    setPrevId(message.id);
+    setCopied(false);
+  }
 
-  function copyJson() {
-    void navigator.clipboard?.writeText(pretty).then(() => {
+  async function copyJson() {
+    try {
+      await navigator.clipboard.writeText(pretty);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    } catch {
+      // 클립보드 권한이 없어도 JSON 은 화면에 그대로 있다.
+      setCopied(false);
+    }
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`메시지 ${message.label}`}
-      className="fixed inset-0 z-50 flex items-center justify-center p-md"
-    >
-      <div
-        className="absolute inset-0 bg-brand-ink/40"
-        onClick={onClose}
-        aria-hidden
-      />
-      <div className="relative w-full max-w-[36rem] max-h-[80vh] bg-brand-canvas rounded-lg shadow-xl flex flex-col overflow-hidden">
-        <div className="flex items-center gap-xs px-md py-sm border-b border-brand-hairline">
-          <h2 className="flex-1 min-w-0 truncate font-sans text-body-md text-brand-ink">
+    <div className="flex-1 min-w-0 flex flex-col">
+      <div className="shrink-0 px-lg pt-md pb-sm border-b border-brand-hairline-soft">
+        <div className="flex items-center gap-xs min-w-0">
+          <h3
+            className="min-w-0 truncate font-sans text-body-md font-medium text-brand-ink"
+            title={message.label}
+          >
             {message.label}
-          </h2>
+          </h3>
           {message.eqpId && (
-            <span className="shrink-0 inline-flex items-center rounded-[4px] bg-brand-ink-translucent-04 px-[6px] py-[2px] text-[11px] text-brand-muted">
+            <span className="shrink-0 inline-flex items-center rounded-[4px] bg-brand-primary/10 px-[6px] py-[3px] font-mono text-[11px] leading-none font-medium text-brand-primary">
               {message.eqpId}
             </span>
           )}
+        </div>
+        <p className="mt-[2px] text-caption text-brand-muted">
+          메시지
+          {message.className && ` · ${message.className}`}
+        </p>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto px-lg py-sm flex flex-col gap-sm">
+        {/* 코멘트 박스 — LLM 한 줄 요약. 실패했으면 없던 일(빈 박스 금지). */}
+        {message.comment && (
+          <p className="rounded-md bg-brand-surface-soft border border-brand-hairline px-sm py-xs text-body-sm text-brand-ink">
+            {message.comment}
+          </p>
+        )}
+        <div className="relative">
           <button
             type="button"
-            onClick={onClose}
-            aria-label="닫기"
-            className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-brand-muted hover:bg-brand-ink-translucent-04 focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
+            onClick={() => void copyJson()}
+            className="absolute right-xs top-xs z-10 h-6 px-xs rounded-sm border border-brand-hairline bg-brand-canvas text-caption text-brand-muted hover:text-brand-primary hover:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              aria-hidden
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            {copied ? "복사됨" : "복사"}
           </button>
+          <pre className="rounded-md border border-brand-hairline bg-brand-surface-soft px-sm py-xs overflow-x-auto text-[12px] leading-relaxed text-brand-ink whitespace-pre">
+            {pretty}
+          </pre>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto px-md py-sm flex flex-col gap-sm">
-          {/* 코멘트 박스 — LLM 한 줄 요약. 실패했으면 없던 일(빈 박스 금지). */}
-          {message.comment && (
-            <p className="rounded-md bg-brand-surface-soft border border-brand-hairline px-sm py-xs text-body-sm text-brand-ink">
-              {message.comment}
-            </p>
-          )}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={copyJson}
-              className="absolute right-xs top-xs z-10 h-6 px-xs rounded-sm border border-brand-hairline bg-brand-canvas text-caption text-brand-muted hover:text-brand-primary hover:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15 transition-colors"
-            >
-              {copied ? "복사됨" : "복사"}
-            </button>
-            <pre className="rounded-md border border-brand-hairline bg-brand-surface-soft px-sm py-xs overflow-x-auto text-[12px] leading-relaxed text-brand-ink whitespace-pre">
-              {pretty}
-            </pre>
-          </div>
-          {/* 원문 접힘 — 진실원. 포맷팅은 LLM 산출물이라 틀릴 수 있고, 그때
-              확인할 곳이 항상 카드 안에 있어야 한다. */}
-          <details className="rounded-md border border-brand-hairline">
-            <summary className="px-sm py-xs text-caption text-brand-muted cursor-pointer select-none hover:text-brand-primary">
-              원문
-            </summary>
-            <pre className="px-sm pb-xs overflow-x-auto text-[12px] leading-relaxed text-brand-muted whitespace-pre-wrap break-all">
-              {message.raw}
-            </pre>
-          </details>
-        </div>
+        {/* 원문 접힘 — 진실원. 포맷팅이 틀려도 확인할 곳이 항상 같이 있다. */}
+        <details className="rounded-md border border-brand-hairline">
+          <summary className="px-sm py-xs text-caption text-brand-muted cursor-pointer select-none hover:text-brand-primary">
+            원문
+          </summary>
+          <pre className="px-sm pb-xs overflow-x-auto text-[12px] leading-relaxed text-brand-muted whitespace-pre-wrap break-all">
+            {message.raw}
+          </pre>
+        </details>
       </div>
     </div>
   );

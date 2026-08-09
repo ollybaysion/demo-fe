@@ -11,7 +11,7 @@ import type { PendingInput } from "@/lib/input-store";
 import type { DerivedGroup } from "../context/derive-cards";
 import type { DataMessage, DataSnapshot } from "@/lib/types";
 import { AddDataModal } from "./AddDataModal";
-import { MessageSection } from "./MessageCards";
+import { MessageDetail, MessageSection } from "./MessageCards";
 import { ArtifactCard } from "./ArtifactCard";
 import { ArtifactDetail } from "./ArtifactDetail";
 import type { Artifact } from "./artifacts";
@@ -293,7 +293,7 @@ export function DataPanel({
    * 채워야 할 이유가 없다.
    */
   const [picked, setPicked] = useState<{
-    kind: "snapshot" | "artifact";
+    kind: "snapshot" | "artifact" | "message";
     id: string;
   } | null>(null);
   const pickedImage =
@@ -303,12 +303,26 @@ export function DataPanel({
             a.id === picked.id && a.kind === "image",
         ) ?? null)
       : null;
+  const pickedMessage =
+    expanded && picked?.kind === "message"
+      ? (dataMessages.find((m) => m.id === picked.id) ?? null)
+      : null;
   const detailTarget =
-    expanded && !pickedImage
+    expanded && !pickedImage && !pickedMessage
       ? (snapshots.find((s) => picked?.kind === "snapshot" && s.id === picked.id) ??
         snapshots[0] ??
         null)
       : null;
+
+  /**
+   * 메시지 제목 클릭 — 상세는 모달이 아니라 확장 모드(#136)의 오른쪽 면이다.
+   * 접혀 있으면 넓히면서 연다: 슬라이드가 곧 "자세히 보기"라는 기존 문법 그대로.
+   * (React Compiler 가 메모하므로 수동 useCallback 을 두지 않는다.)
+   */
+  function selectMessage(id: string) {
+    setPicked({ kind: "message", id });
+    if (!expanded) onToggleExpanded();
+  }
 
   const handleAdd = useCallback(
     (input: string) => {
@@ -787,6 +801,8 @@ export function DataPanel({
                 <MessageSection
                   messages={dataMessages}
                   onRemove={(id) => onRemoveMessage?.(id)}
+                  onSelectMessage={selectMessage}
+                  selectedId={pickedMessage?.id ?? null}
                   inputOpen={messageInputOpen}
                   onCloseInput={() => setMessageInputOpen(false)}
                   onSubmitInput={onSubmitMessage ?? (() => Promise.resolve(false))}
@@ -930,10 +946,12 @@ export function DataPanel({
         </div>
 
         {/* 상세 면 — 확장 모드의 오른쪽. 카드에서 걷어낸 "읽기"가 여기 산다.
-            그림을 고르면 표 대신 그림이 이 자리를 쓴다. */}
+            그림·메시지를 고르면 표 대신 그것이 이 자리를 쓴다. */}
         {showDetail &&
           (pickedImage ? (
             <ArtifactDetail artifact={pickedImage} />
+          ) : pickedMessage ? (
+            <MessageDetail message={pickedMessage} />
           ) : detailTarget ? (
             <SnapshotDetail snapshot={detailTarget} />
           ) : (
